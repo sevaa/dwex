@@ -8,9 +8,9 @@ from PyQt5.QtGui import QBrush
 _blue_brush = QBrush(Qt.GlobalColor.blue)
 
 class DIETableModel(QAbstractTableModel):
-    def __init__(self, die):
+    def __init__(self, die, prefix):
         QAbstractTableModel.__init__(self)
-        self.prefix = False # TODO: make it a persistent setting
+        self.prefix = prefix
         self.die = die
         self.attributes = die.attributes
         self.keys = list(die.attributes.keys())
@@ -89,6 +89,14 @@ class DIETableModel(QAbstractTableModel):
             ranges = di._ranges.get_range_list_at_offset(attr.value)
             return GenericTableModel(("Start offset", "End offset"), (("0x%X" % r.begin_offset, "0x%X" % r.end_offset) for r in ranges))
         return None
+
+    # Returns (cu, die_offset) or None if not a navigable
+    def ref_target(self, index):
+        attr = self.attributes[self.keys[index.row()]]
+        if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
+            return (self.die.cu, attr.value + self.die.cu.cu_offset)
+        return None
+
 
 class GenericTableModel(QAbstractTableModel):
     def __init__(self, headers, values):
