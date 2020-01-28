@@ -58,11 +58,8 @@ class TheWindow(QMainWindow):
         
         rpane = QWidget()
         rpane_layout = self.rpane_layout = QVBoxLayout()
-        rpane_layout.setContentsMargins(0, 0, 0, 0)
         rpane.setLayout(rpane_layout)
         die_table = self.die_table = QTableView()
-        die_table.setColumnWidth(0, font_metrics.averageCharWidth()*20)
-        die_table.setColumnWidth(0, font_metrics.averageCharWidth()*10)
         die_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         die_table.clicked.connect(self.on_attribute_selection)
         die_table.doubleClicked.connect(self.on_attribute_dclick)
@@ -73,6 +70,7 @@ class TheWindow(QMainWindow):
         rpane_layout.addWidget(details_table)
         rpane_layout.setStretchFactor(die_table, 0)
         rpane_layout.setStretchFactor(details_table, 1)
+        rpane_layout.setContentsMargins(0, 0, 0, 0)
 
         spl = QSplitter()
         spl.addWidget(self.the_tree)
@@ -206,6 +204,28 @@ class TheWindow(QMainWindow):
     def on_exit(self):
         self.destroy()
 
+    def save_filename_in_mru(self, filename):
+        try:
+            i = self.mru.index(filename)
+        except ValueError:
+            i = -1
+        if i != 0:
+            if i > 0:
+                self.mru.pop(i)
+            self.mru.insert(0, filename)
+            if len(self.mru) > 10:
+                self.mru = self.mru[0:10]
+            self.save_mru()
+            file_menu = self.menuBar().actions()[0].menu()
+            if file_menu.actions()[1].menu() is None: # Flimsy... we check if item 2 on the File menu is a submenu or not
+                mru_menu = QMenu("Recent files")
+                file_menu.insertMenu(file_menu.actions()[1], mru_menu)
+            else:
+                mru_menu = file_menu.actions()[1].menu()
+                mru_menu.clear()
+            self.populate_mru_menu(mru_menu)
+
+
     # Callback for the Mach-O fat binary opening logic
     # Taking a cue from Hopper or IDA, we parse only one slice at a time
     def resolve_arch(self, arches):
@@ -222,8 +242,9 @@ class TheWindow(QMainWindow):
             if not di: # Covers both False and None
                 return di
 
-            # Placeholders for cached top level stuff
+            # Some cached top level stuff
             di._ranges = None
+            di._CUs = [cu for cu in di.iter_CUs()]
             self.tree_model = DWARFTreeModel(di, self.prefix)
             self.the_tree.setModel(self.tree_model)
             self.setWindowTitle("DWARF Explorer - " + os.path.basename(filename))
@@ -233,27 +254,7 @@ class TheWindow(QMainWindow):
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
-
-            # MRU
-            try:
-                i = self.mru.index(filename)
-            except ValueError:
-                i = -1
-            if i != 0:
-                if i > 0:
-                    self.mru.pop(i)
-                self.mru.insert(0, filename)
-                if len(self.mru) > 10:
-                    self.mru = self.mru[0:10]
-                self.save_mru()
-                file_menu = self.menuBar().actions()[0].menu()
-                if file_menu.actions()[1].menu is None: # Flimsy... we check if item 2 on the File menu is a submenu or not
-                    mru_menu = QMenu("Recent files")
-                    file_menu.insertMenu(file_menu.actions()[1], mru_menu)
-                else:
-                    mru_menu = file_menu.actions()[1].menu()
-                    mru_menu.clear()
-                self.populate_mru_menu(mru_menu)
+            self.save_filename_in_mru(filename)
             return True
         finally:
             self.end_wait()

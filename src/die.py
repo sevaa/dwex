@@ -32,7 +32,7 @@ class DIETableModel(QAbstractTableModel):
             return val.decode('utf-8')
         elif form == 'DW_FORM_addr' and isinstance(val, int):
             return "0x%X" % val
-        elif form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
+        elif form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
             return "Ref: 0x%X" % val
         else:
             return str(val)
@@ -50,12 +50,12 @@ class DIETableModel(QAbstractTableModel):
             elif col == 2:
                 return self.format_value(attr)
         elif role == Qt.ToolTipRole:
-            if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
+            if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return "Double-click to follow"
-            elif attr.form in ('DW_FORM_ref_addr', 'DW_FORM_ref_sig8', 'DW_FORM_ref_sup4', 'DW_FORM_ref_sup8'):
+            elif attr.form in ('DW_FORM_ref_sig8', 'DW_FORM_ref_sup4', 'DW_FORM_ref_sup8'):
                 return "Unsupported reference format"
         elif role == Qt.ForegroundRole:
-            if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
+            if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return _blue_brush
 
     def display_DIE(self, die):
@@ -95,6 +95,15 @@ class DIETableModel(QAbstractTableModel):
         attr = self.attributes[self.keys[index.row()]]
         if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
             return (self.die.cu, attr.value + self.die.cu.cu_offset)
+        elif attr.form == 'DW_FORM_ref_addr':
+            prev_cu = None
+            for cu in self.die.dwarfinfo._CUs: # Don't reparse CUs, reuse cached ones
+                if prev_cu is None:
+                    prev_cu = cu
+                elif cu.cu_offset > attr.value:
+                    return (prev_cu, attr.value)
+                else:
+                    prev_cu = cu
         return None
 
 
