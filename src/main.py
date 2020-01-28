@@ -1,5 +1,5 @@
-import sys, os, io, struct
-from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex, QSettings
+import sys, os, io
+from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex, QSettings, QTimer
 from PyQt5.QtGui import QFontMetrics 
 from PyQt5.QtWidgets import *
 from die import DIETableModel
@@ -7,23 +7,46 @@ from formats import read_dwarf
 from tree import DWARFTreeModel
 
 #-----------------------------------------------------------------
-#  The one and only main window class
+# The one and only main window class
+# Pretty much DWARF unaware, all the DWARF visualization logic is in tree.py and die.py
 #-----------------------------------------------------------------
 
 class TheWindow(QMainWindow):
     def __init__(self):
+        QMainWindow.__init__(self)
+        self.wait_level = 0
+        self.font_metrics = QFontMetrics(QApplication.font())
+
+        self.load_settings()
+        self.setup_menu()
+        self.setup_ui()
+        self.setAcceptDrops(True)
+
+        # The data model placeholders - to be populated once we read a file
+        self.die_model = None # Recreated between files
+        self.tree_model = None # Reused between DIEs
+
+        self.show()
+
+        # Command line: if can't open, print the error to console
+        # On Mac/Linux, the user will see it. On Windows, they won't.
+        if len(sys.argv) > 1:
+            try:
+                if self.open_file(sys.argv[1]) is None:
+                    print("The file contains no DWARF information, or it is in an unsupported format.")
+            except Exception as exc:
+                print(format(exc))
+
+    def load_settings(self):
         self.sett = QSettings('Seva', 'DWARFExplorer')
         self.prefix = self.sett.value('General/Prefix', False, type=bool)
         self.mru = []
         for i in range(0, 10):
             s = self.sett.value("General/MRU%d" % i, False)
             if s:
-                self.mru.append(s)
-        QMainWindow.__init__(self)
-        self.wait_level = 0
-        font_metrics = self.font_metrics = QFontMetrics(QApplication.font())
+                self.mru.append(s)        
 
-        # Set up the menu
+    def setup_menu(self):
         menu = self.menuBar()
         file_menu = menu.addMenu("&File")
         file_menu.addAction("Open...").triggered.connect(self.on_open)
@@ -47,14 +70,14 @@ class TheWindow(QMainWindow):
         self.followref_menuitem.setEnabled(False);
         self.followref_menuitem.triggered.connect(self.on_followref)        
         help_menu = menu.addMenu("Help")
-        help_menu.addAction("About...").triggered.connect(self.on_about)
+        help_menu.addAction("About...").triggered.connect(self.on_about)      
 
+    def setup_ui(self):
         # Set up the left pane and the right pane
         tree = self.the_tree = QTreeView()
         tree.header().hide()
         tree.setUniformRowHeights(True)
         tree.clicked.connect(self.on_tree_selection)
-        tree.expanded.connect(self.on_tree_expand)
         
         rpane = QWidget()
         rpane_layout = self.rpane_layout = QVBoxLayout()
@@ -79,25 +102,14 @@ class TheWindow(QMainWindow):
         spl.setStretchFactor(0, 0)
         spl.setStretchFactor(1, 1) 
         self.setCentralWidget(spl)
-        self.setAcceptDrops(True)
-
-        # The data model placeholders - to be populated once we read a file
-        self.die_model = None # Recreated between files
-        self.tree_model = None # Reused between DIEs
 
         self.setWindowTitle("DWARF Explorer")
-        self.resize(font_metrics.averageCharWidth() * 250, font_metrics.height() * 60)
-    
-        self.show()
+        self.resize(self.font_metrics.averageCharWidth() * 250, self.font_metrics.height() * 60)
 
-        # Command line: if can't open, print the error to console
-        # On Mac/Linux, the user will see it. On Windows, they won't.
-        if len(sys.argv) > 1:
-            try:
-                if not self.open_file(sys.argv[1]):
-                    print("The file contains no DWARF information, or it is in an unsupported format.")
-            except Exception as exc:
-                print(format(exc))
+
+    ###################################################################
+    # Done with init
+    ###################################################################
 
     # File drag/drop handling - equivalent to open
     def dragEnterEvent(self, evt):
@@ -105,7 +117,7 @@ class TheWindow(QMainWindow):
             evt.accept()
 
     def dropEvent(self, evt):
-        self.open_file_interactive(evt.mimeData().urls()[0].toLocalFile())
+        self.open_file_interactive(os.path.normpath(evt.mimeData().urls()[0].toLocalFile()))
 
     # Open a file, display an error if failure
     def open_file_interactive(self, filename):
@@ -116,7 +128,7 @@ class TheWindow(QMainWindow):
                     QMessageBox.Ok, self).show()
         except Exception as exc:
             QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
-                "Error opening the file:\n" + format(exc),
+                "Error opening the file:\n\n" + format(exc),
                 QMessageBox.Ok, self).show()
 
     # TODO: list the extensions for the open file dialog?
@@ -124,17 +136,25 @@ class TheWindow(QMainWindow):
         dir = os.path.dirname(self.mru[0]) if len(self.mru) > 0 else ''
         filename = QFileDialog.getOpenFileName(self, None, dir)
         if filename[0]:
-            self.open_file_interactive(filename[0])
+            self.open_file_interactive(os.path.normpath(filename[0]))
 
     def populate_mru_menu(self, mru_menu):
-        for filename in self.mru:
-            mru_menu.addAction(filename).triggered.connect(lambda: self.on_recentfile(filename))
+        class MRUHandler(object):
+            def __init__(self, filename, win):
+                object.__init__(self)
+                self.filename = filename
+                self.win = win
+            def __call__(self):
+                self.win.on_recentfile(self.filename)
+
+        for i, filename in enumerate(self.mru):
+            mru_menu.addAction(filename).triggered.connect(MRUHandler(filename, self))
 
     def on_recentfile(self, filename):
         self.open_file_interactive(filename)
 
     def on_about(self):
-        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v.0.50\ngithub.com/sevaa/dwex",
+        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v.0.50\n\ngithub.com/sevaa/dwex",
             QMessageBox.Ok, self).show()
 
     def display_die(self, index):
@@ -146,6 +166,8 @@ class TheWindow(QMainWindow):
         else:
             self.die_model.display_DIE(die)
         self.die_table.resizeColumnsToContents()
+        self.details_table.setModel(None)
+        self.followref_menuitem.setEnabled(False)
 
         #TODO: resize the attribute table dynamically
         #attr_count = self.die_model.rowCount(None)
@@ -165,11 +187,11 @@ class TheWindow(QMainWindow):
         self.forward_menuitem.setEnabled(False)
         self.display_die(index)
 
-    def on_tree_expand(self, index):
-        self.tree_model.on_expand(index)
-
     def on_attribute_selection(self, index):
-        self.details_table.setModel(self.die_model.get_attribute_details(index.row()))
+        details_model = self.die_model.get_attribute_details(index.row())
+        self.details_table.setModel(details_model)
+        if details_model is not None:
+            self.details_table.resizeColumnsToContents()
         self.followref_menuitem.setEnabled(self.die_model.ref_target(index) is not None)
 
     def on_attribute_dclick(self, index):
@@ -191,15 +213,18 @@ class TheWindow(QMainWindow):
     def on_nav_forward(self):
         self.on_nav(-1)
 
+    # Called for double-click on a reference type attribute, and via the menu
     def on_followref(self, index = None):
+        self.start_wait() # TODO: only show the wait cursor if it's indeed time consuming
         if index is None:
             index = self.die_table.getCurrentIndex()
-        navitem = self.die_model.ref_target(index)
+        navitem = self.die_model.ref_target(index)  # Retrieve the ref target from the DIE model...
         if navitem:
-            target_tree_index = self.tree_model.index_for_navitem(navitem)
+            target_tree_index = self.tree_model.index_for_navitem(navitem) # ...and feed it to the tree model.
             self.the_tree.setCurrentIndex(target_tree_index)
             # Qt doesn't raise the notification by itself
             self.on_tree_selection(target_tree_index)
+        self.end_wait()
 
     def on_exit(self):
         self.destroy()
@@ -235,6 +260,7 @@ class TheWindow(QMainWindow):
     # Can throw an exception
     # Returns None if it doesn't seem to contain DWARF
     # False if the user cancelled
+    # True if the DWARF tree was loaded
     def open_file(self, filename):
         self.start_wait()
         try:
@@ -243,8 +269,11 @@ class TheWindow(QMainWindow):
                 return di
 
             # Some cached top level stuff
-            di._ranges = None
-            di._CUs = [cu for cu in di.iter_CUs()]
+            # Notably, iter_CUs doesn't cache
+            di._ranges = None # Loaded on first use
+            di._CUs = [cu for cu in di.iter_CUs()] # We'll need them first thing, might as well load here
+            di._locparser = None # Created on first use
+
             self.tree_model = DWARFTreeModel(di, self.prefix)
             self.the_tree.setModel(self.tree_model)
             self.setWindowTitle("DWARF Explorer - " + os.path.basename(filename))

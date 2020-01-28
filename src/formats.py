@@ -1,4 +1,4 @@
-import io
+import io, struct
 from os import path
 from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
 # This doesn't depend on Qt

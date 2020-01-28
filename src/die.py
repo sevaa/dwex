@@ -1,11 +1,25 @@
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
 from PyQt5.QtGui import QBrush
+from elftools.dwarf.locationlists import LocationParser, LocationExpr
+from elftools.dwarf.dwarf_expr import GenericExprDumper, DW_OP_opcode2name
 
 #------------------------------------------------
 # DIE formatter
 #------------------------------------------------
 
 _blue_brush = QBrush(Qt.GlobalColor.blue)
+
+# Format: op arg, arg...
+class ExprDumper(GenericExprDumper):
+    def _dump_to_string(self, opcode, opcode_name, args):
+        # Challenge: for nested expressions, args is a list with a list of commands
+        # For those, the format is: op {op arg, arg; op arg, arg}
+        if args:
+            args = [str(s) if isinstance(s, str) or isinstance(s, int) else '{' + '; '.join(s) + '}' for s in args]
+            args = ', '.join(args)
+            return opcode_name + ' ' + args
+        else:
+            return opcode_name
 
 class DIETableModel(QAbstractTableModel):
     def __init__(self, die, prefix):
@@ -14,6 +28,7 @@ class DIETableModel(QAbstractTableModel):
         self.die = die
         self.attributes = die.attributes
         self.keys = list(die.attributes.keys())
+        self._exprdumper = None
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.DisplayRole:
@@ -33,7 +48,18 @@ class DIETableModel(QAbstractTableModel):
         elif form == 'DW_FORM_addr' and isinstance(val, int):
             return "0x%X" % val
         elif form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
-            return "Ref: 0x%X" % val
+            return "Ref: 0x%X" % val # There are several other reference forms in the spec
+        elif attr.name == 'DW_AT_location':
+            di = self.die.dwarfinfo
+            if di._locparser is None:
+                di._locparser = LocationParser(di.location_lists())
+            if self._exprdumper is None:
+                self._exprdumper = ExprDumper(self.die.cu.structs)
+            ll = di._locparser.parse_from_attribute(attr, self.die.cu['version']) # Either a list or a LocationExpr
+            if isinstance(ll, LocationExpr):
+                return '; '.join(self._exprdumper.dump(ll.loc_expr))
+            else:
+                return "Loc list: 0x%X" % attr.value
         else:
             return str(val)
 
@@ -44,9 +70,9 @@ class DIETableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             col = index.column()
             if col == 0:
-                return key[0 if self.prefix else 6:]
+                return key if self.prefix or not key.startswith('DW_AT_')  else key[6:]
             elif col == 1:
-                return attr.form[0 if self.prefix else 8:]
+                return attr.form if self.prefix or not attr.form.startswith('DW_FORM_') else attr.form[8:]
             elif col == 2:
                 return self.format_value(attr)
         elif role == Qt.ToolTipRole:
@@ -88,6 +114,18 @@ class DIETableModel(QAbstractTableModel):
                 return None
             ranges = di._ranges.get_range_list_at_offset(attr.value)
             return GenericTableModel(("Start offset", "End offset"), (("0x%X" % r.begin_offset, "0x%X" % r.end_offset) for r in ranges))
+        elif key == 'DW_AT_location':
+            di = self.die.dwarfinfo
+            if di._locparser is None:
+                di._locparser = LocationParser(di.location_lists())
+            if self._exprdumper is None:
+                self._exprdumper = ExprDumper(self.die.cu.structs)
+            ll = di._locparser.parse_from_attribute(attr, self.die.cu['version']) # Either a list or a LocationExpr
+            if isinstance(ll, LocationExpr):
+                return GenericTableModel(("Command",), ((cmd,) for cmd in self._exprdumper.dump(ll.loc_expr)))
+            else:
+                return GenericTableModel(("Start offset", "End offset", "Expression"),
+                    (('0x%X'%l.begin_offset, '0x%X'%l.end_offset, '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll))
         return None
 
     # Returns (cu, die_offset) or None if not a navigable

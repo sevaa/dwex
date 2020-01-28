@@ -17,8 +17,16 @@ def strip_path(filename):
 # Some additional data for every DIE
 def with_index(o, i):
     o._i = i
-    o._child_count = None
+    o._children = None
     return o
+
+def load_children(parent_die):
+    # Load and cache child DIEs in the parent DIE, if necessary
+    # Assumes the check if the DIE has children has been already performed
+    if parent_die._children is None:
+        # TODO: wait cursor here. It may cause disk I/O
+        parent_die._children = [with_index(die, i) for (i, die) in enumerate(parent_die.iter_children())]    
+
 
 class DWARFTreeModel(QAbstractItemModel):
     def __init__(self, di, prefix):
@@ -26,30 +34,36 @@ class DWARFTreeModel(QAbstractItemModel):
         self.prefix = prefix
         self.TopDIEs = [with_index(CU.get_top_DIE(), i) for (i, CU) in enumerate(di._CUs)]
 
+    # Qt callbacks. QTreeView supports progressive loading, as long as you feed it the "item has children" bit in advance
+
     def index(self, row, col, parent):
         if parent.isValid():
             parent_die = parent.internalPointer()
-            if parent_die._child_count is None: # Never expanded, but the tree view needs a placeholder
-                return self.createIndex(row, col)
-            else:
-                children = [die for die in parent_die.iter_children()] # Cached, fast
-                return self.createIndex(row, col, children[row])
+            # print("child of %s" % parent_die.tag)
+            load_children(parent_die)
+            return self.createIndex(row, col, parent_die._children[row])
         else:
             return self.createIndex(row, col, self.TopDIEs[row])
         return QModelIndex()
 
+    def flags(self, index):
+        f = Qt.ItemIsSelectable | Qt.ItemIsEnabled
+        if index.isValid() and not index.internalPointer().has_children:
+            f = f | Qt.ItemNeverHasChildren
+        return f
+
+    def hasChildren(self, index):
+        return not index.isValid() or index.internalPointer().has_children
+
     def rowCount(self, parent):
         if parent.isValid():
             parent_die = parent.internalPointer()
-            if parent_die is None: # The item is a temporary placeholder
-                return 0
-
+            # print('rcount of %s' % parent_die.tag)
             if not parent_die.has_children: # Legitimately nothing
                 return 0
-            elif parent_die._child_count is None: # Never expanded, return 1 to enable the expansion on the UI
-                return 1
-            else: # DIEs already read and cached
-                return parent_die._child_count
+            else:
+                load_children(parent_die)
+                return len(parent_die._children)
         else:
             return len(self.TopDIEs)
 
@@ -57,24 +71,20 @@ class DWARFTreeModel(QAbstractItemModel):
         return 1
 
     def parent(self, index):
-        die = index.internalPointer()
-        parent = die.get_parent()
-        if not parent:
-            return QModelIndex()
-        else:
-            return self.createIndex(parent._i, 0, parent)
+        if index.isValid():
+            parent = index.internalPointer().get_parent()
+            if parent:
+                return self.createIndex(parent._i, 0, parent)
+        return QModelIndex()
 
     def data(self, index, role):
         die = index.internalPointer() # Should never come for a placeholder entry
         if role == Qt.DisplayRole:
-            if die is None:
-                return "Please wait..."
-
-            if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
+            if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit': # CU/top die: return file name
                 source_name = die.attributes['DW_AT_name'].value.decode('utf-8')
                 return strip_path(source_name)
-            else:
-                s = die.tag[0 if self.prefix else 7:]
+            else: # Return tag, with name if possible
+                s = die.tag if self.prefix or not die.tag.startswith('DW_AT_') else die.tag[7:]
                 if 'DW_AT_name' in die.attributes:
                     s += ": " + die.attributes['DW_AT_name'].value.decode('utf-8')
                 return s
@@ -82,24 +92,17 @@ class DWARFTreeModel(QAbstractItemModel):
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
                 return die.attributes['DW_AT_name'].value.decode('utf-8')
 
+    # The rest is not Qt callbacks
+
     def set_prefix(self, prefix):
         if prefix != self.prefix:
             self.prefix = prefix
             self.dataChanged.emit(
                 self.createIndex(0, 0, self.TopDIEs[0]),
-                self.createIndex(len(self.TopDIEs)-1, 0, self.TopDIEs[-1]))
-
-    # That's where the progressive loading lives.
-    def on_expand(self, parent):
-        parent_die = parent.internalPointer()
-        if parent_die._child_count is None:
-            children = [with_index(die, i) for (i, die) in enumerate(parent_die.iter_children())] # Slow, parses the file
-            child_count = len(children)
-            parent_die._child_count = child_count
-            self.rowsRemoved.emit(parent, 0, 0)
-            self.rowsInserted.emit(parent, 0, len(children) - 1)
+                self.createIndex(len(self.TopDIEs)-1, 0, self.TopDIEs[-1]))    
 
     # Identifier for the current tree node that you can navigate to
+    # For the back-forward logic
     # Specifically, (cu, offset within the info section)
     def get_navitem(self, index):
         die = index.internalPointer()
@@ -115,15 +118,15 @@ class DWARFTreeModel(QAbstractItemModel):
 
         i = bisect_left(target_cu._diemap, target_offset)
         target_die = target_cu._dielist[i]
-        if '_i' in dir(target_die): # DIE already once iterated over
+        if '_i' in dir(target_die): # DIE already iterated over
             return self.createIndex(target_die._i, 0, target_die)
-        else: # Found the DIE, but the tree was never opened this deep. Restore the indices.
+        else: # Found the DIE, but the tree was never opened this deep. Read the tree along the path to the target DIE
+            index = False
             while '_i' not in dir(target_die):
                 parent_die = target_die.get_parent()
-                for i, die in enumerate(parent_die.iter_children()):
-                    with_index(die, i)
-                    if die.offset == target_offset:
-                        index = self.createIndex(i, 0, target_die)
+                load_children(parent_die)
+                if not index: # After the first iteration, the one in the direct parent of target_die, target_die will have _i
+                    index = self.createIndex(target_die._i, 0, target_die)
                 target_die = parent_die
             return index
 
