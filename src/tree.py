@@ -1,5 +1,7 @@
 from bisect import bisect_left
 from PyQt5.QtCore import Qt, QAbstractItemModel, QModelIndex
+from PyQt5.QtGui import QFont, QFontInfo, QBrush
+from PyQt5.QtWidgets import QApplication
 
 # Supports both / and \ - current system separator might not match the system the file came from
 # so os.path.basename won't do
@@ -32,7 +34,11 @@ class DWARFTreeModel(QAbstractItemModel):
     def __init__(self, di, prefix):
         QAbstractItemModel.__init__(self)
         self.prefix = prefix
-        self.TopDIEs = [with_index(CU.get_top_DIE(), i) for (i, CU) in enumerate(di._CUs)]
+        self.top_dies = [with_index(CU.get_top_DIE(), i) for (i, CU) in enumerate(di._CUs)]
+        self.highlight_condition = None
+        fi = QFontInfo(QApplication.font())
+        self.bold_font = QFont(fi.family(), fi.pointSize(), QFont.Bold)
+        self.blue_brush = QBrush(Qt.GlobalColor.blue)
 
     # Qt callbacks. QTreeView supports progressive loading, as long as you feed it the "item has children" bit in advance
 
@@ -43,7 +49,7 @@ class DWARFTreeModel(QAbstractItemModel):
             load_children(parent_die)
             return self.createIndex(row, col, parent_die._children[row])
         else:
-            return self.createIndex(row, col, self.TopDIEs[row])
+            return self.createIndex(row, col, self.top_dies[row])
         return QModelIndex()
 
     def flags(self, index):
@@ -65,7 +71,7 @@ class DWARFTreeModel(QAbstractItemModel):
                 load_children(parent_die)
                 return len(parent_die._children)
         else:
-            return len(self.TopDIEs)
+            return len(self.top_dies)
 
     def columnCount(self, parent):
         return 1
@@ -91,15 +97,23 @@ class DWARFTreeModel(QAbstractItemModel):
         elif role == Qt.ToolTipRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
                 return die.attributes['DW_AT_name'].value.decode('utf-8')
+        elif role == Qt.ForegroundRole and self.highlight_condition and self.highlight_condition(die):
+            return self.blue_brush
+        elif role == Qt.FontRole and self.highlight_condition and self.highlight_condition(die):
+            return self.bold_font
 
     # The rest is not Qt callbacks
+
+    def highlight(self, condition):
+        self.highlight_condition = condition
+        self.dataChanged.emit(self.createIndex(0, 0, self.top_dies[0]), self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]), (Qt.ForegroundRole, Qt.FontRole))
 
     def set_prefix(self, prefix):
         if prefix != self.prefix:
             self.prefix = prefix
             self.dataChanged.emit(
-                self.createIndex(0, 0, self.TopDIEs[0]),
-                self.createIndex(len(self.TopDIEs)-1, 0, self.TopDIEs[-1]))    
+                self.createIndex(0, 0, self.top_dies[0]),
+                self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]))    
 
     # Identifier for the current tree node that you can navigate to
     # For the back-forward logic
@@ -130,4 +144,7 @@ class DWARFTreeModel(QAbstractItemModel):
                 target_die = parent_die
             return index
 
+# Highlighter function(s)
+def has_code_location(die):
+    return 'DW_AT_low_pc' in die.attributes or 'DW_AT_ranges' in die.attributes
 

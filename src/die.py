@@ -36,10 +36,11 @@ class ExprDumper(GenericExprDumper):
 
 # TODO: cache expr dumper on CU level, not here
 class DIETableModel(QAbstractTableModel):
-    def __init__(self, die, prefix, lowlevel):
+    def __init__(self, die, prefix, lowlevel, hex):
         QAbstractTableModel.__init__(self)
         self.prefix = prefix
         self.lowlevel = lowlevel
+        self.hex = hex
         self.die = die
         self.attributes = die.attributes
         self.keys = list(die.attributes.keys())
@@ -63,24 +64,6 @@ class DIETableModel(QAbstractTableModel):
             self._exprdumper = ExprDumper(self.die.cu.structs, self.prefix)
         return di._locparser.parse_from_attribute(attr, self.die.cu['version'])
 
-    def format_value(self, attr):
-        val = attr.value
-        form = attr.form
-        if isinstance(val, bytes):
-            return val.decode('utf-8')
-        elif form == 'DW_FORM_addr' and isinstance(val, int):
-            return "0x%X" % val
-        elif form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
-            return "Ref: 0x%X" % val # There are several other reference forms in the spec
-        elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
-            ll = self.parse_location(attr)
-            if isinstance(ll, LocationExpr):
-                return '; '.join(self._exprdumper.dump(ll.loc_expr))
-            else:
-                return "Loc list: 0x%X" % attr.value
-        else:
-            return str(val)
-
     def data(self, index, role):
         row = index.row()
         key = self.keys[row]
@@ -92,7 +75,7 @@ class DIETableModel(QAbstractTableModel):
             elif col == 1:
                 return attr.form if self.prefix or not attr.form.startswith('DW_FORM_') else attr.form[8:]
             elif col == 2:
-                return str(attr.raw_value) if self.lowlevel else self.format_value(attr)
+                return self.format_raw(attr) if self.lowlevel else self.format_value(attr)
             elif col == 3:
                 return self.format_value(attr)
         elif role == Qt.ToolTipRole:
@@ -105,6 +88,28 @@ class DIETableModel(QAbstractTableModel):
                 return _blue_brush
 
     # End of Qt callbacks
+
+    # Big DIE attribute value interpreter
+    def format_value(self, attr):
+        val = attr.value
+        form = attr.form
+        if isinstance(val, bytes):
+            return val.decode('utf-8')
+        elif form == 'DW_FORM_addr' and isinstance(val, int):
+            return hex(val)
+        elif form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
+            return "Ref: 0x%X" % val # There are several other reference forms in the spec
+        elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
+            ll = self.parse_location(attr)
+            if isinstance(ll, LocationExpr):
+                return '; '.join(self._exprdumper.dump(ll.loc_expr))
+            else:
+                return "Loc list: 0x%X" % attr.value
+        else:
+            return hex(val) if isinstance(val, int) and self.hex else str(attr.raw_value)
+
+    def format_raw(self, attr):
+        return hex(attr.raw_value) if isinstance(attr.raw_value, int) and self.hex else str(attr.raw_value)
 
     def display_DIE(self, die):
         rows_was = len(self.keys)
@@ -121,7 +126,7 @@ class DIETableModel(QAbstractTableModel):
     def set_prefix(self, prefix):
         if prefix != self.prefix:
             self.prefix = prefix
-            self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
+            self.dataChanged.emit(self.createIndex(0, 2), self.createIndex(len(self.keys)-1, 3))
             if self._exprdumper:
                 self._exprdumper.set_prefix(prefix)
 
@@ -134,7 +139,11 @@ class DIETableModel(QAbstractTableModel):
             else:
                 self.beginRemoveColumns(QModelIndex(), 2, 2)
                 self.endRemoveColumns()
-            self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, self.columnCount(None)-1))
+
+    def set_hex(self, hex):
+        if hex != self.hex:
+            self.hex = hex
+            self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
 
     # Returns a table model for the attribute details
     # For attributes that refer to larger data structures, spell it out into a table
@@ -149,14 +158,14 @@ class DIETableModel(QAbstractTableModel):
             if not di._ranges: # Absent in the DWARF file
                 return None
             ranges = di._ranges.get_range_list_at_offset(attr.value)
-            return GenericTableModel(("Start offset", "End offset"), (("0x%X" % r.begin_offset, "0x%X" % r.end_offset) for r in ranges))
+            return GenericTableModel(("Start offset", "End offset"), ((hex(r.begin_offset), hex(r.end_offset)) for r in ranges))
         elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
             ll = self.parse_location(attr)
             if isinstance(ll, LocationExpr):
                 return GenericTableModel(("Command",), ((cmd,) for cmd in self._exprdumper.dump(ll.loc_expr)))
             else:
                 return GenericTableModel(("Start offset", "End offset", "Expression"),
-                    (('0x%X'%l.begin_offset, '0x%X'%l.end_offset, '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll))
+                    ((hex(l.begin_offset), hex(l.end_offset), '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll))
         return None
 
     # Returns (cu, die_offset) or None if not a navigable

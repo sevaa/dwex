@@ -1,18 +1,20 @@
 import sys, os, io
-from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex, QSettings, QTimer
-from PyQt5.QtGui import QFontMetrics 
+from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex, QSettings
+from PyQt5.QtGui import QFontMetrics, QKeySequence
 from PyQt5.QtWidgets import *
 from die import DIETableModel
 from formats import read_dwarf
-from tree import DWARFTreeModel
+from tree import DWARFTreeModel, has_code_location
 
 # TODO:
-# Copy
 # Low level raw bytes for expressions
-# Tree highligting
 # Line info
-# Expose offsets, CU info in low level mode
+# Expose offsets, CU info in low level mode?
+# Crash reporting
+# Update check
+# Autotest on corpus
 # What else is section_offset?
+
 
 #-----------------------------------------------------------------
 # The one and only main window class
@@ -49,6 +51,7 @@ class TheWindow(QMainWindow):
         self.sett = QSettings('Seva', 'DWARFExplorer')
         self.prefix = self.sett.value('General/Prefix', False, type=bool)
         self.lowlevel = self.sett.value('General/LowLevel', False, type=bool)
+        self.hex = self.sett.value('General/Hex', False, type=bool)
         self.mru = []
         for i in range(0, 10):
             s = self.sett.value("General/MRU%d" % i, False)
@@ -58,11 +61,16 @@ class TheWindow(QMainWindow):
     def setup_menu(self):
         menu = self.menuBar()
         file_menu = menu.addMenu("&File")
-        file_menu.addAction("Open...").triggered.connect(self.on_open)
+        open_menuitem = file_menu.addAction("Open...")
+        open_menuitem.setShortcut(QKeySequence.Open)
+        open_menuitem.triggered.connect(self.on_open)
         if len(self.mru):
             mru_menu = file_menu.addMenu("Recent files")
             self.populate_mru_menu(mru_menu)
-        file_menu.addAction("E&xit").triggered.connect(self.on_exit)
+        exit_menuitem = file_menu.addAction("E&xit")
+        exit_menuitem.setMenuRole(QAction.QuitRole)
+        exit_menuitem.setShortcut(QKeySequence.Quit)
+        exit_menuitem.triggered.connect(self.on_exit)
         view_menu = menu.addMenu("View")
         self.prefix_menuitem = view_menu.addAction("DWARF prefix")
         self.prefix_menuitem.setCheckable(True)
@@ -72,18 +80,45 @@ class TheWindow(QMainWindow):
         self.lowlevel_menuitem.setCheckable(True)
         self.lowlevel_menuitem.setChecked(self.lowlevel)
         self.lowlevel_menuitem.triggered.connect(self.on_view_lowlevel)
+        self.hex_menuitem = view_menu.addAction("Hexadecimal")
+        self.hex_menuitem.setCheckable(True)
+        self.hex_menuitem.setChecked(self.hex)
+        self.hex_menuitem.triggered.connect(self.on_view_hex)
+        view_menu.addSeparator()
+        self.highlightcode_menuitem = view_menu.addAction("Highlight code")
+        self.highlightcode_menuitem.setCheckable(True)
+        self.highlightcode_menuitem.setEnabled(False)
+        self.highlightcode_menuitem.triggered.connect(self.on_highlight_code)
+        self.highlightnothing_menuitem = view_menu.addAction("Remove highlighting")
+        self.highlightnothing_menuitem.setEnabled(False)
+        self.highlightnothing_menuitem.triggered.connect(self.on_highlight_nothing)
+        edit_menu = menu.addMenu("Edit")
+        self.copy_menuitem = edit_menu.addAction("Copy value")
+        self.copy_menuitem.setShortcut(QKeySequence.Copy)
+        self.copy_menuitem.setEnabled(False)
+        self.copy_menuitem.triggered.connect(self.on_copyvalue)
+        self.copyline_menuitem = edit_menu.addAction("Copy line")
+        self.copyline_menuitem.setEnabled(False)
+        self.copyline_menuitem.triggered.connect(self.on_copyline)        
+        self.copytable_menuitem = edit_menu.addAction("Copy table")
+        self.copytable_menuitem.setEnabled(False)
+        self.copytable_menuitem.triggered.connect(self.on_copytable)        
         nav_menu = menu.addMenu("Navigate")
         self.back_menuitem = nav_menu.addAction("Back")
+        self.back_menuitem.setShortcut(QKeySequence.Back)
         self.back_menuitem.setEnabled(False);
         self.back_menuitem.triggered.connect(lambda: self.on_nav(1))
         self.forward_menuitem = nav_menu.addAction("Forward")
+        self.forward_menuitem.setShortcut(QKeySequence.Forward)
         self.forward_menuitem.setEnabled(False);
         self.forward_menuitem.triggered.connect(lambda: self.on_nav(-1))
         self.followref_menuitem = nav_menu.addAction("Follow the ref")
         self.followref_menuitem.setEnabled(False);
         self.followref_menuitem.triggered.connect(self.on_followref)        
         help_menu = menu.addMenu("Help")
-        help_menu.addAction("About...").triggered.connect(self.on_about)      
+        about_menuitem = help_menu.addAction("About...")
+        about_menuitem.setMenuRole(QAction.AboutRole)
+        about_menuitem.triggered.connect(self.on_about)      
 
     def setup_ui(self):
         # Set up the left pane and the right pane
@@ -124,13 +159,51 @@ class TheWindow(QMainWindow):
     # Done with init
     ###################################################################
 
-    # File drag/drop handling - equivalent to open
-    def dragEnterEvent(self, evt):
-        if evt.mimeData() and evt.mimeData().hasUrls() and len(evt.mimeData().urls()) == 1:
-            evt.accept()
+    # Callback for the Mach-O fat binary opening logic
+    # Taking a cue from Hopper or IDA, we parse only one slice at a time
+    def resolve_arch(self, arches):
+        r = QInputDialog.getItem(self, 'Mach-O Fat Binary', 'Choose an architecture:', arches, 0, False, Qt.WindowType.Dialog)
+        return arches.index(r[0]) if r[1] else None
 
-    def dropEvent(self, evt):
-        self.open_file_interactive(os.path.normpath(evt.mimeData().urls()[0].toLocalFile()))
+    # Can throw an exception
+    # Returns None if it doesn't seem to contain DWARF
+    # False if the user cancelled
+    # True if the DWARF tree was loaded
+    def open_file(self, filename):
+        self.start_wait()
+        try:
+            di = read_dwarf(filename, self.resolve_arch)
+            if not di: # Covers both False and None
+                return di
+
+            # Some cached top level stuff
+            # Notably, iter_CUs doesn't cache
+            di._ranges = None # Loaded on first use
+            di._CUs = [cu for cu in di.iter_CUs()] # We'll need them first thing, might as well load here
+            di._locparser = None # Created on first use
+
+            self.tree_model = DWARFTreeModel(di, self.prefix)
+            self.the_tree.setModel(self.tree_model)
+            self.setWindowTitle("DWARF Explorer - " + os.path.basename(filename))
+            self.back_menuitem.setEnabled(False)
+            self.forward_menuitem.setEnabled(False)
+            self.followref_menuitem.setEnabled(False)
+            self.highlightcode_menuitem.setEnabled(True)
+            self.highlightnothing_menuitem.setEnabled(True)
+            self.copy_menuitem.setEnabled(False)
+            self.copyline_menuitem.setEnabled(False)
+            self.copytable_menuitem.setEnabled(False)
+            # Navigation stack - empty
+            self.navhistory = []
+            self.navpos = -1
+            self.save_filename_in_mru(filename)
+            return True
+        finally:
+            self.end_wait()
+
+    def save_mru(self):
+        for i, filename in enumerate(self.mru):
+            self.sett.setValue("General/MRU%d" % i, filename)    
 
     # Open a file, display an error if failure
     def open_file_interactive(self, filename):
@@ -163,6 +236,38 @@ class TheWindow(QMainWindow):
         for i, filename in enumerate(self.mru):
             mru_menu.addAction(filename).triggered.connect(MRUHandler(filename, self))
 
+    def save_filename_in_mru(self, filename):
+        try:
+            i = self.mru.index(filename)
+        except ValueError:
+            i = -1
+        if i != 0:
+            if i > 0:
+                self.mru.pop(i)
+            self.mru.insert(0, filename)
+            if len(self.mru) > 10:
+                self.mru = self.mru[0:10]
+            self.save_mru()
+            file_menu = self.menuBar().actions()[0].menu()
+            if file_menu.actions()[1].menu() is None: # Flimsy... we check if item 2 on the File menu is a submenu or not
+                mru_menu = QMenu("Recent files")
+                file_menu.insertMenu(file_menu.actions()[1], mru_menu)
+            else:
+                mru_menu = file_menu.actions()[1].menu()
+                mru_menu.clear()
+            self.populate_mru_menu(mru_menu)    
+
+    # File drag/drop handling - equivalent to open
+    def dragEnterEvent(self, evt):
+        if evt.mimeData() and evt.mimeData().hasUrls() and len(evt.mimeData().urls()) == 1:
+            evt.accept()
+
+    def dropEvent(self, evt):
+        self.open_file_interactive(os.path.normpath(evt.mimeData().urls()[0].toLocalFile()))               
+
+    #############################################################
+    #############################################################     
+
     def on_about(self):
         QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v.0.50\n\nSeva Alekseyev, 2020\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
             QMessageBox.Ok, self).show()
@@ -171,7 +276,7 @@ class TheWindow(QMainWindow):
         die = index.internalPointer()
         die_table = self.die_table
         if not self.die_model:
-            self.die_model = DIETableModel(die, self.prefix, self.lowlevel)
+            self.die_model = DIETableModel(die, self.prefix, self.lowlevel, self.hex)
             die_table.setModel(self.die_model)
         else:
             self.die_model.display_DIE(die)
@@ -197,6 +302,10 @@ class TheWindow(QMainWindow):
         self.back_menuitem.setEnabled(len(self.navhistory) > 1)
         self.forward_menuitem.setEnabled(False)
         self.display_die(index)
+        self.die_table.setCurrentIndex(QModelIndex())
+        self.copy_menuitem.setEnabled(False)
+        self.copyline_menuitem.setEnabled(False)
+        self.copytable_menuitem.setEnabled(False)
 
     def on_attribute_selection(self, index):
         details_model = self.die_model.get_attribute_details(index.row())
@@ -204,6 +313,9 @@ class TheWindow(QMainWindow):
         if details_model is not None:
             self.details_table.resizeColumnsToContents()
         self.followref_menuitem.setEnabled(self.die_model.ref_target(index) is not None)
+        self.copy_menuitem.setEnabled(True)
+        self.copyline_menuitem.setEnabled(True)
+        self.copytable_menuitem.setEnabled(True)        
 
     def on_attribute_dclick(self, index):
         self.on_followref(index)
@@ -231,71 +343,12 @@ class TheWindow(QMainWindow):
             self.on_tree_selection(target_tree_index)
         self.end_wait()
 
+
+    ##########################################################################
+    ##########################################################################
+
     def on_exit(self):
         self.destroy()
-
-    def save_filename_in_mru(self, filename):
-        try:
-            i = self.mru.index(filename)
-        except ValueError:
-            i = -1
-        if i != 0:
-            if i > 0:
-                self.mru.pop(i)
-            self.mru.insert(0, filename)
-            if len(self.mru) > 10:
-                self.mru = self.mru[0:10]
-            self.save_mru()
-            file_menu = self.menuBar().actions()[0].menu()
-            if file_menu.actions()[1].menu() is None: # Flimsy... we check if item 2 on the File menu is a submenu or not
-                mru_menu = QMenu("Recent files")
-                file_menu.insertMenu(file_menu.actions()[1], mru_menu)
-            else:
-                mru_menu = file_menu.actions()[1].menu()
-                mru_menu.clear()
-            self.populate_mru_menu(mru_menu)
-
-
-    # Callback for the Mach-O fat binary opening logic
-    # Taking a cue from Hopper or IDA, we parse only one slice at a time
-    def resolve_arch(self, arches):
-        r = QInputDialog.getItem(self, 'Mach-O Fat Binary', 'Choose an architecture:', arches, 0, False, Qt.WindowType.Dialog)
-        return arches.index(r[0]) if r[1] else None
-
-    # Can throw an exception
-    # Returns None if it doesn't seem to contain DWARF
-    # False if the user cancelled
-    # True if the DWARF tree was loaded
-    def open_file(self, filename):
-        self.start_wait()
-        try:
-            di = read_dwarf(filename, self.resolve_arch)
-            if not di: # Covers both False and None
-                return di
-
-            # Some cached top level stuff
-            # Notably, iter_CUs doesn't cache
-            di._ranges = None # Loaded on first use
-            di._CUs = [cu for cu in di.iter_CUs()] # We'll need them first thing, might as well load here
-            di._locparser = None # Created on first use
-
-            self.tree_model = DWARFTreeModel(di, self.prefix)
-            self.the_tree.setModel(self.tree_model)
-            self.setWindowTitle("DWARF Explorer - " + os.path.basename(filename))
-            self.back_menuitem.setEnabled(False)
-            self.forward_menuitem.setEnabled(False)
-            self.followref_menuitem.setEnabled(False)
-            # Navigation stack - empty
-            self.navhistory = []
-            self.navpos = -1
-            self.save_filename_in_mru(filename)
-            return True
-        finally:
-            self.end_wait()
-
-    def save_mru(self):
-        for i, filename in enumerate(self.mru):
-            self.sett.setValue("General/MRU%d" % i, filename)
 
     # Checkmark toggling is handled by the framework
     def on_view_prefix(self, checked):
@@ -315,6 +368,48 @@ class TheWindow(QMainWindow):
         if self.die_model:
             self.die_model.set_lowlevel(checked)
             self.refresh_details()
+
+    def on_view_hex(self, checked):        
+        self.hex = checked
+        self.sett.setValue('General/Hex', self.lowlevel)
+        if self.die_model:
+            self.die_model.set_hex(checked)
+            self.refresh_details()        
+
+    def on_highlight_code(self):
+        self.highlightcode_menuitem.setChecked(True)
+        self.tree_model.highlight(has_code_location)
+
+    def on_highlight_nothing(self):
+        self.highlightcode_menuitem.setChecked(False)
+        self.tree_model.highlight(None)
+
+    def on_copy(self, v):
+        cb = QApplication.clipboard()
+        cb.clear()
+        cb.setText(v)
+
+    def on_copyvalue(self):
+        t = self.details_table if self.details_table.hasFocus() else self.die_table
+        m = t.model()
+        self.on_copy(m.data(t.currentIndex(), Qt.DisplayRole))
+
+    def on_copyline(self):
+        t = self.details_table if self.details_table.hasFocus() else self.die_table
+        m = t.model()
+        row = t.currentIndex().row()
+        line = "\t".join(m.data(m.index(row, c, QModelIndex()), Qt.DisplayRole)
+            for c in range(0, m.columnCount(QModelIndex())))
+        self.on_copy(line)
+
+    def on_copytable(self):
+        t = self.details_table if self.details_table.hasFocus() else self.die_table
+        m = t.model()
+        table_text = "\n".join(
+                "\t".join(m.data(m.index(r, c, QModelIndex()), Qt.DisplayRole)
+                for c in range(0, m.columnCount(QModelIndex())))
+            for r in range(0, m.rowCount(QModelIndex())))
+        self.on_copy(table_text)
 
     # If the detils pane has data - reload that
     def refresh_details(self):

@@ -111,7 +111,7 @@ def read_dwarf(filename, resolve_arch):
                 file.seek(0)
                 elffile = ELFFile(file)
                 file = None # Keep the file open
-                return elffile.get_dwarf_info()
+                return elffile.get_dwarf_info() if elffile.has_dwarf_info() else None
             elif struct.unpack('>I', signature)[0] in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe): # Mach-O fat binary, 32- and 64-bit Mach-O in big- or little-endian format
                 return read_macho(filename, resolve_arch)
         finally:
