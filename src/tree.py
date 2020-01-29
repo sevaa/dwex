@@ -84,7 +84,7 @@ class DWARFTreeModel(QAbstractItemModel):
                 source_name = die.attributes['DW_AT_name'].value.decode('utf-8')
                 return strip_path(source_name)
             else: # Return tag, with name if possible
-                s = die.tag if self.prefix or not die.tag.startswith('DW_AT_') else die.tag[7:]
+                s = die.tag if self.prefix or not die.tag.startswith('DW_TAG_') else die.tag[7:]
                 if 'DW_AT_name' in die.attributes:
                     s += ": " + die.attributes['DW_AT_name'].value.decode('utf-8')
                 return s

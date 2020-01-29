@@ -19,6 +19,9 @@ def read_pe(filename):
             raw_size if virtual_size == 0 else min((raw_size, virtual_size)), 0)
         for (name, section, virtual_size, raw_size) in sections}
 
+    if not '.debug_info' in data:
+        return None
+
     machine = pefile.imageNtHeaders.header.FileHeader.Machine
     is64 = machine in (IMAGE_FILE_MACHINE.AMD64, IMAGE_FILE_MACHINE.ARM64, IMAGE_FILE_MACHINE.IA64) # There are also some exotic architectures...
     return DWARFInfo(
@@ -64,6 +67,9 @@ def read_macho(filename, resolve_arch):
         for section in loadcmd.sections
     }
 
+    if not '__debug_info' in data:
+        return None
+
     # TODO: distinguish between arm flavors in DwarfConfig?
     arch = macho.machHeader.header.cputype
     return DWARFInfo(
@@ -76,7 +82,7 @@ def read_macho(filename, resolve_arch):
         debug_aranges_sec = data['__debug_aranges'],
         debug_abbrev_sec = data['__debug_abbrev'],
         debug_frame_sec = data.get('__debug_frame'),
-        eh_frame_sec=None,
+        eh_frame_sec = None,
         debug_str_sec = data['__debug_str'],
         debug_loc_sec = data['__debug_loc'],
         debug_ranges_sec = data['__debug_ranges'],

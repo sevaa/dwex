@@ -6,6 +6,14 @@ from die import DIETableModel
 from formats import read_dwarf
 from tree import DWARFTreeModel
 
+# TODO:
+# Copy
+# Low level raw bytes for expressions
+# Tree highligting
+# Line info
+# Expose offsets, CU info in low level mode
+# What else is section_offset?
+
 #-----------------------------------------------------------------
 # The one and only main window class
 # Pretty much DWARF unaware, all the DWARF visualization logic is in tree.py and die.py
@@ -40,6 +48,7 @@ class TheWindow(QMainWindow):
     def load_settings(self):
         self.sett = QSettings('Seva', 'DWARFExplorer')
         self.prefix = self.sett.value('General/Prefix', False, type=bool)
+        self.lowlevel = self.sett.value('General/LowLevel', False, type=bool)
         self.mru = []
         for i in range(0, 10):
             s = self.sett.value("General/MRU%d" % i, False)
@@ -59,13 +68,17 @@ class TheWindow(QMainWindow):
         self.prefix_menuitem.setCheckable(True)
         self.prefix_menuitem.setChecked(self.prefix)
         self.prefix_menuitem.triggered.connect(self.on_view_prefix)
+        self.lowlevel_menuitem = view_menu.addAction("Low level")
+        self.lowlevel_menuitem.setCheckable(True)
+        self.lowlevel_menuitem.setChecked(self.lowlevel)
+        self.lowlevel_menuitem.triggered.connect(self.on_view_lowlevel)
         nav_menu = menu.addMenu("Navigate")
         self.back_menuitem = nav_menu.addAction("Back")
         self.back_menuitem.setEnabled(False);
-        self.back_menuitem.triggered.connect(self.on_nav_back)
+        self.back_menuitem.triggered.connect(lambda: self.on_nav(1))
         self.forward_menuitem = nav_menu.addAction("Forward")
         self.forward_menuitem.setEnabled(False);
-        self.forward_menuitem.triggered.connect(self.on_nav_forward)
+        self.forward_menuitem.triggered.connect(lambda: self.on_nav(-1))
         self.followref_menuitem = nav_menu.addAction("Follow the ref")
         self.followref_menuitem.setEnabled(False);
         self.followref_menuitem.triggered.connect(self.on_followref)        
@@ -145,29 +158,27 @@ class TheWindow(QMainWindow):
                 self.filename = filename
                 self.win = win
             def __call__(self):
-                self.win.on_recentfile(self.filename)
+                self.win.open_file_interactive(self.filename)
 
         for i, filename in enumerate(self.mru):
             mru_menu.addAction(filename).triggered.connect(MRUHandler(filename, self))
 
-    def on_recentfile(self, filename):
-        self.open_file_interactive(filename)
-
     def on_about(self):
-        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v.0.50\n\ngithub.com/sevaa/dwex",
+        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v.0.50\n\nSeva Alekseyev, 2020\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
             QMessageBox.Ok, self).show()
 
     def display_die(self, index):
         die = index.internalPointer()
         die_table = self.die_table
         if not self.die_model:
-            self.die_model = DIETableModel(die, self.prefix)
+            self.die_model = DIETableModel(die, self.prefix, self.lowlevel)
             die_table.setModel(self.die_model)
         else:
             self.die_model.display_DIE(die)
         self.die_table.resizeColumnsToContents()
         self.details_table.setModel(None)
         self.followref_menuitem.setEnabled(False)
+        self.die_table.setCurrentIndex(QModelIndex())
 
         #TODO: resize the attribute table dynamically
         #attr_count = self.die_model.rowCount(None)
@@ -206,12 +217,6 @@ class TheWindow(QMainWindow):
         self.display_die(tree_index)
         self.back_menuitem.setEnabled(self.navpos < len(self.navhistory) - 1)
         self.forward_menuitem.setEnabled(self.navpos > 0)
-
-    def on_nav_back(self):
-        self.on_nav(1)
-
-    def on_nav_forward(self):
-        self.on_nav(-1)
 
     # Called for double-click on a reference type attribute, and via the menu
     def on_followref(self, index = None):
@@ -301,6 +306,24 @@ class TheWindow(QMainWindow):
 
         if self.die_model:
             self.die_model.set_prefix(checked)
+            self.refresh_details()
+
+    # Checkmark toggling is handled by the framework
+    def on_view_lowlevel(self, checked):        
+        self.lowlevel = checked
+        self.sett.setValue('General/LowLevel', self.lowlevel)
+        if self.die_model:
+            self.die_model.set_lowlevel(checked)
+            self.refresh_details()
+
+    # If the detils pane has data - reload that
+    def refresh_details(self):
+        index = self.die_table.currentIndex()
+        if index.isValid():
+            details_model = self.die_model.get_attribute_details(index.row())
+            if details_model:
+                self.details_table.setModel(details_model)
+                self.details_table.resizeColumnsToContents()
         self.die_table.resizeColumnsToContents()
 
     # Doesn't quite work for the delay on tree expansion :(
