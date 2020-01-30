@@ -1,6 +1,7 @@
 import os, sys
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
-sys.path.insert(1, os.path.join(os.getcwd(), "src"))
+sys.path.insert(1, os.path.join(os.getcwd(), "dwex"))
+from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from formats import read_dwarf
 from die import DIETableModel
 from tree import strip_path
@@ -16,43 +17,59 @@ def test_dwarfinfo(di):
     for CU in di._CUs:
         print("%s" % strip_path(CU.get_top_DIE().attributes['DW_AT_name'].value.decode('ASCII')))
         for die in CU.iter_DIEs():
-            if not m:
-                m = DIETableModel(die, True, True, False)
-            else:
-                m.display_DIE(die)
+            if not die.is_null():
+                assert die.tag.startswith('DW_TAG_')
 
-            rc = m.rowCount(dummy_index)
-            cc = m.columnCount(dummy_index)
-            for r in range(0, rc):
-                for c in range(0, cc):
-                    m.data(m.index(r, c, dummy_index), Qt.DisplayRole)
-                m.get_attribute_details(r)
+                if not m:
+                    m = DIETableModel(die, True, True, False)
+                else:
+                    m.display_DIE(die)
+
+                rc = m.rowCount(dummy_index)
+                cc = m.columnCount(dummy_index)
+                keys = list(die.attributes.keys())
+                # Assuming rows correspond to attributes; 
+                # if we introduce non-attribute metadata into the DIE table, this will break
+                for r in range(0, rc):
+                    key = keys[r]
+                    attr = die.attributes[key]
+                    form = attr.form
+                    value = attr.value
+                    # Check the elftools' results first
+
+                    # Check if the key is interpreted properly
+                    assert str(keys[r]).startswith('DW_AT_')
+
+                    # Check if attributes with locations are all found
+                    if form == 'DW_FORM_locexpr':
+                        assert LocationParser.attribute_has_location(attr, CU['version'])
+                    else:
+                        assert not LocationParser.attribute_has_location(attr, CU['version'])
+
+                    # Now check the spell out logic
+                    for c in range(0, cc):
+                        m.data(m.index(r, c, dummy_index), Qt.DisplayRole)
+                    m.get_attribute_details(r)
 
 def test_file(filename):
     print(filename)
     arches = False
-    def f(a):
+    def save_arches(a):
         nonlocal arches
         arches = a
-        return None
-    di = read_dwarf(filename, f)
-    if arches:
+        return None # Cancel out of loading
+    di = read_dwarf(filename, save_arches)
+    if arches: # Fat binary - go through all through architectures
         for arch_no in range(0, len(arches)):
-            def g(arches):
-                return arch_no
-            di = read_dwarf(filename, g)
+            print(arches[arch_no])
+            di = read_dwarf(filename, lambda arches:arch_no)
             assert di
             test_dwarfinfo(di)
     else:
         assert di
         test_dwarfinfo(di)
 
-#test_file("H:\\dev\\dwex\\samples\\a.exe")
-test_file("H:\\dev\\dwex\\samples\\YarxiMin.app.dSYM")
 
-
-# test that attributes where LocationParser.attribute_has_location returns false
-# don't have DW_FORM_locexpr
 # Caught on GNU_call_site_value
 
 # All sec_offsets must be parsed

@@ -46,9 +46,8 @@ def read_pe(filename):
 # resolve_arch takes a list of architecture descriptions, and returns
 # the desired index, or None if the user has cancelled
 def read_macho(filename, resolve_arch):
-    from filebytes.mach_o import MachO, CpuType, CpuSubTypeARM, TypeFlags
+    from filebytes.mach_o import MachO, CpuType, CpuSubTypeARM, TypeFlags, LC
     macho = MachO(filename)
-    # TODO: find a MachO file that is not a fat binary
     if macho.isFat:
         # One CPU type where it's relevant - armv6, armv7, armv7s coexisted in the iOS toolchain for a while
         slices = [CpuType[slice.machHeader.header.cputype].name +
@@ -62,9 +61,11 @@ def read_macho(filename, resolve_arch):
     # We proceed with macho being a arch-specific file, or a slice within a fat binary
     data = {
         section.name: DebugSectionDescriptor(io.BytesIO(section.bytes), section.name, None, len(section.bytes), 0)
-        for loadcmd in macho.loadCommands
-        if getattr(loadcmd, 'name', None) == '__DWARF'
-        for section in loadcmd.sections
+        for cmd in macho.loadCommands
+        if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64)
+        #if getattr(loadcmd, 'name', None) == '__DWARF'
+        for section in cmd.sections
+        if section.name.startswith('__debug')
     }
 
     if not '__debug_info' in data:
@@ -75,20 +76,20 @@ def read_macho(filename, resolve_arch):
     return DWARFInfo(
         config = DwarfConfig(
             little_endian=True,
-            default_address_size = 8 if (arch | TypeFlags.ABI64) != 0 else 4,
+            default_address_size = 8 if (arch & TypeFlags.ABI64) != 0 else 4,
             machine_arch = CpuType[arch].name
         ),
         debug_info_sec = data['__debug_info'],
-        debug_aranges_sec = data['__debug_aranges'],
+        debug_aranges_sec = data.get('__debug_aranges'),
         debug_abbrev_sec = data['__debug_abbrev'],
         debug_frame_sec = data.get('__debug_frame'),
-        eh_frame_sec = None,
+        eh_frame_sec = None, # Haven't seen those in Mach-O
         debug_str_sec = data['__debug_str'],
-        debug_loc_sec = data['__debug_loc'],
-        debug_ranges_sec = data['__debug_ranges'],
-        debug_line_sec = data['__debug_line'],
-        debug_pubtypes_sec = data['__debug_pubtypes'],
-        debug_pubnames_sec = data['__debug_pubtypes'],
+        debug_loc_sec = data.get('__debug_loc'),
+        debug_ranges_sec = data.get('__debug_ranges'),
+        debug_line_sec = data.get('__debug_line'),
+        debug_pubtypes_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubn?
+        debug_pubnames_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubt?
     )
 
 # UI agnostic - resolve_arch might be interactive

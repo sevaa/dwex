@@ -5,6 +5,9 @@ from PyQt5.QtWidgets import *
 from die import DIETableModel
 from formats import read_dwarf
 from tree import DWARFTreeModel, has_code_location
+from scriptdlg import ScriptDlg
+
+version=(0,50)
 
 # TODO:
 # Low level raw bytes for expressions
@@ -33,8 +36,10 @@ class TheWindow(QMainWindow):
         self.setAcceptDrops(True)
 
         # The data model placeholders - to be populated once we read a file
-        self.die_model = None # Recreated between files
-        self.tree_model = None # Reused between DIEs
+        self.tree_model = None # Recreated between files
+        self.die_model = None # Reused between DIEs
+
+        self.findcondition = None
 
         self.show()
 
@@ -64,9 +69,11 @@ class TheWindow(QMainWindow):
         open_menuitem = file_menu.addAction("Open...")
         open_menuitem.setShortcut(QKeySequence.Open)
         open_menuitem.triggered.connect(self.on_open)
+        self.mru_menu = file_menu.addMenu("Recent files")
         if len(self.mru):
-            mru_menu = file_menu.addMenu("Recent files")
-            self.populate_mru_menu(mru_menu)
+            self.populate_mru_menu()
+        else:
+            self.mru_menu.setEnabled(False)
         exit_menuitem = file_menu.addAction("E&xit")
         exit_menuitem.setMenuRole(QAction.QuitRole)
         exit_menuitem.setShortcut(QKeySequence.Quit)
@@ -102,7 +109,19 @@ class TheWindow(QMainWindow):
         self.copyline_menuitem.triggered.connect(self.on_copyline)        
         self.copytable_menuitem = edit_menu.addAction("Copy table")
         self.copytable_menuitem.setEnabled(False)
-        self.copytable_menuitem.triggered.connect(self.on_copytable)        
+        self.copytable_menuitem.triggered.connect(self.on_copytable)  
+        edit_menu.addSeparator()
+        self.find_menuitem = edit_menu.addAction("Find...")
+        self.find_menuitem.setEnabled(False)
+        self.find_menuitem.setShortcut(QKeySequence.Find)
+        self.find_menuitem.triggered.connect(self.on_find)
+        self.findbycondition_menuitem = edit_menu.addAction("Find by condition...")
+        self.findbycondition_menuitem.setEnabled(False)
+        self.findbycondition_menuitem.triggered.connect(self.on_findbycondition)
+        self.findnext_menuitem = edit_menu.addAction("Find next")
+        self.findnext_menuitem.setEnabled(False)
+        self.findnext_menuitem.setShortcut(QKeySequence.FindNext)
+        self.findnext_menuitem.triggered.connect(self.on_findnext)
         nav_menu = menu.addMenu("Navigate")
         self.back_menuitem = nav_menu.addAction("Back")
         self.back_menuitem.setShortcut(QKeySequence.Back)
@@ -127,21 +146,19 @@ class TheWindow(QMainWindow):
         tree.setUniformRowHeights(True)
         tree.clicked.connect(self.on_tree_selection)
         
-        rpane = QWidget()
-        rpane_layout = self.rpane_layout = QVBoxLayout()
-        rpane.setLayout(rpane_layout)
+        rpane = QSplitter(Qt.Orientation.Vertical)
         die_table = self.die_table = QTableView()
         die_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         die_table.clicked.connect(self.on_attribute_selection)
         die_table.doubleClicked.connect(self.on_attribute_dclick)
-        rpane_layout.addWidget(die_table)
+        rpane.addWidget(die_table)
 
         details_table = self.details_table = QTableView()
         details_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        rpane_layout.addWidget(details_table)
-        rpane_layout.setStretchFactor(die_table, 0)
-        rpane_layout.setStretchFactor(details_table, 1)
-        rpane_layout.setContentsMargins(0, 0, 0, 0)
+        rpane.addWidget(details_table)
+        # All the resizing goes into the bottom pane
+        rpane.setStretchFactor(0, 0)
+        rpane.setStretchFactor(1, 1)
 
         spl = QSplitter()
         spl.addWidget(self.the_tree)
@@ -179,7 +196,10 @@ class TheWindow(QMainWindow):
             # Some cached top level stuff
             # Notably, iter_CUs doesn't cache
             di._ranges = None # Loaded on first use
-            di._CUs = [cu for cu in di.iter_CUs()] # We'll need them first thing, might as well load here
+            def with_index(o, i):
+                o._i = i
+                return o
+            di._CUs = [with_index(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
             di._locparser = None # Created on first use
 
             self.tree_model = DWARFTreeModel(di, self.prefix)
@@ -193,6 +213,8 @@ class TheWindow(QMainWindow):
             self.copy_menuitem.setEnabled(False)
             self.copyline_menuitem.setEnabled(False)
             self.copytable_menuitem.setEnabled(False)
+            self.findbycondition_menuitem.setEnabled(True)
+            self.find_menuitem.setEnabled(True)
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
@@ -224,7 +246,7 @@ class TheWindow(QMainWindow):
         if filename[0]:
             self.open_file_interactive(os.path.normpath(filename[0]))
 
-    def populate_mru_menu(self, mru_menu):
+    def populate_mru_menu(self):
         class MRUHandler(object):
             def __init__(self, filename, win):
                 object.__init__(self)
@@ -234,7 +256,7 @@ class TheWindow(QMainWindow):
                 self.win.open_file_interactive(self.filename)
 
         for i, filename in enumerate(self.mru):
-            mru_menu.addAction(filename).triggered.connect(MRUHandler(filename, self))
+            self.mru_menu.addAction(filename).triggered.connect(MRUHandler(filename, self))
 
     def save_filename_in_mru(self, filename):
         try:
@@ -248,14 +270,9 @@ class TheWindow(QMainWindow):
             if len(self.mru) > 10:
                 self.mru = self.mru[0:10]
             self.save_mru()
-            file_menu = self.menuBar().actions()[0].menu()
-            if file_menu.actions()[1].menu() is None: # Flimsy... we check if item 2 on the File menu is a submenu or not
-                mru_menu = QMenu("Recent files")
-                file_menu.insertMenu(file_menu.actions()[1], mru_menu)
-            else:
-                mru_menu = file_menu.actions()[1].menu()
-                mru_menu.clear()
-            self.populate_mru_menu(mru_menu)    
+            self.mru_menu.setEnabled(True)
+            self.mru_menu.clear()
+            self.populate_mru_menu()    
 
     # File drag/drop handling - equivalent to open
     def dragEnterEvent(self, evt):
@@ -266,11 +283,8 @@ class TheWindow(QMainWindow):
         self.open_file_interactive(os.path.normpath(evt.mimeData().urls()[0].toLocalFile()))               
 
     #############################################################
+    # Done with file stuff, now tree navigation
     #############################################################     
-
-    def on_about(self):
-        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v.0.50\n\nSeva Alekseyev, 2020\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
-            QMessageBox.Ok, self).show()
 
     def display_die(self, index):
         die = index.internalPointer()
@@ -346,6 +360,42 @@ class TheWindow(QMainWindow):
 
     ##########################################################################
     ##########################################################################
+
+    def findbytext(self, die, s):
+        for key in die.attributes.keys():
+            attr = die.attributes[key]
+            if str(attr.value).lower().find(s) >= 0 or str(key).lower().find(s) >= 0 or attr.form.lower().find(s) >= 0:
+                return True
+        return False
+
+    def on_find(self):
+        r = QInputDialog.getText(self, 'Find', 'Find what:')
+        if r[1] and r[0]:
+            s = r[0].lower()
+            self.findcondition = lambda die: self.findbytext(die, s)
+            self.findnext_menuitem.setEnabled(True)
+            self.on_findnext()
+
+    def on_findbycondition(self):
+        dlg = ScriptDlg(self)
+        if dlg.exec() == QDialog.Accepted:
+            cond = dlg.cond
+            self.findcondition = lambda die: eval(cond, {'die' : die})
+            self.findnext_menuitem.setEnabled(True)
+            self.on_findnext()
+
+    def on_findnext(self):
+        index = self.tree_model.find(self.the_tree.currentIndex(), self.findcondition)
+        if index:
+            self.the_tree.setCurrentIndex(index)
+            self.on_tree_selection(index)
+
+    ##########################################################################
+    ##########################################################################
+
+    def on_about(self):
+        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(version) + "\n\nSeva Alekseyev, 2020\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
+            QMessageBox.Ok, self).show()
 
     def on_exit(self):
         self.destroy()
@@ -432,8 +482,20 @@ class TheWindow(QMainWindow):
             self.wait_level -= 1
         if self.wait_level == 0:
             self.setCursor(Qt.ArrowCursor)
-        
-the_app = QApplication([])
-the_window = TheWindow()
-the_app.exec_()        
 
+def dwex_main():       
+    if sys.settrace is None: # Lame way to detect a debugger
+        try:
+            the_app = QApplication([])
+            the_window = TheWindow()
+            the_app.exec_()        
+        except Exception as exc:
+            from crash import report_crash
+            report_crash(exc)
+    else: # Running under a debugger - surface the uncaught exceptions
+        the_app = QApplication([])
+        the_window = TheWindow()
+        the_app.exec_()        
+
+if __name__ == "__main__":
+    dwex_main()

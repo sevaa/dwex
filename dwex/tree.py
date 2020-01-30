@@ -25,7 +25,7 @@ def with_index(o, i):
 def load_children(parent_die):
     # Load and cache child DIEs in the parent DIE, if necessary
     # Assumes the check if the DIE has children has been already performed
-    if parent_die._children is None:
+    if '_children' not in dir(parent_die) or parent_die._children is None:
         # TODO: wait cursor here. It may cause disk I/O
         parent_die._children = [with_index(die, i) for (i, die) in enumerate(parent_die.iter_children())]    
 
@@ -90,7 +90,7 @@ class DWARFTreeModel(QAbstractItemModel):
                 source_name = die.attributes['DW_AT_name'].value.decode('utf-8')
                 return strip_path(source_name)
             else: # Return tag, with name if possible
-                s = die.tag if self.prefix or not die.tag.startswith('DW_TAG_') else die.tag[7:]
+                s = die.tag if self.prefix or not str(die.tag).startswith('DW_TAG_') else die.tag[7:]
                 if 'DW_AT_name' in die.attributes:
                     s += ": " + die.attributes['DW_AT_name'].value.decode('utf-8')
                 return s
@@ -132,17 +132,58 @@ class DWARFTreeModel(QAbstractItemModel):
 
         i = bisect_left(target_cu._diemap, target_offset)
         target_die = target_cu._dielist[i]
-        if '_i' in dir(target_die): # DIE already iterated over
-            return self.createIndex(target_die._i, 0, target_die)
+        return self.index_for_die(target_die)
+
+    # Takes a die that might not have an _i
+    # Restores the _i
+    # Assumes all parent DIEs of the current one are already parsed
+    def index_for_die(self, die):
+        if '_i' in dir(die): # DIE already iterated over
+            return self.createIndex(die._i, 0, die)
         else: # Found the DIE, but the tree was never opened this deep. Read the tree along the path to the target DIE
             index = False
-            while '_i' not in dir(target_die):
-                parent_die = target_die.get_parent()
+            while '_i' not in dir(die):
+                parent_die = die.get_parent()
                 load_children(parent_die)
                 if not index: # After the first iteration, the one in the direct parent of target_die, target_die will have _i
-                    index = self.createIndex(target_die._i, 0, target_die)
-                target_die = parent_die
+                    index = self.createIndex(die._i, 0, die)
+                die = parent_die
             return index
+
+    # Returns the index of the found item, or False
+    # Pos is the index of the current item, or an invalid one
+    def find(self, start_pos, cond):
+        have_start_pos = start_pos.isValid()
+        if have_start_pos: # Searching from a specific position, with wrap-around
+            start_die = start_pos.internalPointer()
+            start_die_offset = start_die.offset # In the current die, before the next one
+            start_cu = start_die.cu
+            start_cu_offset = start_cu.cu_offset
+            cu = start_cu
+            wrapped = False
+        else:
+            cu = self.top_dies[0].cu
+
+        while True:
+            cu_offset = cu.cu_offset
+            # Parse all DIEs in the current CU
+            for die in cu.iter_DIEs():
+                # Quit condition with search from position - quit once we go past the starting position after the wrap
+                if cu_offset >= start_cu_offset and die.offset > start_die_offset and wrapped:
+                    break
+                if (not have_start_pos or cu_offset != start_cu_offset or (not wrapped and die.offset > start_die_offset)) and cond(die):
+                    return self.index_for_die(die)
+
+            # We're at the end of the CU. What next?
+            if cu._i < len(self.top_dies) - 1: # More CUs to scan
+                cu = self.top_dies[cu._i + 1].cu
+            elif have_start_pos and not wrapped: # Scanned the last CU, wrap around
+                cu = self.top_dies[0].cu
+                wrapped = True
+            else:
+                break
+
+        return False
 
 # Highlighter function(s)
 def has_code_location(die):

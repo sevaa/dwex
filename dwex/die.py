@@ -9,8 +9,8 @@ from elftools.dwarf.dwarf_expr import GenericExprDumper, DW_OP_opcode2name
 
 _blue_brush = QBrush(Qt.GlobalColor.blue)
 
-ll_headers = ("Attribute", "Form", "Raw", "Value")
-headers = ("Attribute", "Form", "Value")
+_ll_headers = ("Attribute", "Form", "Raw", "Value")
+_noll_headers = ("Attribute", "Form", "Value")
 
 # Format: op arg, arg...
 class ExprDumper(GenericExprDumper):
@@ -24,6 +24,7 @@ class ExprDumper(GenericExprDumper):
     def _dump_to_string(self, opcode, opcode_name, args):
         # Challenge: for nested expressions, args is a list with a list of commands
         # For those, the format is: op {op arg, arg; op arg, arg}
+        # Can't just check for iterable, str is iterable too
         if opcode_name.startswith('DW_OP_') and not self.prefix:
             opcode_name = opcode_name[6:]
 
@@ -45,16 +46,17 @@ class DIETableModel(QAbstractTableModel):
         self.attributes = die.attributes
         self.keys = list(die.attributes.keys())
         self._exprdumper = None
+        self.headers = _ll_headers if self.lowlevel else _noll_headers
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.DisplayRole:
-            return (ll_headers if self.lowlevel else headers)[section]
+            return self.headers[section]
 
     def rowCount(self, parent):
         return len(self.keys)
 
     def columnCount(self, parent):
-        return 4 if self.lowlevel else 3
+        return len(self.headers)
 
     def parse_location(self, attr):
         di = self.die.dwarfinfo
@@ -71,7 +73,8 @@ class DIETableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             col = index.column()
             if col == 0:
-                return key if self.prefix or not key.startswith('DW_AT_')  else key[6:]
+                # Unknown keys come across as ints
+                return key if self.prefix or not str(key).startswith('DW_AT_')  else key[6:]
             elif col == 1:
                 return attr.form if self.prefix or not attr.form.startswith('DW_FORM_') else attr.form[8:]
             elif col == 2:
@@ -133,6 +136,7 @@ class DIETableModel(QAbstractTableModel):
     def set_lowlevel(self, lowlevel):
         if lowlevel != self.lowlevel:
             self.lowlevel = lowlevel
+            self.headers = _ll_headers if self.lowlevel else _noll_headers
             if lowlevel:
                 self.beginInsertColumns(QModelIndex(), 2, 2)
                 self.endInsertColumns()
@@ -145,27 +149,31 @@ class DIETableModel(QAbstractTableModel):
             self.hex = hex
             self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
 
-    # Returns a table model for the attribute details
-    # For attributes that refer to larger data structures, spell it out into a table
+    # Returns a table model for the attribute details table
+    # For attributes that refer to larger data structures (ranges, locations), makes sense spell it out into a table
     def get_attribute_details(self, row):
         key = self.keys[row]
         attr = self.attributes[key]
         form = attr.form
-        if key == "DW_AT_ranges" and form == 'DW_FORM_sec_offset':
+        if key == "DW_AT_ranges":
             di = self.die.dwarfinfo
             if not di._ranges:
                 di._ranges = di.range_lists()
             if not di._ranges: # Absent in the DWARF file
                 return None
             ranges = di._ranges.get_range_list_at_offset(attr.value)
-            return GenericTableModel(("Start offset", "End offset"), ((hex(r.begin_offset), hex(r.end_offset)) for r in ranges))
+            # TODO: handle base addresses. Never seen those so far...
+            cu_base = self.die.cu.get_top_DIE().attributes['DW_AT_low_pc'].value
+            return GenericTableModel(("Start offset", "End offset"),
+                ((hex(cu_base + r.begin_offset), hex(cu_base + r.end_offset)) for r in ranges))
         elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
             ll = self.parse_location(attr)
             if isinstance(ll, LocationExpr):
                 return GenericTableModel(("Command",), ((cmd,) for cmd in self._exprdumper.dump(ll.loc_expr)))
             else:
+                cu_base = self.die.cu.get_top_DIE().attributes['DW_AT_low_pc'].value
                 return GenericTableModel(("Start offset", "End offset", "Expression"),
-                    ((hex(l.begin_offset), hex(l.end_offset), '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll))
+                    ((hex(cu_base + l.begin_offset), hex(cu_base + l.end_offset), '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll))
         return None
 
     # Returns (cu, die_offset) or None if not a navigable

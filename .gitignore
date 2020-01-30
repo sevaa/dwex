@@ -1,4 +1,4 @@
-/src/__pycache__
-/src/elftools
-/src/filebytes
-/src/.vscode
+/test/testlocal.py
+/samples
+__pycache__
+.vscode
