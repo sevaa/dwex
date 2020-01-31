@@ -43,17 +43,36 @@ def read_pe(filename):
         debug_pubnames_sec = data.get('.debug_pubnames'),
     )
 
+# Arch + flavor. Relevant for ARM and ARM64
+def make_macho_arch_name(macho):
+    from filebytes.mach_o import CpuType, CpuSubTypeARM
+    h = macho.machHeader.header
+    flavor = CpuSubTypeARM[h.cpusubtype].name if h.cputype == CpuType.ARM else ''
+    return CpuType[h.cputype].name + flavor
+        
+# For debugging purposes only - dump individual debug related sections in a Mach-O file/slice as files
+def macho_save_sections(filename, macho):
+    from filebytes.mach_o import LC
+    arch = make_macho_arch_name(macho)
+    for cmd in macho.loadCommands:
+        if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64):
+            for section in cmd.sections:
+                if section.name.startswith('__debug'):
+                    sec_file = ".".join((filename, arch, section.name))
+                    if not path.exists(sec_file):
+                        with open(sec_file, 'wb') as f:
+                            f.write(section.bytes)
+
+
 # resolve_arch takes a list of architecture descriptions, and returns
 # the desired index, or None if the user has cancelled
-def read_macho(filename, resolve_arch):
+def read_macho(filename, resolve_arch, friendly_filename):
     from filebytes.mach_o import MachO, CpuType, CpuSubTypeARM, TypeFlags, LC
     fat_arch = None
     macho = MachO(filename)
     if macho.isFat:
         # One CPU type where it's relevant - armv6, armv7, armv7s coexisted in the iOS toolchain for a while
-        slices = [CpuType[slice.machHeader.header.cputype].name +
-            (CpuSubTypeARM[slice.machHeader.header.cpusubtype].name if slice.machHeader.header.cputype == CpuType.ARM else '')
-            for slice in macho.fatArches]
+        slices = [make_macho_arch_name(slice) for slice in macho.fatArches]
         arch_no = resolve_arch(slices)
         if arch_no is None: # User cancellation
             return False
@@ -69,6 +88,8 @@ def read_macho(filename, resolve_arch):
         for section in cmd.sections
         if section.name.startswith('__debug')
     }
+
+    #macho_save_sections(friendly_filename, macho)
 
     if not '__debug_info' in data:
         return None
@@ -118,15 +139,23 @@ def read_dwarf(filename, resolve_arch):
                 file = None # Keep the file open
                 return elffile.get_dwarf_info() if elffile.has_dwarf_info() else None
             elif struct.unpack('>I', signature)[0] in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe): # Mach-O fat binary, 32- and 64-bit Mach-O in big- or little-endian format
-                return read_macho(filename, resolve_arch)
+                return read_macho(filename, resolve_arch, filename)
         finally:
             if file:
                 file.close()                
     elif path.isdir(filename):
         # Is it a dSYM bundle?
         nameparts = path.basename(filename).split('.') # Typical bundle name: appname.app.dSYM
-        dsym_file = path.join(filename, 'Contents', 'Resources', 'DWARF', nameparts[0])
-        if path.exists(dsym_file):
-            return read_macho(dsym_file, resolve_arch)
+        if len(nameparts) > 2 and nameparts[-2] == 'app' and nameparts[-1] == 'dSYM':
+            dsym_file = path.join(filename, 'Contents', 'Resources', 'DWARF', nameparts[0])
+            if path.exists(dsym_file):
+                return read_macho(dsym_file, resolve_arch, filename)
+        # Is it an app bundle? appname.app
+        if len(nameparts) > 1 and nameparts[-1] == 'app':
+            app_file = path.join(filename, nameparts[0])
+            if path.exists(app_file):
+                return read_macho(app_file, resolve_arch, filename)
+
+
         # Any other bundle formats we should be aware of?
     return None

@@ -14,12 +14,24 @@ _noll_headers = ("Attribute", "Form", "Value")
 
 # Format: op arg, arg...
 class ExprDumper(GenericExprDumper):
-    def __init__(self, structs, prefix):
+    def __init__(self, structs, prefix, hex):
         GenericExprDumper.__init__(self, structs)
         self.prefix = prefix
+        self.hex = hex
 
     def set_prefix(self, prefix):
         self.prefix = prefix
+
+    def set_hex(self, hex):
+        self.hex = hex        
+    
+    def format_arg(self, s):
+        if isinstance(s, str):
+            return s
+        elif isinstance(s, int):
+            return hex(s) if self.hex else str(s)
+        else: # Assuming a subexpression TODO: check if it's iterable
+            return '{' + '; '.join(s) + '}'
 
     def _dump_to_string(self, opcode, opcode_name, args):
         # Challenge: for nested expressions, args is a list with a list of commands
@@ -29,7 +41,7 @@ class ExprDumper(GenericExprDumper):
             opcode_name = opcode_name[6:]
 
         if args:
-            args = [str(s) if isinstance(s, str) or isinstance(s, int) else '{' + '; '.join(s) + '}' for s in args]
+            args = [self.format_arg(s) for s in args]
             args = ', '.join(args)
             return opcode_name + ' ' + args
         else:
@@ -63,7 +75,7 @@ class DIETableModel(QAbstractTableModel):
         if di._locparser is None:
             di._locparser = LocationParser(di.location_lists())
         if self._exprdumper is None:
-            self._exprdumper = ExprDumper(self.die.cu.structs, self.prefix)
+            self._exprdumper = ExprDumper(self.die.cu.structs, self.prefix, self.hex)
         return di._locparser.parse_from_attribute(attr, self.die.cu['version'])
 
     def data(self, index, role):
@@ -76,7 +88,7 @@ class DIETableModel(QAbstractTableModel):
                 # Unknown keys come across as ints
                 return key if self.prefix or not str(key).startswith('DW_AT_')  else key[6:]
             elif col == 1:
-                return attr.form if self.prefix or not attr.form.startswith('DW_FORM_') else attr.form[8:]
+                return attr.form if self.prefix or not str(attr.form).startswith('DW_FORM_') else attr.form[8:]
             elif col == 2:
                 return self.format_raw(attr) if self.lowlevel else self.format_value(attr)
             elif col == 3:
@@ -147,6 +159,8 @@ class DIETableModel(QAbstractTableModel):
     def set_hex(self, hex):
         if hex != self.hex:
             self.hex = hex
+            if self._exprdumper:
+                self._exprdumper.set_hex(hex)
             self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
 
     # Returns a table model for the attribute details table

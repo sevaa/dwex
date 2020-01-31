@@ -39,12 +39,12 @@ def test_dwarfinfo(di):
 
                     # Check if the key is interpreted properly
                     assert str(keys[r]).startswith('DW_AT_')
+                    assert str(form).startswith('DW_FORM_')
 
                     # Check if attributes with locations are all found
                     if form == 'DW_FORM_locexpr':
                         assert LocationParser.attribute_has_location(attr, CU['version'])
-                    else:
-                        assert not LocationParser.attribute_has_location(attr, CU['version'])
+                    # The converse is not true; on DWARF2, locations have form DW_FORM_block1
 
                     # Now check the spell out logic
                     for c in range(0, cc):

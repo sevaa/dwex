@@ -17,6 +17,7 @@ version=(0,50)
 # Update check
 # Autotest on corpus
 # What else is section_offset?
+# Translate decl_file
 
 
 #-----------------------------------------------------------------
@@ -195,7 +196,7 @@ class TheWindow(QMainWindow):
     def open_file(self, filename, arch = None):
         self.start_wait()
         try:
-            di = read_dwarf(filename, self.resolve_arch if arch is None else lambda arches: arch.index(arch))
+            di = read_dwarf(filename, self.resolve_arch if arch is None else lambda arches: arches.index(arch))
             if not di: # Covers both False and None
                 return di
 
@@ -227,7 +228,7 @@ class TheWindow(QMainWindow):
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
-            self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) else None)
+            self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
             return True
         finally:
             self.end_wait()
@@ -377,11 +378,22 @@ class TheWindow(QMainWindow):
     ##########################################################################
 
     def findbytext(self, die, s):
-        for key in die.attributes.keys():
-            attr = die.attributes[key]
-            if str(attr.value).lower().find(s) >= 0 or str(key).lower().find(s) >= 0 or attr.form.lower().find(s) >= 0:
+        for k in die.attributes.keys():
+            attr = die.attributes[k]
+            v = attr.value
+            f = attr.form
+            all = "\n".join(str(v), str(k), f, hex(v) if isinstance(v, int) else '').lower()
+            if all.find(s) >= 0:
                 return True
         return False
+
+    # Exception means false
+    def eval_user_condition(self, cond, die):
+        try:
+            return eval(cond, {'die' : die})
+        except Exception as exc:
+            print("Error in user condition: %s" % format(exc))
+            return False
 
     def on_find(self):
         r = QInputDialog.getText(self, 'Find', 'Find what:')
@@ -395,7 +407,7 @@ class TheWindow(QMainWindow):
         dlg = ScriptDlg(self)
         if dlg.exec() == QDialog.Accepted:
             cond = dlg.cond
-            self.findcondition = lambda die: eval(cond, {'die' : die})
+            self.findcondition = lambda die: self.eval_user_condition(cond, die)
             self.findnext_menuitem.setEnabled(True)
             self.on_findnext()
 
