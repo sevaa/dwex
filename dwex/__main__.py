@@ -59,9 +59,11 @@ class TheWindow(QMainWindow):
         self.hex = self.sett.value('General/Hex', False, type=bool)
         self.mru = []
         for i in range(0, 10):
-            s = self.sett.value("General/MRU%d" % i, False)
-            if s:
-                self.mru.append(s)        
+            f = self.sett.value("General/MRU%d" % i, False)
+            if f:
+                arch = self.sett.value("General/MRUArch%d" % i, None)
+                fa = (f,) if arch is None else (f,arch) 
+                self.mru.append(fa)        
 
     def setup_menu(self):
         menu = self.menuBar()
@@ -78,6 +80,7 @@ class TheWindow(QMainWindow):
         exit_menuitem.setMenuRole(QAction.QuitRole)
         exit_menuitem.setShortcut(QKeySequence.Quit)
         exit_menuitem.triggered.connect(self.on_exit)
+        #########
         view_menu = menu.addMenu("View")
         self.prefix_menuitem = view_menu.addAction("DWARF prefix")
         self.prefix_menuitem.setCheckable(True)
@@ -99,6 +102,7 @@ class TheWindow(QMainWindow):
         self.highlightnothing_menuitem = view_menu.addAction("Remove highlighting")
         self.highlightnothing_menuitem.setEnabled(False)
         self.highlightnothing_menuitem.triggered.connect(self.on_highlight_nothing)
+        #########
         edit_menu = menu.addMenu("Edit")
         self.copy_menuitem = edit_menu.addAction("Copy value")
         self.copy_menuitem.setShortcut(QKeySequence.Copy)
@@ -110,18 +114,7 @@ class TheWindow(QMainWindow):
         self.copytable_menuitem = edit_menu.addAction("Copy table")
         self.copytable_menuitem.setEnabled(False)
         self.copytable_menuitem.triggered.connect(self.on_copytable)  
-        edit_menu.addSeparator()
-        self.find_menuitem = edit_menu.addAction("Find...")
-        self.find_menuitem.setEnabled(False)
-        self.find_menuitem.setShortcut(QKeySequence.Find)
-        self.find_menuitem.triggered.connect(self.on_find)
-        self.findbycondition_menuitem = edit_menu.addAction("Find by condition...")
-        self.findbycondition_menuitem.setEnabled(False)
-        self.findbycondition_menuitem.triggered.connect(self.on_findbycondition)
-        self.findnext_menuitem = edit_menu.addAction("Find next")
-        self.findnext_menuitem.setEnabled(False)
-        self.findnext_menuitem.setShortcut(QKeySequence.FindNext)
-        self.findnext_menuitem.triggered.connect(self.on_findnext)
+        #########
         nav_menu = menu.addMenu("Navigate")
         self.back_menuitem = nav_menu.addAction("Back")
         self.back_menuitem.setShortcut(QKeySequence.Back)
@@ -134,6 +127,19 @@ class TheWindow(QMainWindow):
         self.followref_menuitem = nav_menu.addAction("Follow the ref")
         self.followref_menuitem.setEnabled(False);
         self.followref_menuitem.triggered.connect(self.on_followref)        
+        nav_menu.addSeparator()
+        self.find_menuitem = nav_menu.addAction("Find...")
+        self.find_menuitem.setEnabled(False)
+        self.find_menuitem.setShortcut(QKeySequence.Find)
+        self.find_menuitem.triggered.connect(self.on_find)
+        self.findbycondition_menuitem = nav_menu.addAction("Find by condition...")
+        self.findbycondition_menuitem.setEnabled(False)
+        self.findbycondition_menuitem.triggered.connect(self.on_findbycondition)
+        self.findnext_menuitem = nav_menu.addAction("Find next")
+        self.findnext_menuitem.setEnabled(False)
+        self.findnext_menuitem.setShortcut(QKeySequence.FindNext)
+        self.findnext_menuitem.triggered.connect(self.on_findnext)
+        ########
         help_menu = menu.addMenu("Help")
         about_menuitem = help_menu.addAction("About...")
         about_menuitem.setMenuRole(QAction.AboutRole)
@@ -173,7 +179,7 @@ class TheWindow(QMainWindow):
 
 
     ###################################################################
-    # Done with init
+    # Done with init, now file stuff
     ###################################################################
 
     # Callback for the Mach-O fat binary opening logic
@@ -186,10 +192,10 @@ class TheWindow(QMainWindow):
     # Returns None if it doesn't seem to contain DWARF
     # False if the user cancelled
     # True if the DWARF tree was loaded
-    def open_file(self, filename):
+    def open_file(self, filename, arch = None):
         self.start_wait()
         try:
-            di = read_dwarf(filename, self.resolve_arch)
+            di = read_dwarf(filename, self.resolve_arch if arch is None else lambda arches: arch.index(arch))
             if not di: # Covers both False and None
                 return di
 
@@ -204,7 +210,10 @@ class TheWindow(QMainWindow):
 
             self.tree_model = DWARFTreeModel(di, self.prefix)
             self.the_tree.setModel(self.tree_model)
-            self.setWindowTitle("DWARF Explorer - " + os.path.basename(filename))
+            s = os.path.basename(filename)
+            if arch is not None:
+                s += ' (' + arch + ')'
+            self.setWindowTitle("DWARF Explorer - " + s)
             self.back_menuitem.setEnabled(False)
             self.forward_menuitem.setEnabled(False)
             self.followref_menuitem.setEnabled(False)
@@ -218,19 +227,21 @@ class TheWindow(QMainWindow):
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
-            self.save_filename_in_mru(filename)
+            self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) else None)
             return True
         finally:
             self.end_wait()
 
     def save_mru(self):
-        for i, filename in enumerate(self.mru):
-            self.sett.setValue("General/MRU%d" % i, filename)    
+        for i, fa in enumerate(self.mru):
+            self.sett.setValue("General/MRU%d" % i, fa[0])    
+            if len(fa) > 1:
+                self.sett.setValue("General/MRUArch%d" % i, fa[1])    
 
     # Open a file, display an error if failure
-    def open_file_interactive(self, filename):
+    def open_file_interactive(self, filename, arch = None):
         try:
-            if self.open_file(filename) is None:
+            if self.open_file(filename, arch) is None:
                 QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer",
                     "The file contains no DWARF information, or it is in an unsupported format.",
                     QMessageBox.Ok, self).show()
@@ -241,32 +252,36 @@ class TheWindow(QMainWindow):
 
     # TODO: list the extensions for the open file dialog?
     def on_open(self):
-        dir = os.path.dirname(self.mru[0]) if len(self.mru) > 0 else ''
+        dir = os.path.dirname(self.mru[0][0]) if len(self.mru) > 0 else ''
         filename = QFileDialog.getOpenFileName(self, None, dir)
         if filename[0]:
             self.open_file_interactive(os.path.normpath(filename[0]))
 
     def populate_mru_menu(self):
         class MRUHandler(object):
-            def __init__(self, filename, win):
+            def __init__(self, fa, win):
                 object.__init__(self)
-                self.filename = filename
+                self.fa = fa
                 self.win = win
             def __call__(self):
-                self.win.open_file_interactive(self.filename)
+                self.win.open_file_interactive(*self.fa)
 
-        for i, filename in enumerate(self.mru):
-            self.mru_menu.addAction(filename).triggered.connect(MRUHandler(filename, self))
+        for i, fa in enumerate(self.mru):
+            s = fa[0]
+            if len(fa) > 1:
+                s += ' (' + fa[1] + ')'
+            self.mru_menu.addAction(s).triggered.connect(MRUHandler(fa, self))
 
-    def save_filename_in_mru(self, filename):
+    def save_filename_in_mru(self, filename, arch = None):
+        mru_record = (filename,) if arch is None else (filename, arch)
         try:
-            i = self.mru.index(filename)
+            i = self.mru.index(mru_record)
         except ValueError:
             i = -1
         if i != 0:
             if i > 0:
                 self.mru.pop(i)
-            self.mru.insert(0, filename)
+            self.mru.insert(0, mru_record)
             if len(self.mru) > 10:
                 self.mru = self.mru[0:10]
             self.save_mru()

@@ -47,6 +47,7 @@ def read_pe(filename):
 # the desired index, or None if the user has cancelled
 def read_macho(filename, resolve_arch):
     from filebytes.mach_o import MachO, CpuType, CpuSubTypeARM, TypeFlags, LC
+    fat_arch = None
     macho = MachO(filename)
     if macho.isFat:
         # One CPU type where it's relevant - armv6, armv7, armv7s coexisted in the iOS toolchain for a while
@@ -56,6 +57,7 @@ def read_macho(filename, resolve_arch):
         arch_no = resolve_arch(slices)
         if arch_no is None: # User cancellation
             return False
+        fat_arch = slices[arch_no]
         macho = macho.fatArches[arch_no]
 
     # We proceed with macho being a arch-specific file, or a slice within a fat binary
@@ -73,7 +75,7 @@ def read_macho(filename, resolve_arch):
 
     # TODO: distinguish between arm flavors in DwarfConfig?
     arch = macho.machHeader.header.cputype
-    return DWARFInfo(
+    di = DWARFInfo(
         config = DwarfConfig(
             little_endian=True,
             default_address_size = 8 if (arch & TypeFlags.ABI64) != 0 else 4,
@@ -91,6 +93,8 @@ def read_macho(filename, resolve_arch):
         debug_pubtypes_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubn?
         debug_pubnames_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubt?
     )
+    di._fat_arch = fat_arch
+    return di
 
 # UI agnostic - resolve_arch might be interactive
 # Returns DWARFInfo

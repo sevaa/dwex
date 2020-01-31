@@ -69,6 +69,13 @@ def test_file(filename):
         assert di
         test_dwarfinfo(di)
 
+def test_tree(path):
+    for f in os.path.listdir(path):
+        full_path = os.path.join(path, f)
+        if f.endswith('.dSYM') or f.endswith('.so'):
+            test_file(os.path.join(path, f))
+        elif path.isdir(fullpath):
+            test_tree(fullpath)
 
 # Caught on GNU_call_site_value
 
