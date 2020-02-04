@@ -12,12 +12,12 @@ version=(0,50)
 # TODO:
 # Low level raw bytes for expressions
 # Line info
-# Expose offsets, CU info in low level mode?
 # Crash reporting
 # Update check
 # Autotest on corpus
 # What else is section_offset?
 # Translate decl_file
+# Inconsistent hex capitalization: %x vs hex()
 
 
 #-----------------------------------------------------------------
@@ -103,6 +103,10 @@ class TheWindow(QMainWindow):
         self.highlightnothing_menuitem = view_menu.addAction("Remove highlighting")
         self.highlightnothing_menuitem.setEnabled(False)
         self.highlightnothing_menuitem.triggered.connect(self.on_highlight_nothing)
+        view_menu.addSeparator()
+        self.cuproperties_menuitem = view_menu.addAction("CU properties...")
+        self.cuproperties_menuitem.setEnabled(False)
+        self.cuproperties_menuitem.triggered.connect(self.on_cuproperties)
         #########
         edit_menu = menu.addMenu("Edit")
         self.copy_menuitem = edit_menu.addAction("Copy value")
@@ -302,6 +306,7 @@ class TheWindow(QMainWindow):
     # Done with file stuff, now tree navigation
     #############################################################     
 
+    # Index is a tree index - the DIE is the data object within
     def display_die(self, index):
         die = index.internalPointer()
         die_table = self.die_table
@@ -313,6 +318,7 @@ class TheWindow(QMainWindow):
         self.die_table.resizeColumnsToContents()
         self.details_table.setModel(None)
         self.followref_menuitem.setEnabled(False)
+        self.cuproperties_menuitem.setEnabled(True)
         self.die_table.setCurrentIndex(QModelIndex())
 
         #TODO: resize the attribute table dynamically
@@ -338,7 +344,7 @@ class TheWindow(QMainWindow):
         self.copytable_menuitem.setEnabled(False)
 
     def on_attribute_selection(self, index):
-        details_model = self.die_model.get_attribute_details(index.row())
+        details_model = self.die_model.get_attribute_details(index)
         self.details_table.setModel(details_model)
         if details_model is not None:
             self.details_table.resizeColumnsToContents()
@@ -382,7 +388,7 @@ class TheWindow(QMainWindow):
             attr = die.attributes[k]
             v = attr.value
             f = attr.form
-            all = "\n".join(str(v), str(k), f, hex(v) if isinstance(v, int) else '').lower()
+            all = "\n".join((str(v), str(k), f, hex(v) if isinstance(v, int) else '')).lower()
             if all.find(s) >= 0:
                 return True
         return False
@@ -461,6 +467,13 @@ class TheWindow(QMainWindow):
         self.highlightcode_menuitem.setChecked(False)
         self.tree_model.highlight(None)
 
+    def on_cuproperties(self):
+        cu = self.the_tree.currentIndex().internalPointer().cu
+        props = (cu['version'], cu['unit_length'], cu['debug_abbrev_offset'], cu['address_size'])
+        s = "DWARF version:\t%d\nLength:\t%d\nAbbrev table offset: 0x%x\nAddress size:\t%d" % props
+        t = "CU at 0x%x" % cu.cu_offset
+        QMessageBox(QMessageBox.Icon.Information, t, s, QMessageBox.Ok, self).show()
+
     def on_copy(self, v):
         cb = QApplication.clipboard()
         cb.clear()
@@ -488,11 +501,11 @@ class TheWindow(QMainWindow):
             for r in range(0, m.rowCount(QModelIndex())))
         self.on_copy(table_text)
 
-    # If the detils pane has data - reload that
+    # If the details pane has data - reload that
     def refresh_details(self):
         index = self.die_table.currentIndex()
         if index.isValid():
-            details_model = self.die_model.get_attribute_details(index.row())
+            details_model = self.die_model.get_attribute_details(index)
             if details_model:
                 self.details_table.setModel(details_model)
                 self.details_table.resizeColumnsToContents()

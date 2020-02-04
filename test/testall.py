@@ -21,7 +21,8 @@ def test_dwarfinfo(di):
                 assert die.tag.startswith('DW_TAG_')
 
                 if not m:
-                    m = DIETableModel(die, True, True, False)
+                    # With prefix, with low level data, decimal
+                    m = DIETableModel(die, True, True, False) 
                 else:
                     m.display_DIE(die)
 
@@ -30,15 +31,15 @@ def test_dwarfinfo(di):
                 keys = list(die.attributes.keys())
                 # Assuming rows correspond to attributes; 
                 # if we introduce non-attribute metadata into the DIE table, this will break
-                for r in range(0, rc):
-                    key = keys[r]
+                for r in range(m.meta_count, rc):
+                    key = keys[r - m.meta_count]
                     attr = die.attributes[key]
                     form = attr.form
                     value = attr.value
                     # Check the elftools' results first
 
                     # Check if the key is interpreted properly
-                    assert str(keys[r]).startswith('DW_AT_')
+                    assert str(key).startswith('DW_AT_')
                     assert str(form).startswith('DW_FORM_')
 
                     # Check if attributes with locations are all found
@@ -49,7 +50,7 @@ def test_dwarfinfo(di):
                     # Now check the spell out logic
                     for c in range(0, cc):
                         m.data(m.index(r, c, dummy_index), Qt.DisplayRole)
-                    m.get_attribute_details(r)
+                    m.get_attribute_details(m.index(r, 0, dummy_index))
 
 def test_file(filename):
     print(filename)

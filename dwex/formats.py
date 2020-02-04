@@ -43,7 +43,7 @@ def read_pe(filename):
         debug_pubnames_sec = data.get('.debug_pubnames'),
     )
 
-# Arch + flavor. Relevant for ARM and ARM64
+# Arch + flavor where flavor matters
 def make_macho_arch_name(macho):
     from filebytes.mach_o import CpuType, CpuSubTypeARM
     h = macho.machHeader.header
@@ -94,13 +94,12 @@ def read_macho(filename, resolve_arch, friendly_filename):
     if not '__debug_info' in data:
         return None
 
-    # TODO: distinguish between arm flavors in DwarfConfig?
     arch = macho.machHeader.header.cputype
     di = DWARFInfo(
         config = DwarfConfig(
             little_endian=True,
             default_address_size = 8 if (arch & TypeFlags.ABI64) != 0 else 4,
-            machine_arch = CpuType[arch].name
+            machine_arch = make_macho_arch_name(macho)
         ),
         debug_info_sec = data['__debug_info'],
         debug_aranges_sec = data.get('__debug_aranges'),
