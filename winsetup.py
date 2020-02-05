@@ -1,12 +1,16 @@
-import subprocess, sys
+import subprocess, sys, os
 from os import path, environ
+
+def create_shortcut_under(root, exepath):
+    profile = environ[root]
+    s = "$s=(New-Object -COM WScript.Shell).CreateShortcut('" + profile + "\\Microsoft\\Windows\\Start Menu\\Programs\\DWARF Explorer.lnk');"
+    s += "$s.TargetPath='"+exepath+"';$s.Save()"
+    return subprocess.call(['powershell', s]) == 0
 
 def create_shortcut():
     exepath = path.join(path.dirname(sys.executable), "Scripts", "dwex.exe")
-    profile = environ['USERPROFILE']
-    s = "$s=(New-Object -COM WScript.Shell).CreateShortcut('" + profile + "\\Start Menu\\Programs\\DWARFExplorer.lnk');"
-    s += "$s.TargetPath='"+exepath+"';$s.Description='DWARF Explorer';$s.Save()"
-    subprocess.call(['powershell', s])
+    if not create_shortcut_under('ALLUSERSPROFILE', exepath):
+        create_shortcut_under('APPDATA', exepath)
 
 if __name__ == "__main__":
     create_shortcut()
