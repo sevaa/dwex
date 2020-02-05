@@ -17,24 +17,24 @@ def strip_path(filename):
 #------------------------------------------------    
 
 # Some additional data for every DIE
-def with_index(o, i):
-    o._i = i
-    o._children = None
-    return o
+def decorate_die(die, i):
+    die._i = i
+    die._children = None
+    return die
 
 def load_children(parent_die):
     # Load and cache child DIEs in the parent DIE, if necessary
     # Assumes the check if the DIE has children has been already performed
     if '_children' not in dir(parent_die) or parent_die._children is None:
         # TODO: wait cursor here. It may cause disk I/O
-        parent_die._children = [with_index(die, i) for (i, die) in enumerate(parent_die.iter_children())]    
+        parent_die._children = [decorate_die(die, i) for (i, die) in enumerate(parent_die.iter_children())]    
 
 
 class DWARFTreeModel(QAbstractItemModel):
     def __init__(self, di, prefix):
         QAbstractItemModel.__init__(self)
         self.prefix = prefix
-        self.top_dies = [with_index(CU.get_top_DIE(), i) for (i, CU) in enumerate(di._CUs)]
+        self.top_dies = [decorate_die(CU.get_top_DIE(), i) for (i, CU) in enumerate(di._CUs)]
         self.highlight_condition = None
         fi = QFontInfo(QApplication.font())
         self.bold_font = QFont(fi.family(), fi.pointSize(), QFont.Bold)

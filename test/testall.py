@@ -16,6 +16,7 @@ def test_dwarfinfo(di):
     dummy_index = QModelIndex()
     for CU in di._CUs:
         print("%s" % strip_path(CU.get_top_DIE().attributes['DW_AT_name'].value.decode('ASCII')))
+        CU._lineprogram = None
         for die in CU.iter_DIEs():
             if not die.is_null():
                 assert die.tag.startswith('DW_TAG_')

@@ -208,11 +208,11 @@ class TheWindow(QMainWindow):
             # Some cached top level stuff
             # Notably, iter_CUs doesn't cache
             di._ranges = None # Loaded on first use
-            def with_index(o, i):
-                o._i = i
-                o._lineprogram = None
-                return o
-            di._CUs = [with_index(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
+            def decorate_cu(cu, i):
+                cu._i = i
+                cu._lineprogram = None
+                return cu
+            di._CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
             di._locparser = None # Created on first use
 
             self.tree_model = DWARFTreeModel(di, self.prefix)
