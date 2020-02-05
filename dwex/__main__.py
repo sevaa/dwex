@@ -16,7 +16,6 @@ version=(0,50)
 # Update check
 # Autotest on corpus
 # What else is section_offset?
-# Translate decl_file
 # Inconsistent hex capitalization: %x vs hex()
 # const_value as FORM_block1: an array of 4 bytes, found in iOS/4.69.8/ARMv7/DecompItem.mm 
 
@@ -429,7 +428,7 @@ class TheWindow(QMainWindow):
     ##########################################################################
 
     def on_about(self):
-        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(version) + "\n\nSeva Alekseyev, 2020\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
+        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(str(v) for v in version) + "\n\nSeva Alekseyev, 2020\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
             QMessageBox.Ok, self).show()
 
     def on_exit(self):

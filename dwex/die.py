@@ -252,11 +252,16 @@ class DIETableModel(QAbstractTableModel):
                 def format_state(state):
                     return (hex(state.address),
                         files[state.file-1].name.decode('ASCII') if state.file > 0 else '(N/A)',
-                        state.line)
+                        state.line,
+                        'Y' if state.is_stmt  else '',
+                        'Y' if state.basic_block else '',
+                        'Y' if state.end_sequence else '',
+                        'Y' if state.prologue_end else '',
+                        'Y' if state.epilogue_begin else '')
                 states = [format_state(e.state) for e in lpe if e.state]
                 # TODO: low level flavor with extra details
                 # TODO: commands vs states
-                return GenericTableModel(('Address', 'File', 'Line'), states)
+                return GenericTableModel(('Address', 'File', 'Line', 'Stmt', 'Basic block', 'End seq', 'End prologue', 'Begin epilogue'), states)
         return None
 
     # Returns (cu, die_offset) or None if not a navigable
