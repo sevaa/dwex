@@ -74,7 +74,7 @@ def test_file(filename):
 def test_tree(path):
     for f in os.listdir(path):
         full_path = os.path.join(path, f)
-        if full_path.endswith('.dSYM') or (full_path.endswith('.so') and not full_path.endswith('libJiPadLib.so')):
+        if f.endswith('.dSYM') or f.endswith('.o') or (f.endswith('.so') and not f.endswith('libJiPadLib.so')):
             test_file(full_path)
         elif os.path.isdir(full_path):
             test_tree(full_path)

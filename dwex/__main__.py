@@ -10,14 +10,12 @@ from scriptdlg import ScriptDlg
 version=(0,50)
 
 # TODO:
-# Low level raw bytes for expressions
-# Line info
-# Crash reporting
-# Update check
+# Low level raw bytes for expressions in location lists
 # Autotest on corpus
 # What else is section_offset?
-# Inconsistent hex capitalization: %x vs hex()
+# Inconsistent hex capitalization: %x vs hex()?
 # const_value as FORM_block1: an array of 4 bytes, found in iOS/4.69.8/ARMv7/DecompItem.mm 
+# Test back-forward mouse buttons
 
 
 #-----------------------------------------------------------------
@@ -148,7 +146,8 @@ class TheWindow(QMainWindow):
         help_menu = menu.addMenu("Help")
         about_menuitem = help_menu.addAction("About...")
         about_menuitem.setMenuRole(QAction.AboutRole)
-        about_menuitem.triggered.connect(self.on_about)      
+        about_menuitem.triggered.connect(self.on_about) 
+        help_menu.addAction('Check for updates...').triggered.connect(self.on_updatecheck)
 
     def setup_ui(self):
         # Set up the left pane and the right pane
@@ -380,6 +379,16 @@ class TheWindow(QMainWindow):
             self.on_tree_selection(target_tree_index)
         self.end_wait()
 
+    # Back-forward mouse buttons are shortcuts for back/forward navigation
+    # Qt docs claim capturing is not necessary
+    def mouseReleaseEvent(self, evt):
+        QMainWindow.mouseReleaseEvent(self, evt)
+        b = evt.button()
+        if b == Qt.MouseButton.BackButton:
+            self.on_nav(1)
+        elif b == Qt.MouseButton.ForwardButton:
+            self.on_nav(-1)
+        
 
     ##########################################################################
     ##########################################################################
@@ -430,6 +439,27 @@ class TheWindow(QMainWindow):
     def on_about(self):
         QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(str(v) for v in version) + "\n\nSeva Alekseyev, 2020\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
             QMessageBox.Ok, self).show()
+
+    def on_updatecheck(self):
+        from urllib.request import urlopen
+        import json
+        try:
+            self.start_wait()
+            resp = urlopen('https://api.github.com/repos/sevaa/dwex/releases')
+            #resp = urlopen('https://api.github.com/repos/jazzband/pip-tools/releases')
+            if resp.getcode() == 200:
+                releases = resp.read()
+                self.start_wait()
+                releases = json.loads(releases)
+                max_tag = max(r['tag_name'] for r in releases)
+                max_ver = tuple(int(v) for v in max_tag.split('.'))
+                if max_ver > version:
+                    s = "DWARF Explorer v." + max_tag + " is out. Use \"pip install --upgrade dwex\" to update."
+                else: 
+                    s = "You have the latest version."
+                QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", s, QMessageBox.Ok, self).show()
+        except:
+            pass
 
     def on_exit(self):
         self.destroy()
@@ -524,7 +554,7 @@ class TheWindow(QMainWindow):
         if self.wait_level == 0:
             self.setCursor(Qt.ArrowCursor)
 
-def dwex_main():       
+def main():     
     if sys.settrace is None: # Lame way to detect a debugger
         try:
             the_app = QApplication([])
@@ -532,11 +562,11 @@ def dwex_main():
             the_app.exec_()        
         except Exception as exc:
             from crash import report_crash
-            report_crash(exc)
+            report_crash(exc, version)
     else: # Running under a debugger - surface the uncaught exceptions
         the_app = QApplication([])
         the_window = TheWindow()
         the_app.exec_()        
 
 if __name__ == "__main__":
-    dwex_main()
+    main()

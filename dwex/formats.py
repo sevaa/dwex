@@ -45,10 +45,17 @@ def read_pe(filename):
 
 # Arch + flavor where flavor matters
 def make_macho_arch_name(macho):
-    from filebytes.mach_o import CpuType, CpuSubTypeARM
+    from filebytes.mach_o import CpuType, CpuSubTypeARM, CpuSubTypeARM64
     h = macho.machHeader.header
-    flavor = CpuSubTypeARM[h.cpusubtype].name if h.cputype == CpuType.ARM else ''
-    return CpuType[h.cputype].name + flavor
+    c = h.cputype
+    st = h.cpusubtype
+    flavor = ''
+    if st != 0:
+        if c == CpuType.ARM:
+            flavor = CpuSubTypeARM[st].name
+        elif c == CpuType.ARM64:
+            flavor = CpuSubTypeARM64[st].name
+    return CpuType[c].name + flavor
         
 # For debugging purposes only - dump individual debug related sections in a Mach-O file/slice as files
 def macho_save_sections(filename, macho):
@@ -67,7 +74,7 @@ def macho_save_sections(filename, macho):
 # resolve_arch takes a list of architecture descriptions, and returns
 # the desired index, or None if the user has cancelled
 def read_macho(filename, resolve_arch, friendly_filename):
-    from filebytes.mach_o import MachO, CpuType, CpuSubTypeARM, TypeFlags, LC
+    from filebytes.mach_o import MachO, CpuType, TypeFlags, LC
     fat_arch = None
     macho = MachO(filename)
     if macho.isFat:
@@ -94,11 +101,11 @@ def read_macho(filename, resolve_arch, friendly_filename):
     if not '__debug_info' in data:
         return None
 
-    arch = macho.machHeader.header.cputype
+    cpu = macho.machHeader.header.cputype
     di = DWARFInfo(
         config = DwarfConfig(
             little_endian=True,
-            default_address_size = 8 if (arch & TypeFlags.ABI64) != 0 else 4,
+            default_address_size = 8 if (cpu & TypeFlags.ABI64) != 0 else 4,
             machine_arch = make_macho_arch_name(macho)
         ),
         debug_info_sec = data['__debug_info'],
