@@ -15,6 +15,16 @@ _ll_headers = ("Attribute", "Offset", "Form", "Raw", "Value")
 _noll_headers = ("Attribute", "Form", "Value")
 _meta_desc = ('DIE offset', 'Has children') # Anything else?
 
+def get_cu_base(die):
+    top_die = die.cu.get_top_DIE()
+    if 'DW_AT_low_pc' in top_die.attributes:
+        return top_die.attributes['DW_AT_low_pc'].value
+    elif 'DW_AT_entry_pc' in top_die.attributes:
+        return top_die.attributes['DW_AT_entry_pc'].value
+    # TODO: ranges?
+    else:
+        raise ValueError("Can't find the base address for the location list")
+
 # Format: op arg, arg...
 class ExprDumper(GenericExprDumper):
     def __init__(self, structs, prefix, hex):
@@ -149,6 +159,12 @@ class DIETableModel(QAbstractTableModel):
                 return "Loc list: 0x%X" % attr.value
         elif key == 'DW_AT_language':
             return "%d %s" % (val, _DESCR_DW_LANG[val]) if val in _DESCR_DW_LANG else val
+        elif key == 'DW_AT_decl_file':
+            if self.die.cu._lineprogram is None:
+                self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
+            return "%d: %s" % (val, self.die.cu._lineprogram.header.file_entry[val-1].name.decode('ASCII')) if val > 0 else "0: (N/A)"
+        elif key == 'DW_AT_stmt_list':
+            return 'LNP at 0x%x' % val 
         else:
             return hex(val) if isinstance(val, int) and self.hex else str(attr.raw_value)
 
@@ -191,8 +207,6 @@ class DIETableModel(QAbstractTableModel):
                 self.endRemoveColumns()
                 self.rowsRemoved.emit(QModelIndex(), 0, self.meta_count - 1)
                 self.meta_count = 0
-                                
-
 
     def set_hex(self, hex):
         if hex != self.hex:
@@ -219,7 +233,7 @@ class DIETableModel(QAbstractTableModel):
                     return None
                 ranges = di._ranges.get_range_list_at_offset(attr.value)
                 # TODO: handle base addresses. Never seen those so far...
-                cu_base = self.die.cu.get_top_DIE().attributes['DW_AT_low_pc'].value
+                cu_base = get_cu_base(self.die)
                 return GenericTableModel(("Start offset", "End offset"),
                     ((hex(cu_base + r.begin_offset), hex(cu_base + r.end_offset)) for r in ranges))
             elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
@@ -227,9 +241,22 @@ class DIETableModel(QAbstractTableModel):
                 if isinstance(ll, LocationExpr):
                     return GenericTableModel(("Command",), ((cmd,) for cmd in self._exprdumper.dump(ll.loc_expr)))
                 else:
-                    cu_base = self.die.cu.get_top_DIE().attributes['DW_AT_low_pc'].value
+                    cu_base = get_cu_base(self.die)
                     return GenericTableModel(("Start offset", "End offset", "Expression"),
                         ((hex(cu_base + l.begin_offset), hex(cu_base + l.end_offset), '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll))
+            elif key == 'DW_AT_stmt_list':
+                if self.die.cu._lineprogram is None:
+                    self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
+                lpe = self.die.cu._lineprogram.get_entries()
+                files = self.die.cu._lineprogram.header.file_entry
+                def format_state(state):
+                    return (hex(state.address),
+                        files[state.file-1].name.decode('ASCII') if state.file > 0 else '(N/A)',
+                        state.line)
+                states = [format_state(e.state) for e in lpe if e.state]
+                # TODO: low level flavor with extra details
+                # TODO: commands vs states
+                return GenericTableModel(('Address', 'File', 'Line'), states)
         return None
 
     # Returns (cu, die_offset) or None if not a navigable

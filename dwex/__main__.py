@@ -18,6 +18,7 @@ version=(0,50)
 # What else is section_offset?
 # Translate decl_file
 # Inconsistent hex capitalization: %x vs hex()
+# const_value as FORM_block1: an array of 4 bytes, found in iOS/4.69.8/ARMv7/DecompItem.mm 
 
 
 #-----------------------------------------------------------------
@@ -209,6 +210,7 @@ class TheWindow(QMainWindow):
             di._ranges = None # Loaded on first use
             def with_index(o, i):
                 o._i = i
+                o._lineprogram = None
                 return o
             di._CUs = [with_index(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
             di._locparser = None # Created on first use
