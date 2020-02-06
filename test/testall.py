@@ -44,9 +44,9 @@ def test_dwarfinfo(di):
                     assert str(form).startswith('DW_FORM_')
 
                     # Check if attributes with locations are all found
-                    if form == 'DW_FORM_locexpr':
+                    if form == 'DW_FORM_exprloc':
                         assert LocationParser.attribute_has_location(attr, CU['version'])
-                    # The converse is not true; on DWARF2, locations have form DW_FORM_block1
+                    # The converse is not true; on DWARF2, location expressions can have form DW_FORM_block1
 
                     # Now check the spell out logic
                     for c in range(0, cc):

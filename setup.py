@@ -33,7 +33,7 @@ setup(
     long_description_content_type="text/plain",
     python_requires=">=3.5",
     setup_requires=[],
-    install_requires=['pyqt5'],
+    install_requires=['PyQt5'],
     platforms='any',
     classifiers=[
         "Development Status :: 4 - Beta",
