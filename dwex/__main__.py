@@ -7,7 +7,7 @@ from .formats import read_dwarf
 from .tree import DWARFTreeModel, has_code_location
 from .scriptdlg import ScriptDlg
 
-version=(0,52)
+version=(0,53)
 
 # TODO:
 # Low level raw bytes for expressions in location lists
