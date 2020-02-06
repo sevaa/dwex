@@ -1,8 +1,8 @@
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
 from PyQt5.QtGui import QBrush
-from elftools.dwarf.locationlists import LocationParser, LocationExpr
-from elftools.dwarf.dwarf_expr import GenericExprDumper, DW_OP_opcode2name
-from elftools.dwarf.descriptions import _DESCR_DW_LANG
+from .dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
+from .dwex_elftools.dwarf.dwarf_expr import GenericExprDumper, DW_OP_opcode2name
+from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG
 
 #------------------------------------------------
 # DIE formatter
@@ -169,7 +169,7 @@ class DIETableModel(QAbstractTableModel):
         elif key == 'DW_AT_decl_file':
             if self.die.cu._lineprogram is None:
                 self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
-            return "%d: %s" % (val, self.die.cu._lineprogram.header.file_entry[val-1].name.decode('ASCII')) if val > 0 else "0: (N/A)"
+            return "%d: %s" % (val, self.die.cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore')) if val > 0 else "0: (N/A)"
         elif key == 'DW_AT_stmt_list':
             return 'LNP at 0x%x' % val
         else:
@@ -258,7 +258,7 @@ class DIETableModel(QAbstractTableModel):
                 files = self.die.cu._lineprogram.header.file_entry
                 def format_state(state):
                     return (hex(state.address),
-                        files[state.file-1].name.decode('ASCII') if state.file > 0 else '(N/A)',
+                        files[state.file-1].name.decode('utf-8', errors='ignore') if state.file > 0 else '(N/A)',
                         state.line,
                         'Y' if state.is_stmt  else '',
                         'Y' if state.basic_block else '',

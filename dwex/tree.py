@@ -87,16 +87,16 @@ class DWARFTreeModel(QAbstractItemModel):
         die = index.internalPointer() # Should never come for a placeholder entry
         if role == Qt.DisplayRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit': # CU/top die: return file name
-                source_name = die.attributes['DW_AT_name'].value.decode('utf-8')
+                source_name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
                 return strip_path(source_name)
             else: # Return tag, with name if possible
                 s = die.tag if self.prefix or not str(die.tag).startswith('DW_TAG_') else die.tag[7:]
                 if 'DW_AT_name' in die.attributes:
-                    s += ": " + die.attributes['DW_AT_name'].value.decode('utf-8')
+                    s += ": " + die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
                 return s
         elif role == Qt.ToolTipRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
-                return die.attributes['DW_AT_name'].value.decode('utf-8')
+                return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
         elif role == Qt.ForegroundRole and self.highlight_condition and self.highlight_condition(die):
             return self.blue_brush
         elif role == Qt.FontRole and self.highlight_condition and self.highlight_condition(die):

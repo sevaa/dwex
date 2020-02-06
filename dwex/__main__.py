@@ -1,11 +1,11 @@
 import sys, os, io
-from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex, QSettings
-from PyQt5.QtGui import QFontMetrics, QKeySequence
+from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex, QSettings, QUrl
+from PyQt5.QtGui import QFontMetrics, QKeySequence, QDesktopServices
 from PyQt5.QtWidgets import *
-from die import DIETableModel
-from formats import read_dwarf
-from tree import DWARFTreeModel, has_code_location
-from scriptdlg import ScriptDlg
+from .die import DIETableModel
+from .formats import read_dwarf
+from .tree import DWARFTreeModel, has_code_location
+from .scriptdlg import ScriptDlg
 
 version=(0,50)
 
@@ -147,6 +147,7 @@ class TheWindow(QMainWindow):
         about_menuitem.setMenuRole(QAction.AboutRole)
         about_menuitem.triggered.connect(self.on_about) 
         help_menu.addAction('Check for updates...').triggered.connect(self.on_updatecheck)
+        help_menu.addAction('Homepage').triggered.connect(self.on_homepage)
 
     def setup_ui(self):
         # Set up the left pane and the right pane
@@ -448,17 +449,18 @@ class TheWindow(QMainWindow):
             #resp = urlopen('https://api.github.com/repos/jazzband/pip-tools/releases')
             if resp.getcode() == 200:
                 releases = resp.read()
-                self.start_wait()
+                self.end_wait()
                 releases = json.loads(releases)
-                max_tag = max(r['tag_name'] for r in releases)
-                max_ver = tuple(int(v) for v in max_tag.split('.'))
-                if max_ver > version:
-                    s = "DWARF Explorer v." + max_tag + " is out. Use \"pip install --upgrade dwex\" to update."
-                else: 
-                    s = "You have the latest version."
-                QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", s, QMessageBox.Ok, self).show()
+                if len(releases) > 0:
+                    max_tag = max(r['tag_name'] for r in releases)
+                    max_ver = tuple(int(v) for v in max_tag.split('.'))
+                    if max_ver > version:
+                        s = "DWARF Explorer v." + max_tag + " is out. Use \"pip install --upgrade dwex\" to update."
+                    else: 
+                        s = "You have the latest version."
+                    QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", s, QMessageBox.Ok, self).show()
         except:
-            pass
+            self.end_wait()
 
     def on_exit(self):
         self.destroy()
@@ -541,6 +543,9 @@ class TheWindow(QMainWindow):
                 self.details_table.resizeColumnsToContents()
         self.die_table.resizeColumnsToContents()
 
+    def on_homepage(self):
+        QDesktopServices.openUrl(QUrl('https://github.com/sevaa/dwex'))
+
     # Doesn't quite work for the delay on tree expansion :(
     def start_wait(self):
         if self.wait_level == 0:
@@ -560,7 +565,7 @@ def main():
             the_window = TheWindow()
             the_app.exec_()        
         except Exception as exc:
-            from crash import report_crash
+            from .crash import report_crash
             report_crash(exc, version)
     else: # Running under a debugger - surface the uncaught exceptions
         the_app = QApplication([])
