@@ -1,14 +1,13 @@
 from setuptools import setup
-from setuptools.command.install import install, uninstall
+from setuptools.command.install import install
 import platform
 
 class my_install(install):
     def run(self):
         install.run(self)
-        #if platform.system() == 'Windows':
-        #    from winsetup import create_shortcut
-        #    create_shortcut()
-
+        if platform.system() == 'Windows':
+            from winsetup import create_shortcut
+            create_shortcut()
 
 setup(
     name='dwex',
