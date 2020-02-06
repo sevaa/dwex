@@ -9,7 +9,7 @@ debugging information in executable files, built on top of of [pyelftools](https
 
 This project came from my desire to see and navigate the DWARF tree of compiled binaries. Seeing the DIEs is easy enough with utilities like `readelf` or `dwarfdump`. However, chasing inter-DIE references back and forth is not straightforward with those.
 
-The utility might be of use for anyone who is building DWARF parsers for one or another reason, especially if their preferred library is `pyelftools`.
+The utility might be of use for anyone who is building DWARF parsers for one or another reason, especially if their preferred parsing library is `pyelftools`.
 
 Requirements
 ------------
@@ -19,11 +19,15 @@ Requirements
 Installlation
 -------------
 
-Get the Python sources from Github, and run `python setup.py install` using your favorite Python 3 interpreter. I'll publish it on PyPi eventually.
+Run `pip install dwex`, under `sudo` if necessary.
 
-On Debian and related Linux distros, the proper way to install PyQt5 is `apt-get install python3-pyqt5`.
+Alternatively, get the Python sources from Github, and run `python setup.py install` using your favorite Python 3 interpreter in the root folder of the package. In this scenario, you'd have
+to install PyQt5 separately - with `pip install pyqt5`.
 
 On Windows, if `pip` and/or Python is not in PATH, use `c:\Python35\python -m pip install pyqt5`, substituting your own path to Python.
+
+Once you install it, there will be a `dwex` command. On Windows, there will be a `dwex.exe` in
+`Scripts` under the Python folder, and also a start menu item "DWARF Explorer".
 
 Usage
 -----
