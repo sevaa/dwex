@@ -33,7 +33,7 @@ class my_install(install):
 
 setup(
     name='dwex',
-    version='0.51',
+    version='0.52',
     packages=['dwex',
         'dwex.dwex_elftools',
         'dwex.dwex_elftools.elf',

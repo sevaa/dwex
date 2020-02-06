@@ -1,4 +1,4 @@
-import sys, os, io
+import sys, os, io, platform
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex, QSettings, QUrl
 from PyQt5.QtGui import QFontMetrics, QKeySequence, QDesktopServices
 from PyQt5.QtWidgets import *
@@ -7,7 +7,7 @@ from .formats import read_dwarf
 from .tree import DWARFTreeModel, has_code_location
 from .scriptdlg import ScriptDlg
 
-version=(0,51)
+version=(0,52)
 
 # TODO:
 # Low level raw bytes for expressions in location lists
@@ -15,6 +15,7 @@ version=(0,51)
 # What else is section_offset?
 # const_value as FORM_block1: an array of 4 bytes, found in iOS/4.69.8/ARMv7/DecompItem.mm 
 # Test back-forward mouse buttons
+# On MacOS, start without a main window, instead show the Open dialog
 
 
 #-----------------------------------------------------------------
@@ -446,7 +447,6 @@ class TheWindow(QMainWindow):
         try:
             self.start_wait()
             resp = urlopen('https://api.github.com/repos/sevaa/dwex/releases')
-            #resp = urlopen('https://api.github.com/repos/jazzband/pip-tools/releases')
             if resp.getcode() == 200:
                 releases = resp.read()
                 self.end_wait()
@@ -572,5 +572,6 @@ def main():
         the_window = TheWindow()
         the_app.exec_()        
 
+# For running via "python -m dwex"
 if __name__ == "__main__":
     main()

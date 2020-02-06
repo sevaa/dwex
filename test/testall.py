@@ -1,10 +1,10 @@
 import os, sys
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
 sys.path.insert(1, os.path.join(os.getcwd(), "dwex"))
-from elftools.dwarf.locationlists import LocationParser, LocationExpr
-from formats import read_dwarf
-from die import DIETableModel
-from tree import strip_path
+from dwex.dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
+from dwex.formats import read_dwarf
+from dwex.die import DIETableModel
+from dwex.tree import strip_path
 
 def test_dwarfinfo(di):
     # Some global cache setup in line with the app proper

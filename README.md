@@ -7,9 +7,13 @@ debugging information in executable files, built on top of of [pyelftools](https
  - Mach-O (MacOS X, iOS)
  - PE (Windows, Cygwin)
 
-This project came from my desire to see and navigate the DWARF tree of compiled binaries. Seeing the DIEs is easy enough with utilities like `readelf` or `dwarfdump`. However, chasing inter-DIE references back and forth is not straightforward with those.
+This project came from my desire to see and navigate the DWARF tree of compiled Android and iOS binaries. Seeing the DIEs is easy enough with utilities like `readelf` or `dwarfdump`. However, chasing inter-DIE references back and forth is not straightforward with those.
 
 The utility might be of use for anyone who is building DWARF parsers for one or another reason, especially if their preferred parsing library is `pyelftools`.
+
+Note that regular Windows executables (EXE/DLL files) are PE files but don't, as a rule, contain DWARF information. The Microsoft toolchains (Visual Studio and the like) produce debugging information in Microsoft's own format, Program Database (PDB). There are, though, a couple of toolchains that produce PE files with DWARF debug info in them - notably GCC under Cygwin. DWARF Explorer is compatible with those.
+
+DWARF Explorer supports DWARF version 2-4, like the pyelftools library it's based on.
 
 Requirements
 ------------
@@ -19,15 +23,16 @@ Requirements
 Installlation
 -------------
 
-Run `pip install dwex`, under `sudo` if necessary.
+Run `pip install dwex` from the command line, under `sudo` or elevated command line if necessary.
 
-Alternatively, get the Python sources from Github, and run `python setup.py install` using your favorite Python 3 interpreter in the root folder of the package. In this scenario, you'd have
-to install PyQt5 separately - with `pip install pyqt5`.
+On Windows, if `pip` and/or Python is not in PATH, use `c:\Python38\python -m pip install dwex`, substituting your own path to Python 3.
 
-On Windows, if `pip` and/or Python is not in PATH, use `c:\Python35\python -m pip install pyqt5`, substituting your own path to Python.
+Alternatively, get the Python source tree from Github, and run `python setup.py install` in the root folder of the package. In this scenario, you'd have to install PyQt5 separately - with `pip install pyqt5`.
+
+On Linux, sometimes the `python` command defaults to Python 2 while Python 3 is installed side by side. In this case, use `python3` and `pip3`, respectively. Use `python -V` to check.
 
 Once you install it, there will be a `dwex` command. On Windows, there will be a `dwex.exe` in
-`Scripts` under the Python folder, and also a start menu item "DWARF Explorer".
+the `Scripts` folder under the Python folder, and also a start menu item "DWARF Explorer".
 
 Usage
 -----
