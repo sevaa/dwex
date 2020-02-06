@@ -212,6 +212,8 @@ class TheWindow(QMainWindow):
                 cu._lineprogram = None
                 return cu
             di._CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
+            if not len(di._CUs):
+                return None # Weird, but saw it once - debug sections present, but no CUs
             di._locparser = None # Created on first use
 
             self.tree_model = DWARFTreeModel(di, self.prefix)
