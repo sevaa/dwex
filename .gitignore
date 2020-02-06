@@ -2,3 +2,5 @@
 /samples
 __pycache__
 .vscode
+/dwex.egg-info
+/dist
