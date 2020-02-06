@@ -146,9 +146,16 @@ class DIETableModel(QAbstractTableModel):
         val = attr.value
         form = attr.form
         if isinstance(val, bytes):
-            return val.decode('utf-8')
+            if form == 'DW_FORM_strp':
+                return val.decode('utf-8', errors='ignore')
+            elif val == b'':
+                return '[]'
+            else:
+                return hex(val)
         elif form == 'DW_FORM_addr' and isinstance(val, int):
             return hex(val)
+        elif form == 'DW_FORM_flag_present':
+            return ''
         elif form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
             return "Ref: 0x%X" % val # There are several other reference forms in the spec
         elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
@@ -156,7 +163,7 @@ class DIETableModel(QAbstractTableModel):
             if isinstance(ll, LocationExpr):
                 return '; '.join(self._exprdumper.dump(ll.loc_expr))
             else:
-                return "Loc list: 0x%X" % attr.value
+                return "Loc list: 0x%x" % attr.value
         elif key == 'DW_AT_language':
             return "%d %s" % (val, _DESCR_DW_LANG[val]) if val in _DESCR_DW_LANG else val
         elif key == 'DW_AT_decl_file':
@@ -164,7 +171,7 @@ class DIETableModel(QAbstractTableModel):
                 self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
             return "%d: %s" % (val, self.die.cu._lineprogram.header.file_entry[val-1].name.decode('ASCII')) if val > 0 else "0: (N/A)"
         elif key == 'DW_AT_stmt_list':
-            return 'LNP at 0x%x' % val 
+            return 'LNP at 0x%x' % val
         else:
             return hex(val) if isinstance(val, int) and self.hex else str(attr.raw_value)
 

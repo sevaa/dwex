@@ -13,7 +13,6 @@ version=(0,50)
 # Low level raw bytes for expressions in location lists
 # Autotest on corpus
 # What else is section_offset?
-# Inconsistent hex capitalization: %x vs hex()?
 # const_value as FORM_block1: an array of 4 bytes, found in iOS/4.69.8/ARMv7/DecompItem.mm 
 # Test back-forward mouse buttons
 

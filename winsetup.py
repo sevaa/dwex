@@ -8,10 +8,13 @@ def create_shortcut_under(root, exepath, nulfile):
     return subprocess.call(['powershell', s], stdout = nulfile, stderr = nulfile) == 0
 
 def create_shortcut():
-    exepath = path.join(path.dirname(sys.executable), "Scripts", "dwex.exe")
-    with open(os.devnull, 'w') as nulfile:
-        if not create_shortcut_under('ALLUSERSPROFILE', exepath, nulfile):
-            create_shortcut_under('APPDATA', exepath, nulfile)
+    try:
+        exepath = path.join(path.dirname(sys.executable), "Scripts", "dwex.exe")
+        with open(os.devnull, 'w') as nulfile:
+            if not create_shortcut_under('ALLUSERSPROFILE', exepath, nulfile):
+                create_shortcut_under('APPDATA', exepath, nulfile)
+    except:
+        pass
 
 if __name__ == "__main__":
     create_shortcut()
