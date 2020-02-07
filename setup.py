@@ -31,9 +31,16 @@ class my_install(install):
         if platform.system() == 'Windows':
             create_shortcut()
 
+# Pull the long desc from the readme
+try:
+    with open(path.join(path.abspath(path.dirname(__file__)), 'README.md')) as f:
+        long_desc = f.read()          
+except:
+    long_desc = "GUI viewer for DWARF debug information"
+
 setup(
     name='dwex',
-    version='0.53',
+    version='0.54',
     packages=['dwex',
         'dwex.dwex_elftools',
         'dwex.dwex_elftools.elf',
@@ -51,8 +58,8 @@ setup(
     author="Seva Alekseyev",
     author_email="sevaa@sprynet.com",
     description="GUI viewer for DWARF debug information",
-    long_description="GUI viewer for DWARF debug information",
-    long_description_content_type="text/plain",
+    long_description=long_desc,
+    long_description_content_type="text/markdown",
     python_requires=">=3.5",
     setup_requires=[],
     install_requires=['PyQt5'],

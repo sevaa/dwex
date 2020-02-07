@@ -148,10 +148,10 @@ class DIETableModel(QAbstractTableModel):
         if isinstance(val, bytes):
             if form == 'DW_FORM_strp':
                 return val.decode('utf-8', errors='ignore')
-            elif val == b'':
+            elif val == b'': # What's a good value for a blank blob?
                 return '[]'
             else:
-                return val.hex()
+                return ' '.join("%02x" % b for b in val) # Something like "01 ff 33 55"
         elif form == 'DW_FORM_addr' and isinstance(val, int):
             return hex(val)
         elif form == 'DW_FORM_flag_present':
@@ -173,7 +173,7 @@ class DIETableModel(QAbstractTableModel):
         elif key == 'DW_AT_stmt_list':
             return 'LNP at 0x%x' % val
         else:
-            return hex(val) if isinstance(val, int) and self.hex else str(attr.raw_value)
+            return hex(val) if self.hex and isinstance(val, int) else str(val)
 
     def format_form(self, form):
         return form if self.prefix or not str(form).startswith('DW_FORM_') else form[8:]
@@ -200,20 +200,31 @@ class DIETableModel(QAbstractTableModel):
             if self._exprdumper:
                 self._exprdumper.set_prefix(prefix)
 
-    def set_lowlevel(self, lowlevel):
+    # Index is the current selected index
+    # Returns the new selected index, if there was one
+    def set_lowlevel(self, lowlevel, index):
         if lowlevel != self.lowlevel:
             self.lowlevel = lowlevel
             self.headers = _ll_headers if self.lowlevel else _noll_headers
+            new_index = None
             if lowlevel:
                 self.beginInsertColumns(QModelIndex(), 2, 3)
                 self.endInsertColumns()
                 self.meta_count = 2
                 self.rowsInserted.emit(QModelIndex(), 0, self.meta_count - 1)
+                if index.isValid(): # Shift the selection two down
+                    new_index = self.createIndex(index.row() + 2, 0)
             else:
                 self.beginRemoveColumns(QModelIndex(), 2, 3)
                 self.endRemoveColumns()
                 self.rowsRemoved.emit(QModelIndex(), 0, self.meta_count - 1)
                 self.meta_count = 0
+                if index.isValid() and index.row() >= 2: # Shift the selection two down
+                    new_index = self.createIndex(index.row() - 2, 0)
+                else:
+                    new_index = QModelIndex() # Select none
+        return new_index
+
 
     def set_hex(self, hex):
         if hex != self.hex:
@@ -244,13 +255,22 @@ class DIETableModel(QAbstractTableModel):
                 return GenericTableModel(("Start offset", "End offset"),
                     ((hex(cu_base + r.begin_offset), hex(cu_base + r.end_offset)) for r in ranges))
             elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
+                # Expression is a list of ints
                 ll = self.parse_location(attr)
                 if isinstance(ll, LocationExpr):
                     return GenericTableModel(("Command",), ((cmd,) for cmd in self._exprdumper.dump(ll.loc_expr)))
                 else:
                     cu_base = get_cu_base(self.die)
-                    return GenericTableModel(("Start offset", "End offset", "Expression"),
-                        ((hex(cu_base + l.begin_offset), hex(cu_base + l.end_offset), '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll))
+                    if self.lowlevel:
+                        headers = ("Start offset", "End offset", "Expr bytes", "Expression")
+                        values = ((hex(cu_base + l.begin_offset),
+                            hex(cu_base + l.end_offset),
+                            ' '.join("%02x" % b for b in l.loc_expr),
+                            '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll)
+                    else:
+                        headers = ("Start offset", "End offset", "Expression")
+                        values = ((hex(cu_base + l.begin_offset), hex(cu_base + l.end_offset), '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll)
+                    return GenericTableModel(headers, values)
             elif key == 'DW_AT_stmt_list':
                 if self.die.cu._lineprogram is None:
                     self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)

@@ -1,5 +1,5 @@
 import sys, os, io, platform
-from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex, QSettings, QUrl
+from PyQt5.QtCore import Qt, QModelIndex, QSettings, QUrl
 from PyQt5.QtGui import QFontMetrics, QKeySequence, QDesktopServices
 from PyQt5.QtWidgets import *
 from .die import DIETableModel
@@ -7,16 +7,14 @@ from .formats import read_dwarf
 from .tree import DWARFTreeModel, has_code_location
 from .scriptdlg import ScriptDlg
 
-version=(0,53)
+version=(0,54)
 
 # TODO:
-# Low level raw bytes for expressions in location lists
 # Autotest on corpus
 # What else is section_offset?
 # const_value as FORM_block1: an array of 4 bytes, found in iOS/4.69.8/ARMv7/DecompItem.mm 
 # Test back-forward mouse buttons
 # On MacOS, start without a main window, instead show the Open dialog
-# What's the deal with DW_AT_entry_pc? Find, check with readelf - found in \\mac\seva\quincy\3.42\Jishop.app.dSYM:ARMv6 under YarxiCE.cpp under inlined_subroutine at '0xed9'
 # Reproduce the data4 in const_value (not a location), make a unit test
 
 #-----------------------------------------------------------------
@@ -27,7 +25,6 @@ version=(0,53)
 class TheWindow(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
-        self.wait_level = 0
         self.in_tree_nav = False
         self.font_metrics = QFontMetrics(QApplication.font())
 
@@ -483,12 +480,13 @@ class TheWindow(QMainWindow):
             self.refresh_details()
 
     # Checkmark toggling is handled by the framework
-    def on_view_lowlevel(self, checked):        
+    def on_view_lowlevel(self, checked):   
         self.lowlevel = checked
         self.sett.setValue('General/LowLevel', self.lowlevel)
         if self.die_model:
-            self.die_model.set_lowlevel(checked)
-            self.refresh_details()
+            new_sel = self.die_model.set_lowlevel(checked, self.die_table.currentIndex())
+            if new_sel:
+                self.die_table.setCurrentIndex(new_sel)
 
     def on_view_hex(self, checked):        
         self.hex = checked
@@ -554,15 +552,10 @@ class TheWindow(QMainWindow):
 
     # Doesn't quite work for the delay on tree expansion :(
     def start_wait(self):
-        if self.wait_level == 0:
-            self.setCursor(Qt.WaitCursor)
-        self.wait_level += 1
+        QApplication.setOverrideCursor(Qt.WaitCursor)
 
     def end_wait(self):
-        if self.wait_level > 0:
-            self.wait_level -= 1
-        if self.wait_level == 0:
-            self.setCursor(Qt.ArrowCursor)
+        QApplication.restoreOverrideCursor()
 
 def main():     
     if sys.settrace is None: # Lame way to detect a debugger
