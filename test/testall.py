@@ -1,6 +1,6 @@
 import os, sys
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
-sys.path.insert(1, os.path.join(os.getcwd(), "dwex"))
+sys.path.insert(1, os.getcwd()) # To make sure dwex resolves to local path
 from dwex.dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
 from dwex.formats import read_dwarf
 from dwex.die import DIETableModel
@@ -51,9 +51,11 @@ def test_dwarfinfo(di):
                     # Now check the spell out logic
                     for c in range(0, cc):
                         m.data(m.index(r, c, dummy_index), Qt.DisplayRole)
-                    m.get_attribute_details(m.index(r, 0, dummy_index))
+                    details = m.get_attribute_details(m.index(r, 0, dummy_index))
+                    if form == DW_FORM_section_offset:
+                        assert details is not None
 
-def test_file(filename):
+def test_file_for(filename, on_di):    
     print(filename)
     arches = False
     def save_arches(a):
@@ -65,19 +67,28 @@ def test_file(filename):
         for arch_no in range(0, len(arches)):
             print(arches[arch_no])
             di = read_dwarf(filename, lambda arches:arch_no)
-            assert di
-            test_dwarfinfo(di)
-    else:
-        assert di
-        test_dwarfinfo(di)
+            if di:
+                on_di(di)
+    elif di:
+        on_di(di)
 
-def test_tree(path):
+def test_file(filename):
+    test_file_for(filename, test_dwarfinfo)
+
+def test_tree_for(path, on_di):
     for f in os.listdir(path):
         full_path = os.path.join(path, f)
+        # See what can be done about JiPad ones
         if f.endswith('.dSYM') or f.endswith('.o') or (f.endswith('.so') and not f.endswith('libJiPadLib.so')):
-            test_file(full_path)
+            test_file_for(full_path, on_di)
         elif os.path.isdir(full_path):
-            test_tree(full_path)
+            test_tree_for(full_path, on_di)        
+
+def test_tree(path):
+    test_tree_for(path, test_file)
+
+
+
 
 # Caught on GNU_call_site_value
 

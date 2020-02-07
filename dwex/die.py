@@ -157,7 +157,7 @@ class DIETableModel(QAbstractTableModel):
         elif form == 'DW_FORM_flag_present':
             return ''
         elif form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
-            return "Ref: 0x%X" % val # There are several other reference forms in the spec
+            return "Ref: 0x%x" % val # There are several other reference forms in the spec
         elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
             ll = self.parse_location(attr)
             if isinstance(ll, LocationExpr):

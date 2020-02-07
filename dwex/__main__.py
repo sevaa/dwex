@@ -16,7 +16,8 @@ version=(0,53)
 # const_value as FORM_block1: an array of 4 bytes, found in iOS/4.69.8/ARMv7/DecompItem.mm 
 # Test back-forward mouse buttons
 # On MacOS, start without a main window, instead show the Open dialog
-
+# What's the deal with DW_AT_entry_pc? Find, check with readelf - found in \\mac\seva\quincy\3.42\Jishop.app.dSYM:ARMv6 under YarxiCE.cpp under inlined_subroutine at '0xed9'
+# Reproduce the data4 in const_value (not a location), make a unit test
 
 #-----------------------------------------------------------------
 # The one and only main window class
@@ -27,6 +28,7 @@ class TheWindow(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
         self.wait_level = 0
+        self.in_tree_nav = False
         self.font_metrics = QFontMetrics(QApplication.font())
 
         self.load_settings()
@@ -155,12 +157,10 @@ class TheWindow(QMainWindow):
         tree = self.the_tree = QTreeView()
         tree.header().hide()
         tree.setUniformRowHeights(True)
-        tree.clicked.connect(self.on_tree_selection)
         
         rpane = QSplitter(Qt.Orientation.Vertical)
         die_table = self.die_table = QTableView()
         die_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        die_table.clicked.connect(self.on_attribute_selection)
         die_table.doubleClicked.connect(self.on_attribute_dclick)
         rpane.addWidget(die_table)
 
@@ -218,6 +218,7 @@ class TheWindow(QMainWindow):
 
             self.tree_model = DWARFTreeModel(di, self.prefix)
             self.the_tree.setModel(self.tree_model)
+            self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
             s = os.path.basename(filename)
             if arch is not None:
                 s += ' (' + arch + ')'
@@ -316,15 +317,16 @@ class TheWindow(QMainWindow):
         if not self.die_model:
             self.die_model = DIETableModel(die, self.prefix, self.lowlevel, self.hex)
             die_table.setModel(self.die_model)
+            die_table.selectionModel().currentChanged.connect(self.on_attribute_selection)
         else:
             self.die_model.display_DIE(die)
         self.die_table.resizeColumnsToContents()
         self.details_table.setModel(None)
         self.followref_menuitem.setEnabled(False)
         self.cuproperties_menuitem.setEnabled(True)
-        self.die_table.setCurrentIndex(QModelIndex())
+        self.die_table.setCurrentIndex(QModelIndex()) # Will cause on_attribute_selection
 
-        #TODO: resize the attribute table dynamically
+        #TODO: resize the attribute table vertically dynamically
         #attr_count = self.die_model.rowCount(None)
         #die_table.resize(die_table.size().width(),
         #    die_table.rowViewportPosition(attr_count-1) + 
@@ -332,40 +334,45 @@ class TheWindow(QMainWindow):
         #        die_table.horizontalHeader().size().height() + 1 + attr_count)
         #self.rpane_layout.update()
 
-    # Invoked for ref follow, too
-    # But not for back-forward
-    def on_tree_selection(self, index):
-        navitem = self.tree_model.get_navitem(index)
-        self.navhistory[0:self.navpos] = [navitem]
-        self.navpos = 0
-        self.back_menuitem.setEnabled(len(self.navhistory) > 1)
-        self.forward_menuitem.setEnabled(False)
-        self.display_die(index)
-        self.die_table.setCurrentIndex(QModelIndex())
-        self.copy_menuitem.setEnabled(False)
-        self.copyline_menuitem.setEnabled(False)
-        self.copytable_menuitem.setEnabled(False)
+    # Invoked for tree clicks and keyboard navigation, ref follow, back-forward
+    def on_tree_selection(self, index, prev = None):
+        if not self.in_tree_nav: # Short out the history population logic for back-forward clicks
+            navitem = self.tree_model.get_navitem(index)
+            self.navhistory[0:self.navpos] = [navitem]
+            self.navpos = 0
+            self.back_menuitem.setEnabled(len(self.navhistory) > 1)
+            self.forward_menuitem.setEnabled(False)
+        self.display_die(index) # Will clear the selection in the attribute table
 
-    def on_attribute_selection(self, index):
-        details_model = self.die_model.get_attribute_details(index)
-        self.details_table.setModel(details_model)
-        if details_model is not None:
-            self.details_table.resizeColumnsToContents()
-        self.followref_menuitem.setEnabled(self.die_model.ref_target(index) is not None)
-        self.copy_menuitem.setEnabled(True)
-        self.copyline_menuitem.setEnabled(True)
-        self.copytable_menuitem.setEnabled(True)        
+    def on_attribute_selection(self, index, prev = None):
+        if index.isValid():
+            details_model = self.die_model.get_attribute_details(index)
+            self.details_table.setModel(details_model)
+            if details_model is not None:
+                self.details_table.resizeColumnsToContents()
+            self.followref_menuitem.setEnabled(self.die_model.ref_target(index) is not None)
+            self.copy_menuitem.setEnabled(True)
+            self.copyline_menuitem.setEnabled(True)
+            self.copytable_menuitem.setEnabled(True)
+        else: # Selected nothing
+            self.details_table.setModel(None)
+            self.copy_menuitem.setEnabled(False)
+            self.copyline_menuitem.setEnabled(False)
+            self.copytable_menuitem.setEnabled(False)            
+            self.followref_menuitem.setEnabled(False)
+
 
     def on_attribute_dclick(self, index):
         self.on_followref(index)
 
-    # For both back and forward
+    # For both back and forward, delta=1 for back, -1 for forward
     def on_nav(self, delta):
         self.navpos += delta
         navitem = self.navhistory[self.navpos]
         tree_index = self.tree_model.index_for_navitem(navitem)
-        self.the_tree.setCurrentIndex(tree_index)
-        self.display_die(tree_index)
+        self.in_tree_nav = True
+        self.the_tree.setCurrentIndex(tree_index) # Causes on_tree_selection internally
+        self.in_tree_nav = False
         self.back_menuitem.setEnabled(self.navpos < len(self.navhistory) - 1)
         self.forward_menuitem.setEnabled(self.navpos > 0)
 
@@ -377,9 +384,7 @@ class TheWindow(QMainWindow):
         navitem = self.die_model.ref_target(index)  # Retrieve the ref target from the DIE model...
         if navitem:
             target_tree_index = self.tree_model.index_for_navitem(navitem) # ...and feed it to the tree model.
-            self.the_tree.setCurrentIndex(target_tree_index)
-            # Qt doesn't raise the notification by itself
-            self.on_tree_selection(target_tree_index)
+            self.the_tree.setCurrentIndex(target_tree_index) # Calls on_tree_selection internally
         self.end_wait()
 
     # Back-forward mouse buttons are shortcuts for back/forward navigation
@@ -434,7 +439,6 @@ class TheWindow(QMainWindow):
         index = self.tree_model.find(self.the_tree.currentIndex(), self.findcondition)
         if index:
             self.the_tree.setCurrentIndex(index)
-            self.on_tree_selection(index)
 
     ##########################################################################
     ##########################################################################
