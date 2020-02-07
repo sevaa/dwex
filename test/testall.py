@@ -52,7 +52,7 @@ def test_dwarfinfo(di):
                     for c in range(0, cc):
                         m.data(m.index(r, c, dummy_index), Qt.DisplayRole)
                     details = m.get_attribute_details(m.index(r, 0, dummy_index))
-                    if form == DW_FORM_section_offset:
+                    if form == 'DW_FORM_section_offset':
                         assert details is not None
 
 def test_file_for(filename, on_di):    
@@ -85,7 +85,7 @@ def test_tree_for(path, on_di):
             test_tree_for(full_path, on_di)        
 
 def test_tree(path):
-    test_tree_for(path, test_file)
+    test_tree_for(path, test_dwarfinfo)
 
 
 
