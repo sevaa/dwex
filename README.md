@@ -1,8 +1,8 @@
 DWARF Explorer
 ==============
 
-A cross platform GUI utility for visualizing the DWARF
-debugging information in executable files, built on top of of [pyelftools](https://github.com/eliben/pyelftools) and [filebytes](https://github.com/sashs/filebytes). Runs on Windows, MacOS X, and Linux. Supports parsing the following file types for DWARF data:
+A cross-platform GUI utility for visualizing the DWARF
+debugging information in executable files, built on top of [pyelftools](https://github.com/eliben/pyelftools) and [filebytes](https://github.com/sashs/filebytes). Runs on Windows, MacOS X, and Linux. Supports parsing the following file types for DWARF data:
  - ELF (Linux, Android)
  - Mach-O (MacOS X, iOS)
  - PE (Windows, Cygwin)
@@ -13,9 +13,9 @@ The utility might be of use for anyone who is building DWARF parsers for one or 
 
 Note that regular Windows executables (EXE/DLL files) are PE files but don't, as a rule, contain DWARF information. The Microsoft toolchains (Visual Studio and the like) produce debugging information in Microsoft's own format, Program Database (PDB). There are, though, a couple of toolchains that produce PE files with DWARF debug info in them - notably GCC under Cygwin. DWARF Explorer is compatible with those.
 
-DWARF Explorer supports DWARF version 2-4, like the pyelftools library it's based on.
+DWARF Explorer supports DWARF version 2-4, like the pyelftools library it's based on. DWARF v5 exists, and will be eventually supported, but it's not mainstream yet.
 
-Requirements
+Requirements and Dependencies
 ------------
  - Python 3.5+
  - PyQt5
@@ -41,6 +41,6 @@ Click Open in the File menu, choose your executable, and eyeball the DWARF tree.
 
 Click on DIEs in the tree to see their contents. DIE attributes that have a substructure or point at larger data structures are clickable.
 
-DIE attributes that contain references to other DIEs are rendered in blue; the link can be followed by double-click. To come back to the original DIE, use Navigate/Back or an appropriate keyboatrd shortcut (those vary between platforms).
+DIE attributes that contain references to other DIEs are rendered in blue; the link can be followed by double-click. To come back to the original DIE, use Navigate/Back or an appropriate keyboard shortcut (those vary between platforms).
 
 
