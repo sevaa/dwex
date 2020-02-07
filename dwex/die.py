@@ -13,7 +13,8 @@ _ltgrey_brush = QBrush(Qt.GlobalColor.lightGray)
 
 _ll_headers = ("Attribute", "Offset", "Form", "Raw", "Value")
 _noll_headers = ("Attribute", "Form", "Value")
-_meta_desc = ('DIE offset', 'Has children') # Anything else?
+_meta_desc = ('DIE offset', 'DIE size', 'Abbrev code', 'Has children') # Anything else?
+_meta_count = 4
 
 def get_cu_base(die):
     top_die = die.cu.get_top_DIE()
@@ -74,7 +75,7 @@ class DIETableModel(QAbstractTableModel):
         self.keys = list(die.attributes.keys())
         self._exprdumper = None
         self.headers = _ll_headers if self.lowlevel else _noll_headers
-        self.meta_count = 2 if lowlevel else 0
+        self.meta_count = _meta_count if lowlevel else 0
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.DisplayRole:
@@ -124,6 +125,7 @@ class DIETableModel(QAbstractTableModel):
             if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return _blue_brush
 
+    # Data for the metadata lines - ones that are not attributes
     def meta_data(self, index, role):
         row = index.row()
         if role == Qt.DisplayRole:
@@ -133,7 +135,11 @@ class DIETableModel(QAbstractTableModel):
             elif col == (4 if self.lowlevel else 2):
                 if row == 0:
                     return hex(self.die.offset)
-                elif row == 1:
+                if row == 1: # Should this be always hex? Not sure...
+                    return hex(self.die.size) if self.hex else str(self.die.size)
+                elif row == 2: # Hex makes no sense here
+                    return str(self.die.abbrev_code)                    
+                elif row == 3:
                     return str(self.die.has_children)
         elif role == Qt.BackgroundRole:
             return _ltgrey_brush
@@ -179,7 +185,13 @@ class DIETableModel(QAbstractTableModel):
         return form if self.prefix or not str(form).startswith('DW_FORM_') else form[8:]
 
     def format_raw(self, attr):
-        return hex(attr.raw_value) if isinstance(attr.raw_value, int) and self.hex else str(attr.raw_value)
+        val = attr.raw_value
+        if isinstance(val, int):
+            return hex(val) if self.hex else str(val)
+        elif isinstance(val, bytes) or (isinstance(val, list) and isinstance(val[0], int)):
+            return ' '.join("%02x" % b for b in val) if len(val) > 0 else '[]'
+        else:
+            return str(val)
 
     def display_DIE(self, die):
         rows_was = len(self.keys)
@@ -210,17 +222,18 @@ class DIETableModel(QAbstractTableModel):
             if lowlevel:
                 self.beginInsertColumns(QModelIndex(), 2, 3)
                 self.endInsertColumns()
-                self.meta_count = 2
+                self.meta_count = _meta_count
                 self.rowsInserted.emit(QModelIndex(), 0, self.meta_count - 1)
                 if index.isValid(): # Shift the selection two down
-                    new_index = self.createIndex(index.row() + 2, 0)
+                    new_index = self.createIndex(index.row() + self.meta_count, 0)
             else:
+                meta_count_was = self.meta_count # Allows for meta_count to be dependent on DIE
                 self.beginRemoveColumns(QModelIndex(), 2, 3)
                 self.endRemoveColumns()
-                self.rowsRemoved.emit(QModelIndex(), 0, self.meta_count - 1)
                 self.meta_count = 0
-                if index.isValid() and index.row() >= 2: # Shift the selection two down
-                    new_index = self.createIndex(index.row() - 2, 0)
+                self.rowsRemoved.emit(QModelIndex(), 0, meta_count_was - 1)
+                if index.isValid() and index.row() >= meta_count_was: # Shift the selection down
+                    new_index = self.createIndex(index.row() - meta_count_was, 0)
                 else:
                     new_index = QModelIndex() # Select none
         return new_index
