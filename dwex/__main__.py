@@ -242,7 +242,9 @@ class TheWindow(QMainWindow):
         for i, fa in enumerate(self.mru):
             self.sett.setValue("General/MRU%d" % i, fa[0])    
             if len(fa) > 1:
-                self.sett.setValue("General/MRUArch%d" % i, fa[1])    
+                self.sett.setValue("General/MRUArch%d" % i, fa[1])
+            else:
+                self.sett.remove("General/MRUArch%d" % i)
 
     # Open a file, display an error if failure
     def open_file_interactive(self, filename, arch = None):
@@ -396,6 +398,7 @@ class TheWindow(QMainWindow):
         
 
     ##########################################################################
+    # Find/Find next stuff
     ##########################################################################
 
     def findbytext(self, die, s):
@@ -455,8 +458,8 @@ class TheWindow(QMainWindow):
                 self.end_wait()
                 releases = json.loads(releases)
                 if len(releases) > 0:
-                    max_tag = max(r['tag_name'] for r in releases)
-                    max_ver = tuple(int(v) for v in max_tag.split('.'))
+                    max_ver = max(tuple(int(v) for v in r['tag_name'].split('.')) for r in releases)
+                    max_tag = '.'.join(str(i) for i in max_ver)
                     if max_ver > version:
                         s = "DWARF Explorer v." + max_tag + " is out. Use \"pip install --upgrade dwex\" to update."
                     else: 

@@ -78,7 +78,6 @@ def read_macho(filename, resolve_arch, friendly_filename):
     fat_arch = None
     macho = MachO(filename)
     if macho.isFat:
-        # One CPU type where it's relevant - armv6, armv7, armv7s coexisted in the iOS toolchain for a while
         slices = [make_macho_arch_name(slice) for slice in macho.fatArches]
         arch_no = resolve_arch(slices)
         if arch_no is None: # User cancellation
@@ -91,7 +90,6 @@ def read_macho(filename, resolve_arch, friendly_filename):
         section.name: DebugSectionDescriptor(io.BytesIO(section.bytes), section.name, None, len(section.bytes), 0)
         for cmd in macho.loadCommands
         if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64)
-        #if getattr(loadcmd, 'name', None) == '__DWARF'
         for section in cmd.sections
         if section.name.startswith('__debug')
     }
@@ -144,7 +142,8 @@ def read_dwarf(filename, resolve_arch):
                 elffile = ELFFile(file)
                 file = None # Keep the file open
                 return elffile.get_dwarf_info() if elffile.has_dwarf_info() else None
-            elif struct.unpack('>I', signature)[0] in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe): # Mach-O fat binary, 32- and 64-bit Mach-O in big- or little-endian format
+            elif struct.unpack('>I', signature)[0] in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe):
+                # Mach-O fat binary, or 32/64-bit Mach-O in big/little-endian format
                 return read_macho(filename, resolve_arch, filename)
         finally:
             if file:
