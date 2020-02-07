@@ -84,7 +84,7 @@ class DWARFTreeModel(QAbstractItemModel):
         return QModelIndex()
 
     def data(self, index, role):
-        die = index.internalPointer() # Should never come for a placeholder entry
+        die = index.internalPointer()
         if role == Qt.DisplayRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit': # CU/top die: return file name
                 source_name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
@@ -137,6 +137,7 @@ class DWARFTreeModel(QAbstractItemModel):
     # Takes a die that might not have an _i
     # Restores the _i
     # Assumes all parent DIEs of the current one are already parsed
+    # and cached in the CU, so get_parent will always return a valid parent DIE
     def index_for_die(self, die):
         if '_i' in dir(die): # DIE already iterated over
             return self.createIndex(die._i, 0, die)
@@ -144,14 +145,14 @@ class DWARFTreeModel(QAbstractItemModel):
             index = False
             while '_i' not in dir(die):
                 parent_die = die.get_parent()
-                load_children(parent_die)
+                load_children(parent_die) # This will populate the _i in all children of parent_die, including die
                 if not index: # After the first iteration, the one in the direct parent of target_die, target_die will have _i
                     index = self.createIndex(die._i, 0, die)
                 die = parent_die
             return index
 
     # Returns the index of the found item, or False
-    # Pos is the index of the current item, or an invalid one
+    # start_pos is the index of the current item, or an invalid one
     def find(self, start_pos, cond):
         have_start_pos = start_pos.isValid()
         if have_start_pos: # Searching from a specific position, with wrap-around
