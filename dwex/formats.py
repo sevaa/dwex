@@ -2,9 +2,10 @@ import io, struct
 from os import path
 from .dwex_elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
 # This doesn't depend on Qt
+# The dependency on filebytes only lives here
 
 def read_pe(filename):
-    from .dwex_filebytes.pe import PE, IMAGE_FILE_MACHINE
+    from filebytes.pe import PE, IMAGE_FILE_MACHINE
 
     pefile = PE(filename)
 
@@ -45,7 +46,7 @@ def read_pe(filename):
 
 # Arch + flavor where flavor matters
 def make_macho_arch_name(macho):
-    from .dwex_filebytes.mach_o import CpuType, CpuSubTypeARM, CpuSubTypeARM64
+    from filebytes.mach_o import CpuType, CpuSubTypeARM, CpuSubTypeARM64
     h = macho.machHeader.header
     c = h.cputype
     st = h.cpusubtype
@@ -59,7 +60,7 @@ def make_macho_arch_name(macho):
         
 # For debugging purposes only - dump individual debug related sections in a Mach-O file/slice as files
 def macho_save_sections(filename, macho):
-    from .dwex_filebytes.mach_o import LC
+    from filebytes.mach_o import LC
     arch = make_macho_arch_name(macho)
     for cmd in macho.loadCommands:
         if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64):
@@ -74,7 +75,7 @@ def macho_save_sections(filename, macho):
 # resolve_arch takes a list of architecture descriptions, and returns
 # the desired index, or None if the user has cancelled
 def read_macho(filename, resolve_arch, friendly_filename):
-    from .dwex_filebytes.mach_o import MachO, CpuType, TypeFlags, LC
+    from filebytes.mach_o import MachO, CpuType, TypeFlags, LC
     fat_arch = None
     macho = MachO(filename)
     if macho.isFat:

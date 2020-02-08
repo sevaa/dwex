@@ -19,6 +19,7 @@ Requirements and Dependencies
 ------------
  - Python 3.5+
  - PyQt5
+ - filebytes 0.10.1+
 
 Installlation
 -------------
@@ -27,7 +28,7 @@ Run `pip install dwex` from the command line, under `sudo` or elevated command l
 
 On Windows, if `pip` and/or Python is not in PATH, use `c:\Python38\python -m pip install dwex`, substituting your own path to Python 3.
 
-Alternatively, get the Python source tree from Github, and run `python setup.py install` in the root folder of the package. In this scenario, you'd have to install PyQt5 separately - with `pip install pyqt5`.
+Alternatively, get the Python source tree from Github, and run `python setup.py install` in the root folder of the package. In this scenario, you'd have to install PyQt5 and `filebytes` separately - with `pip install pyqt5`.
 
 On Linux, sometimes the `python` command defaults to Python 2 while Python 3 is installed side by side. In this case, use `python3` and `pip3`, respectively. Use `python -V` to check.
 

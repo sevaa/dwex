@@ -40,15 +40,14 @@ except:
 
 setup(
     name='dwex',
-    version='0.54',
+    version='0.55',
     packages=['dwex',
         'dwex.dwex_elftools',
         'dwex.dwex_elftools.elf',
         'dwex.dwex_elftools.common',
         'dwex.dwex_elftools.dwarf',
         'dwex.dwex_elftools.construct',
-        'dwex.dwex_elftools.construct.lib',
-        'dwex.dwex_filebytes'],
+        'dwex.dwex_elftools.construct.lib'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
     cmdclass={'install': my_install},
@@ -62,7 +61,7 @@ setup(
     long_description_content_type="text/markdown",
     python_requires=">=3.5",
     setup_requires=[],
-    install_requires=['PyQt5'],
+    install_requires=['PyQt5', 'filebytes>=0.10.1'],
     platforms='any',
     classifiers=[
         "Development Status :: 4 - Beta",

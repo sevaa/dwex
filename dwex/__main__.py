@@ -7,7 +7,7 @@ from .formats import read_dwarf
 from .tree import DWARFTreeModel, has_code_location
 from .scriptdlg import ScriptDlg
 
-version=(0,54)
+version=(0,55)
 
 # TODO:
 # Autotest on corpus

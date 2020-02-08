@@ -2,7 +2,7 @@ from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelInde
 from PyQt5.QtGui import QBrush
 from .dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
 from .dwex_elftools.dwarf.dwarf_expr import GenericExprDumper, DW_OP_opcode2name
-from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG
+from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS
 
 #------------------------------------------------
 # DIE formatter
@@ -107,7 +107,7 @@ class DIETableModel(QAbstractTableModel):
             col = index.column()
             if col == 0:
                 # Unknown keys come across as ints
-                return key if self.prefix or not str(key).startswith('DW_AT_')  else key[6:]
+                return key if self.prefix or not str(key).startswith('DW_AT_') else key[6:]
             elif col == 1:
                 return hex(attr.offset) if self.lowlevel else self.format_form(attr.form)
             elif col == 2:
@@ -151,14 +151,7 @@ class DIETableModel(QAbstractTableModel):
         key = attr.name
         val = attr.value
         form = attr.form
-        if isinstance(val, bytes):
-            if form == 'DW_FORM_strp':
-                return val.decode('utf-8', errors='ignore')
-            elif val == b'': # What's a good value for a blank blob?
-                return '[]'
-            else:
-                return ' '.join("%02x" % b for b in val) # Something like "01 ff 33 55"
-        elif form == 'DW_FORM_addr' and isinstance(val, int):
+        if form == 'DW_FORM_addr' and isinstance(val, int):
             return hex(val)
         elif form == 'DW_FORM_flag_present':
             return ''
@@ -172,12 +165,30 @@ class DIETableModel(QAbstractTableModel):
                 return "Loc list: 0x%x" % attr.value
         elif key == 'DW_AT_language':
             return "%d %s" % (val, _DESCR_DW_LANG[val]) if val in _DESCR_DW_LANG else val
+        elif key == 'DW_AT_encoding':
+            return "%d %s" % (val, _DESCR_DW_ATE[val]) if val in _DESCR_DW_ATE else val
+        elif key == 'DW_AT_accessibility':
+            return "%d %s" % (val, _DESCR_DW_ACCESS[val]) if val in _DESCR_DW_ACCESS else val
         elif key == 'DW_AT_decl_file':
             if self.die.cu._lineprogram is None:
                 self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
             return "%d: %s" % (val, self.die.cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore')) if val > 0 else "0: (N/A)"
         elif key == 'DW_AT_stmt_list':
             return 'LNP at 0x%x' % val
+        elif isinstance(val, bytes):
+            if form in ('DW_FORM_strp', 'DW_FORM_string'):
+                return val.decode('utf-8', errors='ignore')
+            elif val == b'': # What's a good value for a blank blob?
+                return '[]'
+            else:
+                return ' '.join("%02x" % b for b in val) # Something like "01 ff 33 55"
+        elif isinstance(val, list): # block1 comes across as this
+            if val == []:
+                return '[]'
+            elif isinstance(val[0], int): # Assuming it's a byte array diguised as int array
+                return ' '.join("%02x" % b for b in val)
+            else: # List of something else
+                return str(val)
         else:
             return hex(val) if self.hex and isinstance(val, int) else str(val)
 
