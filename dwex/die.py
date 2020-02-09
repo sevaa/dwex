@@ -329,6 +329,8 @@ class DIETableModel(QAbstractTableModel):
                     return (prev_cu, attr.value)
                 else:
                     prev_cu = cu
+            if cu.cu_offset < attr.value:
+                return (cu, attr.value)
         return None
 
 

@@ -6,16 +6,14 @@ from .die import DIETableModel
 from .formats import read_dwarf
 from .tree import DWARFTreeModel, has_code_location
 from .scriptdlg import ScriptDlg
+from .ui import setup_ui
 
-version=(0,55)
+version=(0,56)
 
 # TODO:
 # Autotest on corpus
-# What else is section_offset?
-# const_value as FORM_block1: an array of 4 bytes, found in iOS/4.69.8/ARMv7/DecompItem.mm 
 # Test back-forward mouse buttons
 # On MacOS, start without a main window, instead show the Open dialog
-# Reproduce the data4 in const_value (not a location), make a unit test
 
 #-----------------------------------------------------------------
 # The one and only main window class
@@ -29,8 +27,7 @@ class TheWindow(QMainWindow):
         self.font_metrics = QFontMetrics(QApplication.font())
 
         self.load_settings()
-        self.setup_menu()
-        self.setup_ui()
+        setup_ui(self)
         self.setAcceptDrops(True)
 
         # The data model placeholders - to be populated once we read a file
@@ -62,123 +59,6 @@ class TheWindow(QMainWindow):
                 arch = self.sett.value("General/MRUArch%d" % i, None)
                 fa = (f,) if arch is None else (f,arch) 
                 self.mru.append(fa)        
-
-    def setup_menu(self):
-        menu = self.menuBar()
-        file_menu = menu.addMenu("&File")
-        open_menuitem = file_menu.addAction("Open...")
-        open_menuitem.setShortcut(QKeySequence.Open)
-        open_menuitem.triggered.connect(self.on_open)
-        self.mru_menu = file_menu.addMenu("Recent files")
-        if len(self.mru):
-            self.populate_mru_menu()
-        else:
-            self.mru_menu.setEnabled(False)
-        exit_menuitem = file_menu.addAction("E&xit")
-        exit_menuitem.setMenuRole(QAction.QuitRole)
-        exit_menuitem.setShortcut(QKeySequence.Quit)
-        exit_menuitem.triggered.connect(self.on_exit)
-        #########
-        view_menu = menu.addMenu("View")
-        self.prefix_menuitem = view_menu.addAction("DWARF prefix")
-        self.prefix_menuitem.setCheckable(True)
-        self.prefix_menuitem.setChecked(self.prefix)
-        self.prefix_menuitem.triggered.connect(self.on_view_prefix)
-        self.lowlevel_menuitem = view_menu.addAction("Low level")
-        self.lowlevel_menuitem.setCheckable(True)
-        self.lowlevel_menuitem.setChecked(self.lowlevel)
-        self.lowlevel_menuitem.triggered.connect(self.on_view_lowlevel)
-        self.hex_menuitem = view_menu.addAction("Hexadecimal")
-        self.hex_menuitem.setCheckable(True)
-        self.hex_menuitem.setChecked(self.hex)
-        self.hex_menuitem.triggered.connect(self.on_view_hex)
-        view_menu.addSeparator()
-        self.highlightcode_menuitem = view_menu.addAction("Highlight code")
-        self.highlightcode_menuitem.setCheckable(True)
-        self.highlightcode_menuitem.setEnabled(False)
-        self.highlightcode_menuitem.triggered.connect(self.on_highlight_code)
-        self.highlightnothing_menuitem = view_menu.addAction("Remove highlighting")
-        self.highlightnothing_menuitem.setEnabled(False)
-        self.highlightnothing_menuitem.triggered.connect(self.on_highlight_nothing)
-        view_menu.addSeparator()
-        self.cuproperties_menuitem = view_menu.addAction("CU properties...")
-        self.cuproperties_menuitem.setEnabled(False)
-        self.cuproperties_menuitem.triggered.connect(self.on_cuproperties)
-        #########
-        edit_menu = menu.addMenu("Edit")
-        self.copy_menuitem = edit_menu.addAction("Copy value")
-        self.copy_menuitem.setShortcut(QKeySequence.Copy)
-        self.copy_menuitem.setEnabled(False)
-        self.copy_menuitem.triggered.connect(self.on_copyvalue)
-        self.copyline_menuitem = edit_menu.addAction("Copy line")
-        self.copyline_menuitem.setEnabled(False)
-        self.copyline_menuitem.triggered.connect(self.on_copyline)        
-        self.copytable_menuitem = edit_menu.addAction("Copy table")
-        self.copytable_menuitem.setEnabled(False)
-        self.copytable_menuitem.triggered.connect(self.on_copytable)  
-        #########
-        nav_menu = menu.addMenu("Navigate")
-        self.back_menuitem = nav_menu.addAction("Back")
-        self.back_menuitem.setShortcut(QKeySequence.Back)
-        self.back_menuitem.setEnabled(False);
-        self.back_menuitem.triggered.connect(lambda: self.on_nav(1))
-        self.forward_menuitem = nav_menu.addAction("Forward")
-        self.forward_menuitem.setShortcut(QKeySequence.Forward)
-        self.forward_menuitem.setEnabled(False);
-        self.forward_menuitem.triggered.connect(lambda: self.on_nav(-1))
-        self.followref_menuitem = nav_menu.addAction("Follow the ref")
-        self.followref_menuitem.setEnabled(False);
-        self.followref_menuitem.triggered.connect(self.on_followref)        
-        nav_menu.addSeparator()
-        self.find_menuitem = nav_menu.addAction("Find...")
-        self.find_menuitem.setEnabled(False)
-        self.find_menuitem.setShortcut(QKeySequence.Find)
-        self.find_menuitem.triggered.connect(self.on_find)
-        self.findbycondition_menuitem = nav_menu.addAction("Find by condition...")
-        self.findbycondition_menuitem.setEnabled(False)
-        self.findbycondition_menuitem.triggered.connect(self.on_findbycondition)
-        self.findnext_menuitem = nav_menu.addAction("Find next")
-        self.findnext_menuitem.setEnabled(False)
-        self.findnext_menuitem.setShortcut(QKeySequence.FindNext)
-        self.findnext_menuitem.triggered.connect(self.on_findnext)
-        ########
-        help_menu = menu.addMenu("Help")
-        about_menuitem = help_menu.addAction("About...")
-        about_menuitem.setMenuRole(QAction.AboutRole)
-        about_menuitem.triggered.connect(self.on_about) 
-        help_menu.addAction('Check for updates...').triggered.connect(self.on_updatecheck)
-        help_menu.addAction('Homepage').triggered.connect(self.on_homepage)
-
-    def setup_ui(self):
-        # Set up the left pane and the right pane
-        tree = self.the_tree = QTreeView()
-        tree.header().hide()
-        tree.setUniformRowHeights(True)
-        
-        rpane = QSplitter(Qt.Orientation.Vertical)
-        die_table = self.die_table = QTableView()
-        die_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        die_table.doubleClicked.connect(self.on_attribute_dclick)
-        rpane.addWidget(die_table)
-
-        details_table = self.details_table = QTableView()
-        details_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        rpane.addWidget(details_table)
-        # All the resizing goes into the bottom pane
-        rpane.setStretchFactor(0, 0)
-        rpane.setStretchFactor(1, 1)
-
-        spl = QSplitter()
-        spl.addWidget(self.the_tree)
-        spl.addWidget(rpane)
-        # All the resizing goes into the right pane by default
-        spl.setStretchFactor(0, 0)
-        spl.setStretchFactor(1, 1) 
-        self.setCentralWidget(spl)
-
-        self.setWindowTitle("DWARF Explorer")
-        self.resize(self.font_metrics.averageCharWidth() * 250, self.font_metrics.height() * 60)
-
 
     ###################################################################
     # Done with init, now file stuff
@@ -343,6 +223,7 @@ class TheWindow(QMainWindow):
             self.forward_menuitem.setEnabled(False)
         self.display_die(index) # Will clear the selection in the attribute table
 
+    # Selection changed in the DIE table - either user or program
     def on_attribute_selection(self, index, prev = None):
         if index.isValid():
             details_model = self.die_model.get_attribute_details(index)
@@ -362,7 +243,7 @@ class TheWindow(QMainWindow):
 
 
     def on_attribute_dclick(self, index):
-        self.on_followref(index)
+        self.followref(index)
 
     # For both back and forward, delta=1 for back, -1 for forward
     def on_nav(self, delta):
@@ -375,16 +256,19 @@ class TheWindow(QMainWindow):
         self.back_menuitem.setEnabled(self.navpos < len(self.navhistory) - 1)
         self.forward_menuitem.setEnabled(self.navpos > 0)
 
-    # Called for double-click on a reference type attribute, and via the menu
-    def on_followref(self, index = None):
+    def followref(self, index = None):
         self.start_wait() # TODO: only show the wait cursor if it's indeed time consuming
         if index is None:
-            index = self.die_table.getCurrentIndex()
+            index = self.die_table.currentIndex()
         navitem = self.die_model.ref_target(index)  # Retrieve the ref target from the DIE model...
         if navitem:
             target_tree_index = self.tree_model.index_for_navitem(navitem) # ...and feed it to the tree model.
             self.the_tree.setCurrentIndex(target_tree_index) # Calls on_tree_selection internally
         self.end_wait()
+
+    # Called for double-click on a reference type attribute, and via the menu
+    def on_followref(self):
+        self.followref()
 
     # Back-forward mouse buttons are shortcuts for back/forward navigation
     # Qt docs claim capturing is not necessary
@@ -560,20 +444,22 @@ class TheWindow(QMainWindow):
     def end_wait(self):
         QApplication.restoreOverrideCursor()
 
+def on_exception(exctype, exc, tb):
+    from .crash import report_crash
+    report_crash(exc, tb, version)
+    sys.excepthook = on_exception.prev_exchook
+    sys.exit(1)
+
 def main():     
     if sys.settrace is None: # Lame way to detect a debugger
-        try:
-            the_app = QApplication([])
-            the_window = TheWindow()
-            the_app.exec_()        
-        except Exception as exc:
-            from .crash import report_crash
-            report_crash(exc, version)
-    else: # Running under a debugger - surface the uncaught exceptions
-        the_app = QApplication([])
-        the_window = TheWindow()
-        the_app.exec_()        
+        on_exception.prev_exchook = sys.excepthook
+        sys.excepthook = on_exception
+
+    the_app = QApplication([])
+    win = TheWindow()
+    the_app.exec_()        
 
 # For running via "python -m dwex"
+# Running this file directly won't work, it relies on being in a module
 if __name__ == "__main__":
     main()

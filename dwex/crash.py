@@ -19,8 +19,7 @@ def submit_report(subj, body):
     except Exception as exc:
         pass
 
-def make_exc_report(exc, version):
-    tb = sys.exc_info()[2]
+def make_exc_report(exc, tb, version):
     while tb.tb_next:
         tb = tb.tb_next
     ss = traceback.extract_tb(tb)
@@ -41,10 +40,10 @@ def make_exc_report(exc, version):
     report += "PyLocals:\n" + ''.join(k + ": " + str(locals[k]) + "\n" for k in locals)
     return report
 
-def report_crash(exc, version):
+def report_crash(exc, tb, version):
     try:
-        submit_report('[crash][python][dwex][pyexception]', make_exc_report(exc, version))
-    except Exception as exc:
+        submit_report('[crash][python][dwex][pyexception]', make_exc_report(exc, tb, version))
+    except Exception as nexc:
         pass
 
 if __name__ == "__main__":
