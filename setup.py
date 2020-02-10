@@ -40,7 +40,7 @@ except:
 
 setup(
     name='dwex',
-    version='0.55',
+    version='0.56',
     packages=['dwex',
         'dwex.dwex_elftools',
         'dwex.dwex_elftools.elf',
