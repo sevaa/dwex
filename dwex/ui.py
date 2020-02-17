@@ -74,7 +74,7 @@ def setup_menu(win):
     win.find_menuitem.setEnabled(False)
     win.find_menuitem.setShortcut(QKeySequence.Find)
     win.find_menuitem.triggered.connect(win.on_find)
-    win.findip_menuitem = nav_menu.addAction("Find by IP...")
+    win.findip_menuitem = nav_menu.addAction("Find code offset...")
     win.findip_menuitem.setEnabled(False)
     win.findip_menuitem.triggered.connect(win.on_findip)
     win.findbycondition_menuitem = nav_menu.addAction("Find by condition...")
