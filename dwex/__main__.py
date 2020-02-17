@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version=(0,57)
+version=(0,58)
 
 # TODO:
 # Autotest on corpus
@@ -333,7 +333,7 @@ class TheWindow(QMainWindow):
             self.on_findnext()
 
     def on_findnext(self):
-        index = self.tree_model.find(self.the_tree.currentIndex(), self.findcondition)
+        index = self.tree_model.find(self.the_tree.currentIndex(), self.findcondition, self.findcucondition)
         if index:
             self.the_tree.setCurrentIndex(index)
 
