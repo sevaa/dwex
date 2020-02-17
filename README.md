@@ -50,4 +50,7 @@ The UI of DWARF Explorer was meant for eyeballing that data structure. The left 
 
 In DWARF, tag and attribute names are prefixed with `DW_TAG_` and `DW_AT_`, respectively. DWARF Explorer elides those by default to reduce visual clutter. Use `View/DWARF prefix` in the menu to bring them back.
 
+Disclaimer
+----------
 
+This project is unrelated to [ragundo/DwarfExplorer](https://github.com/ragundo/DwarfExplorer). That one deals with a different kind of dwarves. Although, interestingly enough, they also use the Qt library for their GUI.
