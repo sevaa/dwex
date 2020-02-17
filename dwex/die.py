@@ -2,7 +2,7 @@ from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelInde
 from PyQt5.QtGui import QBrush
 from .dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
 from .dwex_elftools.dwarf.dwarf_expr import GenericExprDumper, DW_OP_opcode2name
-from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS
+from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL
 
 #------------------------------------------------
 # DIE formatter
@@ -169,6 +169,8 @@ class DIETableModel(QAbstractTableModel):
             return "%d %s" % (val, _DESCR_DW_ATE[val]) if val in _DESCR_DW_ATE else val
         elif key == 'DW_AT_accessibility':
             return "%d %s" % (val, _DESCR_DW_ACCESS[val]) if val in _DESCR_DW_ACCESS else val
+        elif key == 'DW_AT_inline':
+            return "%d %s" % (val, _DESCR_DW_INL[val]) if val in _DESCR_DW_INL else val
         elif key == 'DW_AT_decl_file':
             if self.die.cu._lineprogram is None:
                 self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
@@ -353,3 +355,28 @@ class GenericTableModel(QAbstractTableModel):
     def data(self, index, role):
         if role == Qt.DisplayRole:
             return self.values[index.row()][index.column()]
+
+# Find helper:
+# Returns true if the specified IP is in [low_pc, high_pc)
+# Or in ranges
+def ip_in_range(die, ip):
+    if 'DW_AT_ranges' in die.attributes:
+        di = die.dwarfinfo
+        if not di._ranges:
+            di._ranges = di.range_lists()
+        if not di._ranges: # Absent in the DWARF file
+            return False
+        # TODO: handle base addresses. Never seen those so far...
+        cu_base = get_cu_base(die)
+        rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value)
+        for r in rl:
+            if r.begin_offset <= ip - cu_base < r.end_offset:
+                return True
+    if 'DW_AT_low_pc' in die.attributes and 'DW_AT_high_pc' in die.attributes:
+        l = die.attributes['DW_AT_low_pc'].value
+        h = die.attributes['DW_AT_high_pc'].value
+        if die.attributes['DW_AT_high_pc'].form != 'DW_FORM_addr':
+            h += l
+        if l <= ip < h:
+            return True
+    return False

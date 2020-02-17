@@ -2,13 +2,13 @@ import sys, os, io, platform
 from PyQt5.QtCore import Qt, QModelIndex, QSettings, QUrl
 from PyQt5.QtGui import QFontMetrics, QKeySequence, QDesktopServices
 from PyQt5.QtWidgets import *
-from .die import DIETableModel
+from .die import DIETableModel, ip_in_range
 from .formats import read_dwarf
 from .tree import DWARFTreeModel, has_code_location
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version=(0,56)
+version=(0,57)
 
 # TODO:
 # Autotest on corpus
@@ -35,6 +35,7 @@ class TheWindow(QMainWindow):
         self.die_model = None # Reused between DIEs
 
         self.findcondition = None
+        self.findcucondition = None
 
         self.show()
 
@@ -110,6 +111,7 @@ class TheWindow(QMainWindow):
             self.copytable_menuitem.setEnabled(False)
             self.findbycondition_menuitem.setEnabled(True)
             self.find_menuitem.setEnabled(True)
+            self.findip_menuitem.setEnabled(True)
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
@@ -308,14 +310,25 @@ class TheWindow(QMainWindow):
         if r[1] and r[0]:
             s = r[0].lower()
             self.findcondition = lambda die: self.findbytext(die, s)
+            self.findcucondision = None
             self.findnext_menuitem.setEnabled(True)
             self.on_findnext()
+
+    def on_findip(self):
+        r = QInputDialog.getText(self, 'Find code address', 'Offset (hex):')
+        if r[1] and r[0]:
+            ip = int(r[0], 16)
+            self.findcondition = lambda die: ip_in_range(die, ip)
+            self.findcucondition = lambda cu: ip_in_range(cu.get_top_DIE(), ip)
+            self.findnext_menuitem.setEnabled(True)
+            self.on_findnext()            
 
     def on_findbycondition(self):
         dlg = ScriptDlg(self)
         if dlg.exec() == QDialog.Accepted:
             cond = dlg.cond
             self.findcondition = lambda die: self.eval_user_condition(cond, die)
+            self.findcucondition = None
             self.findnext_menuitem.setEnabled(True)
             self.on_findnext()
 

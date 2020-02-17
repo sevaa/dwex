@@ -153,7 +153,9 @@ class DWARFTreeModel(QAbstractItemModel):
 
     # Returns the index of the found item, or False
     # start_pos is the index of the current item, or an invalid one
-    def find(self, start_pos, cond):
+    # cond is a condition function
+    # cu_cond is the same for CUs - hook for find by IP
+    def find(self, start_pos, cond, cu_cond = False):
         have_start_pos = start_pos.isValid()
         if have_start_pos: # Searching from a specific position, with wrap-around
             start_die = start_pos.internalPointer()
@@ -168,12 +170,13 @@ class DWARFTreeModel(QAbstractItemModel):
         while True:
             cu_offset = cu.cu_offset
             # Parse all DIEs in the current CU
-            for die in cu.iter_DIEs():
-                # Quit condition with search from position - quit once we go past the starting position after the wrap
-                if cu_offset >= start_cu_offset and die.offset > start_die_offset and wrapped:
-                    break
-                if (not have_start_pos or cu_offset != start_cu_offset or (not wrapped and die.offset > start_die_offset)) and cond(die):
-                    return self.index_for_die(die)
+            if cu_cond(cu) if cu_cond else True:
+                for die in cu.iter_DIEs():
+                    # Quit condition with search from position - quit once we go past the starting position after the wrap
+                    if cu_offset >= start_cu_offset and die.offset > start_die_offset and wrapped:
+                        break
+                    if (not have_start_pos or cu_offset != start_cu_offset or (not wrapped and die.offset > start_die_offset)) and cond(die):
+                        return self.index_for_die(die)
 
             # We're at the end of the CU. What next?
             if cu._i < len(self.top_dies) - 1: # More CUs to scan
