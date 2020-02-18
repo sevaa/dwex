@@ -317,11 +317,14 @@ class TheWindow(QMainWindow):
     def on_findip(self):
         r = QInputDialog.getText(self, 'Find code address', 'Offset (hex):')
         if r[1] and r[0]:
-            ip = int(r[0], 16)
-            self.findcondition = lambda die: ip_in_range(die, ip)
-            self.findcucondition = lambda cu: ip_in_range(cu.get_top_DIE(), ip)
-            self.findnext_menuitem.setEnabled(True)
-            self.on_findnext()            
+            try:
+                ip = int(r[0], 16)
+                self.findcondition = lambda die: ip_in_range(die, ip)
+                self.findcucondition = lambda cu: ip_in_range(cu.get_top_DIE(), ip)
+                self.findnext_menuitem.setEnabled(True)
+                self.on_findnext()            
+            except ValueError:
+                pass
 
     def on_findbycondition(self):
         dlg = ScriptDlg(self)
