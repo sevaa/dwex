@@ -88,6 +88,7 @@ class TheWindow(QMainWindow):
             def decorate_cu(cu, i):
                 cu._i = i
                 cu._lineprogram = None
+                cu._exprparser = None
                 return cu
             di._CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
             if not len(di._CUs):

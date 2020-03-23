@@ -1,7 +1,7 @@
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
 from PyQt5.QtGui import QBrush
 from .dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
-from .dwex_elftools.dwarf.dwarf_expr import GenericExprDumper, DW_OP_opcode2name
+from .dwex_elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
 from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL
 
 #------------------------------------------------
@@ -26,44 +26,6 @@ def get_cu_base(die):
     else:
         raise ValueError("Can't find the base address for the location list")
 
-# Format: op arg, arg...
-class ExprDumper(GenericExprDumper):
-    def __init__(self, structs, prefix, hex):
-        GenericExprDumper.__init__(self, structs)
-        self.prefix = prefix
-        self.hex = hex
-
-    def set_prefix(self, prefix):
-        self.prefix = prefix
-
-    def set_hex(self, hex):
-        self.hex = hex        
-    
-    def format_arg(self, s):
-        if isinstance(s, str):
-            return s
-        elif isinstance(s, int):
-            return hex(s) if self.hex else str(s)
-        elif isinstance(s, bytes): # DW_OP_implicit_value has a bytes argument
-            return s.hex() # Python 3.5+
-        else: # Assuming a subexpression TODO: check if it's iterable
-            return '{' + '; '.join(s) + '}'
-
-    def _dump_to_string(self, opcode, opcode_name, args):
-        # Challenge: for nested expressions, args is a list with a list of commands
-        # For those, the format is: op {op arg, arg; op arg, arg}
-        # Can't just check for iterable, str is iterable too
-        if opcode_name.startswith('DW_OP_') and not self.prefix:
-            opcode_name = opcode_name[6:]
-
-        if args:
-            args = [self.format_arg(s) for s in args]
-            args = ', '.join(args)
-            return opcode_name + ' ' + args
-        else:
-            return opcode_name
-
-# TODO: cache expr dumper on CU level, not here
 class DIETableModel(QAbstractTableModel):
     def __init__(self, die, prefix, lowlevel, hex):
         QAbstractTableModel.__init__(self)
@@ -73,7 +35,6 @@ class DIETableModel(QAbstractTableModel):
         self.die = die
         self.attributes = die.attributes
         self.keys = list(die.attributes.keys())
-        self._exprdumper = None
         self.headers = _ll_headers if self.lowlevel else _noll_headers
         self.meta_count = _meta_count if lowlevel else 0
 
@@ -91,8 +52,6 @@ class DIETableModel(QAbstractTableModel):
         di = self.die.dwarfinfo
         if di._locparser is None:
             di._locparser = LocationParser(di.location_lists())
-        if self._exprdumper is None:
-            self._exprdumper = ExprDumper(self.die.cu.structs, self.prefix, self.hex)
         return di._locparser.parse_from_attribute(attr, self.die.cu['version'])
 
     def data(self, index, role):
@@ -146,6 +105,37 @@ class DIETableModel(QAbstractTableModel):
 
     # End of Qt callbacks
 
+    def format_arg(self, s):
+        if isinstance(s, str):
+            return s
+        elif isinstance(s, int):
+            return hex(s) if self.hex else str(s)
+        elif isinstance(s, list): # Could be a blob (list of ints), could be a subexpression
+            if len(s) > 0 and isinstance(s[0], DWARFExprOp): # Subexpression
+                return '{' + '; '.join(self.format_op(*op) for op in s) + '}'
+            else:
+                return bytes(s).hex() # Python 3.5+
+
+    def format_op(self, op, op_name, args):
+        if op_name.startswith('DW_OP_') and not self.prefix:
+            op_name = op_name[6:]
+        if args:
+            return op_name + ' ' + ', '.join(self.format_arg(s) for s in args)
+        else:
+            return op_name
+
+    # Expr is an expression blob
+    # Returns a list of strings for ops
+    # Format: op arg, arg...
+    def dump_expr(self, expr):
+        if self.die.cu._exprparser is None:
+            self.die.cu._exprparser = DWARFExprParser(self.die.cu.structs)
+
+        # Challenge: for nested expressions, args is a list with a list of commands
+        # For those, the format is: op {op arg, arg; op arg, arg}
+        # Can't just check for iterable, str is iterable too
+        return [self.format_op(*op) for op in self.die.cu._exprparser.parse_expr(expr)]
+
     # Big DIE attribute value interpreter
     def format_value(self, attr):
         key = attr.name
@@ -160,7 +150,7 @@ class DIETableModel(QAbstractTableModel):
         elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
             ll = self.parse_location(attr)
             if isinstance(ll, LocationExpr):
-                return '; '.join(self._exprdumper.dump(ll.loc_expr))
+                return '; '.join(self.dump_expr(ll.loc_expr))
             else:
                 return "Loc list: 0x%x" % attr.value
         elif key == 'DW_AT_language':
@@ -222,8 +212,6 @@ class DIETableModel(QAbstractTableModel):
         if prefix != self.prefix:
             self.prefix = prefix
             self.dataChanged.emit(self.createIndex(0, 2), self.createIndex(len(self.keys)-1, 3))
-            if self._exprdumper:
-                self._exprdumper.set_prefix(prefix)
 
     # Index is the current selected index
     # Returns the new selected index, if there was one
@@ -255,8 +243,6 @@ class DIETableModel(QAbstractTableModel):
     def set_hex(self, hex):
         if hex != self.hex:
             self.hex = hex
-            if self._exprdumper:
-                self._exprdumper.set_hex(hex)
             self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
 
     # Returns a table model for the attribute details table
@@ -284,7 +270,7 @@ class DIETableModel(QAbstractTableModel):
                 # Expression is a list of ints
                 ll = self.parse_location(attr)
                 if isinstance(ll, LocationExpr):
-                    return GenericTableModel(("Command",), ((cmd,) for cmd in self._exprdumper.dump(ll.loc_expr)))
+                    return GenericTableModel(("Command",), ((cmd,) for cmd in self.dump_expr(ll.loc_expr)))
                 else:
                     cu_base = get_cu_base(self.die)
                     if self.lowlevel:
@@ -292,10 +278,10 @@ class DIETableModel(QAbstractTableModel):
                         values = ((hex(cu_base + l.begin_offset),
                             hex(cu_base + l.end_offset),
                             ' '.join("%02x" % b for b in l.loc_expr),
-                            '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll)
+                            '; '.join(self.dump_expr(l.loc_expr))) for l in ll)
                     else:
                         headers = ("Start offset", "End offset", "Expression")
-                        values = ((hex(cu_base + l.begin_offset), hex(cu_base + l.end_offset), '; '.join(self._exprdumper.dump(l.loc_expr))) for l in ll)
+                        values = ((hex(cu_base + l.begin_offset), hex(cu_base + l.end_offset), '; '.join(self.dump_expr(l.loc_expr))) for l in ll)
                     return GenericTableModel(headers, values)
             elif key == 'DW_AT_stmt_list':
                 if self.die.cu._lineprogram is None:

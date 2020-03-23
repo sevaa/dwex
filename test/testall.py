@@ -17,6 +17,7 @@ def test_dwarfinfo(di):
     for CU in di._CUs:
         print("%s" % strip_path(CU.get_top_DIE().attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')))
         CU._lineprogram = None
+        CU._exprparser = None
         for die in CU.iter_DIEs():
             if not die.is_null():
                 assert die.tag.startswith('DW_TAG_')

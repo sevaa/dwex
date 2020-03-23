@@ -33,7 +33,7 @@ from .gnuversions import (
         GNUVerSymSection)
 from .segments import Segment, InterpSegment, NoteSegment
 from ..dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
-
+from .hash import ELFHashSection, GNUHashSection
 
 class ELFFile(object):
     """ Creation: the constructor accepts a stream (file-like object) with the
@@ -150,7 +150,7 @@ class ELFFile(object):
             We assume that if it has the .debug_info or .zdebug_info section, it
             has all the other required sections as well.
         """
-        return (self.get_section_by_name('.debug_info') or
+        return bool(self.get_section_by_name('.debug_info') or
             self.get_section_by_name('.zdebug_info') or
             self.get_section_by_name('.eh_frame'))
 
@@ -167,7 +167,7 @@ class ELFFile(object):
 
         section_names = ('.debug_info', '.debug_aranges', '.debug_abbrev',
                          '.debug_str', '.debug_line', '.debug_frame',
-                         '.debug_loc', '.debug_ranges', '.debug_pubtypes', 
+                         '.debug_loc', '.debug_ranges', '.debug_pubtypes',
                          '.debug_pubnames')
 
         compressed = bool(self.get_section_by_name('.zdebug_info'))
@@ -504,6 +504,10 @@ class ELFFile(object):
             return StabSection(section_header, name, self)
         elif sectype == 'SHT_ARM_ATTRIBUTES':
             return ARMAttributesSection(section_header, name, self)
+        elif sectype == 'SHT_HASH':
+            return self._make_elf_hash_section(section_header, name)
+        elif sectype == 'SHT_GNU_HASH':
+            return self._make_gnu_hash_section(section_header, name)
         else:
             return Section(section_header, name, self)
 
@@ -556,6 +560,20 @@ class ELFFile(object):
             section_header, name,
             elffile=self,
             symboltable=strtab_section)
+
+    def _make_elf_hash_section(self, section_header, name):
+        linked_symtab_index = section_header['sh_link']
+        symtab_section = self.get_section(linked_symtab_index)
+        return ELFHashSection(
+            section_header, name, self, symtab_section
+        )
+
+    def _make_gnu_hash_section(self, section_header, name):
+        linked_symtab_index = section_header['sh_link']
+        symtab_section = self.get_section(linked_symtab_index)
+        return GNUHashSection(
+            section_header, name, self, symtab_section
+        )
 
     def _get_segment_header(self, n):
         """ Find the header of segment #n, parse it and return the struct

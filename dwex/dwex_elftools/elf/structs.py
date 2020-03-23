@@ -43,6 +43,17 @@ class ELFStructs(object):
         assert elfclass == 32 or elfclass == 64
         self.little_endian = little_endian
         self.elfclass = elfclass
+        self.e_type = None
+        self.e_machine = None
+        self.e_ident_osabi = None
+
+    def __getstate__(self):
+        return self.little_endian, self.elfclass, self.e_type, self.e_machine, self.e_ident_osabi
+
+    def __setstate__(self, state):
+        self.little_endian, self.elfclass, e_type, e_machine, e_osabi = state
+        self.create_basic_structs()
+        self.create_advanced_structs(e_type, e_machine, e_osabi)
 
     def create_basic_structs(self):
         """ Create word-size related structs and ehdr struct needed for
@@ -76,12 +87,16 @@ class ELFStructs(object):
         """ Create all ELF structs except the ehdr. They may possibly depend
             on provided e_type and/or e_machine parsed from ehdr.
         """
-        self._create_phdr(e_machine)
-        self._create_shdr(e_machine)
+        self.e_type = e_type
+        self.e_machine = e_machine
+        self.e_ident_osabi = e_ident_osabi
+
+        self._create_phdr()
+        self._create_shdr()
         self._create_chdr()
         self._create_sym()
         self._create_rel()
-        self._create_dyn(e_machine, e_ident_osabi)
+        self._create_dyn()
         self._create_sunw_syminfo()
         self._create_gnu_verneed()
         self._create_gnu_verdef()
@@ -127,13 +142,13 @@ class ELFStructs(object):
     def _create_ntbs(self):
         self.Elf_ntbs = CString
 
-    def _create_phdr(self, e_machine=None):
+    def _create_phdr(self):
         p_type_dict = ENUM_P_TYPE_BASE
-        if e_machine == 'EM_ARM':
+        if self.e_machine == 'EM_ARM':
             p_type_dict = ENUM_P_TYPE_ARM
-        elif e_machine == 'EM_AARCH64':
+        elif self.e_machine == 'EM_AARCH64':
             p_type_dict = ENUM_P_TYPE_AARCH64
-        elif e_machine == 'EM_MIPS':
+        elif self.e_machine == 'EM_MIPS':
             p_type_dict = ENUM_P_TYPE_MIPS
 
         if self.elfclass == 32:
@@ -159,17 +174,17 @@ class ELFStructs(object):
                 self.Elf_xword('p_align'),
             )
 
-    def _create_shdr(self, e_machine=None):
+    def _create_shdr(self):
         """Section header parsing.
 
         Depends on e_machine because of machine-specific values in sh_type.
         """
         sh_type_dict = ENUM_SH_TYPE_BASE
-        if e_machine == 'EM_ARM':
+        if self.e_machine == 'EM_ARM':
             sh_type_dict = ENUM_SH_TYPE_ARM
-        elif e_machine == 'EM_X86_64':
+        elif self.e_machine == 'EM_X86_64':
             sh_type_dict = ENUM_SH_TYPE_AMD64
-        elif e_machine == 'EM_MIPS':
+        elif self.e_machine == 'EM_MIPS':
             sh_type_dict = ENUM_SH_TYPE_MIPS
 
         self.Elf_Shdr = Struct('Elf_Shdr',
@@ -200,38 +215,63 @@ class ELFStructs(object):
         self.Elf_Chdr = Struct('Elf_Chdr', *fields)
 
     def _create_rel(self):
-        # r_info is also taken apart into r_info_sym and r_info_type.
-        # This is done in Value to avoid endianity issues while parsing.
+        # r_info is also taken apart into r_info_sym and r_info_type. This is
+        # done in Value to avoid endianity issues while parsing.
         if self.elfclass == 32:
-            r_info_sym = Value('r_info_sym',
-                lambda ctx: (ctx['r_info'] >> 8) & 0xFFFFFF)
-            r_info_type = Value('r_info_type',
-                lambda ctx: ctx['r_info'] & 0xFF)
-        else: # 64
-            r_info_sym = Value('r_info_sym',
-                lambda ctx: (ctx['r_info'] >> 32) & 0xFFFFFFFF)
-            r_info_type = Value('r_info_type',
-                lambda ctx: ctx['r_info'] & 0xFFFFFFFF)
+            fields = [self.Elf_xword('r_info'),
+                      Value('r_info_sym',
+                            lambda ctx: (ctx['r_info'] >> 8) & 0xFFFFFF),
+                      Value('r_info_type',
+                            lambda ctx: ctx['r_info'] & 0xFF)]
+        elif self.e_machine == 'EM_MIPS': # ELF64 MIPS
+            fields = [
+                # The MIPS ELF64 specification
+                # (https://www.linux-mips.org/pub/linux/mips/doc/ABI/elf64-2.4.pdf)
+                # provides a non-standard relocation structure definition.
+                self.Elf_word('r_sym'),
+                self.Elf_byte('r_ssym'),
+                self.Elf_byte('r_type3'),
+                self.Elf_byte('r_type2'),
+                self.Elf_byte('r_type'),
+
+                # Synthetize usual fields for compatibility with other
+                # architectures. This allows relocation consumers (including
+                # our readelf tests) to work without worrying about MIPS64
+                # oddities.
+                Value('r_info_sym', lambda ctx: ctx['r_sym']),
+                Value('r_info_ssym', lambda ctx: ctx['r_ssym']),
+                Value('r_info_type', lambda ctx: ctx['r_type']),
+                Value('r_info_type2', lambda ctx: ctx['r_type2']),
+                Value('r_info_type3', lambda ctx: ctx['r_type3']),
+                Value('r_info',
+                      lambda ctx: (ctx['r_sym'] << 32)
+                                  | (ctx['r_ssym'] << 24)
+                                  | (ctx['r_type3'] << 16)
+                                  | (ctx['r_type2'] << 8)
+                                  | ctx['r_type']),
+            ]
+        else: # Other 64 ELFs
+            fields = [self.Elf_xword('r_info'),
+                      Value('r_info_sym',
+                            lambda ctx: (ctx['r_info'] >> 32) & 0xFFFFFFFF),
+                      Value('r_info_type',
+                            lambda ctx: ctx['r_info'] & 0xFFFFFFFF)]
 
         self.Elf_Rel = Struct('Elf_Rel',
-            self.Elf_addr('r_offset'),
-            self.Elf_xword('r_info'),
-            r_info_sym,
-            r_info_type,
-        )
+                              self.Elf_addr('r_offset'),
+                              *fields)
+
+        fields_and_addend = fields + [self.Elf_sxword('r_addend')]
         self.Elf_Rela = Struct('Elf_Rela',
-            self.Elf_addr('r_offset'),
-            self.Elf_xword('r_info'),
-            r_info_sym,
-            r_info_type,
-            self.Elf_sxword('r_addend'),
+                               self.Elf_addr('r_offset'),
+                               *fields_and_addend
         )
 
-    def _create_dyn(self, e_machine=None, e_ident_osabi=None):
+    def _create_dyn(self):
         d_tag_dict = dict(ENUM_D_TAG_COMMON)
-        if e_machine in ENUMMAP_EXTRA_D_TAG_MACHINE:
-            d_tag_dict.update(ENUMMAP_EXTRA_D_TAG_MACHINE[e_machine])
-        elif e_ident_osabi == 'ELFOSABI_SOLARIS':
+        if self.e_machine in ENUMMAP_EXTRA_D_TAG_MACHINE:
+            d_tag_dict.update(ENUMMAP_EXTRA_D_TAG_MACHINE[self.e_machine])
+        elif self.e_ident_osabi == 'ELFOSABI_SOLARIS':
             d_tag_dict.update(ENUM_D_TAG_SOLARIS)
 
         self.Elf_Dyn = Struct('Elf_Dyn',
