@@ -42,15 +42,15 @@ Click Open in the File menu, choose your executable, and eyeball the DWARF tree.
 
 On the most basic level, the debug information in a compiled file is an array of *compilation units* (CUs). Each CU contains a tree of data items called *Debugging Information Entries* (DIEs). Each DIE has a title called *tag*, and contains a name-value dictionary called *attributes*. Each CU has exactly one root DIE, and the rest of the DIEs are in its subtree.
 
-DIEs generally correspond to source level entities in the program - variables, functions, classes, members, methods, etc. The DIE tag tells you which one is it. The exact way the compiler builds a DIE tree to describe the program varies between source languages, compiler versions, target platforms and architectures. The official home of the DWARF spec is at [dwarfstd.org](http://dwarfstd.org/), but there's considerable leeway for implementations to improvise upon. On top of that, the DWARF spec contains explicit extension points for compiler vendors to tap into.
-
-DIE attribute values are relatively small scalars - integers, strings, sometimes short byte arrays. However, they sometimes refer at larger data structures. Physically, it's an integer, but logically, it's a pointer to some data elsewhere. Also, DIE attribute values may contain references to other DIEs - for example, a DIE for a variable would contain a reference to a DIE that describes its datatype.
-
 The UI of DWARF Explorer was meant for eyeballing that data structure:
 
 ![dwex](https://user-images.githubusercontent.com/5807738/77756810-510ad300-7006-11ea-8d97-b7c109d050b1.png)
 
-The left hand tree displays the DIEs, with CU root DIEs on the top level. Expand the tree and click on DIEs to see their attributes. DIE attributes that have a substructure or point at larger data structures are clickable. DIE attributes that contain references to other DIEs are rendered in blue; the link can be followed by a double-click or a Ctrl+Enter. To come back to the original DIE, use Navigate/Back or an appropriate keyboard shortcut (those vary between operating systems).
+The left hand tree displays the DIEs, with CU root DIEs on the top level. Expand the tree and click on DIEs to see their attributes. DIE attributes that have a substructure or point at larger data structures are clickable.
+
+DIEs generally correspond to source level entities in the program - variables, functions, classes, members, methods, etc. The DIE tag tells you which one is it. The exact way the compiler builds a DIE tree to describe the program varies between source languages, compiler versions, target platforms and architectures. The official home of the DWARF spec is at [dwarfstd.org](http://dwarfstd.org/), but there's considerable leeway for implementations to improvise upon. On top of that, the DWARF spec contains explicit extension points for compiler vendors to tap into.
+
+DIE attribute values are relatively small scalars - integers, strings, sometimes short byte arrays. However, they sometimes refer at larger data structures. Physically, it's an integer, but logically, it's a pointer to some data elsewhere. Also, DIE attribute values may contain references to other DIEs - for example, a DIE for a variable would contain a reference to a DIE that describes its datatype. DIE attributes that contain references to other DIEs are rendered in blue; the link can be followed by a double-click or a Ctrl+Enter. To come back to the original DIE, use Navigate/Back or an appropriate keyboard shortcut (Alt-Left on Windows and Linux, Ctrl-[ on Mac).
 
 In DWARF, tag and attribute names are prefixed with `DW_TAG_` and `DW_AT_`, respectively. DWARF Explorer elides those by default to reduce visual clutter. Use `View/DWARF prefix` in the menu to bring them back.
 
