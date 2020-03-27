@@ -46,7 +46,11 @@ DIEs generally correspond to source level entities in the program - variables, f
 
 DIE attribute values are relatively small scalars - integers, strings, sometimes short byte arrays. However, they sometimes refer at larger data structures. Physically, it's an integer, but logically, it's a pointer to some data elsewhere. Also, DIE attribute values may contain references to other DIEs - for example, a DIE for a variable would contain a reference to a DIE that describes its datatype.
 
-The UI of DWARF Explorer was meant for eyeballing that data structure. The left hand tree displays the DIEs, with CU root DIEs on the top level. Expand the tree and click on DIEs to see their attributes. DIE attributes that have a substructure or point at larger data structures are clickable. DIE attributes that contain references to other DIEs are rendered in blue; the link can be followed by a double-click or a Ctrl+Enter. To come back to the original DIE, use Navigate/Back or an appropriate keyboard shortcut (those vary between operating systems).
+The UI of DWARF Explorer was meant for eyeballing that data structure:
+
+![dwex](https://user-images.githubusercontent.com/5807738/77756810-510ad300-7006-11ea-8d97-b7c109d050b1.png)
+
+The left hand tree displays the DIEs, with CU root DIEs on the top level. Expand the tree and click on DIEs to see their attributes. DIE attributes that have a substructure or point at larger data structures are clickable. DIE attributes that contain references to other DIEs are rendered in blue; the link can be followed by a double-click or a Ctrl+Enter. To come back to the original DIE, use Navigate/Back or an appropriate keyboard shortcut (those vary between operating systems).
 
 In DWARF, tag and attribute names are prefixed with `DW_TAG_` and `DW_AT_`, respectively. DWARF Explorer elides those by default to reduce visual clutter. Use `View/DWARF prefix` in the menu to bring them back.
 
