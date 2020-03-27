@@ -1,14 +1,14 @@
-import sys, os, io, platform
+import sys, os
 from PyQt5.QtCore import Qt, QModelIndex, QSettings, QUrl
-from PyQt5.QtGui import QFontMetrics, QKeySequence, QDesktopServices
+from PyQt5.QtGui import QFontMetrics, QDesktopServices
 from PyQt5.QtWidgets import *
 from .die import DIETableModel, ip_in_range
 from .formats import read_dwarf
-from .tree import DWARFTreeModel, has_code_location
+from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version=(0,58)
+version = (0, 60)
 
 # TODO:
 # Autotest on corpus
@@ -53,6 +53,8 @@ class TheWindow(QMainWindow):
         self.prefix = self.sett.value('General/Prefix', False, type=bool)
         self.lowlevel = self.sett.value('General/LowLevel', False, type=bool)
         self.hex = self.sett.value('General/Hex', False, type=bool)
+        self.sortcus = self.sett.value('General/SortCUs', True, type=bool)
+        self.sortdies = self.sett.value('General/SortDIEs', False, type=bool)
         self.mru = []
         for i in range(0, 10):
             f = self.sett.value("General/MRU%d" % i, False)
@@ -93,9 +95,13 @@ class TheWindow(QMainWindow):
             di._CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
             if not len(di._CUs):
                 return None # Weird, but saw it once - debug sections present, but no CUs
+            if self.sortcus:
+                di._CUs.sort(key = cu_sort_key)
+                for (i, cu) in enumerate(di._CUs):
+                    cu._i = i
             di._locparser = None # Created on first use
 
-            self.tree_model = DWARFTreeModel(di, self.prefix)
+            self.tree_model = DWARFTreeModel(di, self.prefix, self.sortcus, self.sortdies)
             self.the_tree.setModel(self.tree_model)
             self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
             s = os.path.basename(filename)
@@ -394,10 +400,33 @@ class TheWindow(QMainWindow):
 
     def on_view_hex(self, checked):        
         self.hex = checked
-        self.sett.setValue('General/Hex', self.lowlevel)
+        self.sett.setValue('General/Hex', self.hex)
         if self.die_model:
             self.die_model.set_hex(checked)
-            self.refresh_details()        
+            self.refresh_details()
+
+    def on_sortcus(self, checked):
+        self.sortcus = checked
+        self.sett.setValue('General/SortCUs', self.sortcus)
+        if self.tree_model:
+            sel = self.the_tree.currentIndex()
+            sel = self.tree_model.set_sortcus(checked, sel) # This will reload the tree
+            self.the_tree.setCurrentIndex(sel)
+
+    def on_sortdies(self, checked):
+        self.sortdies = checked
+        self.sett.setValue('General/SortDIEs', self.sortdies)
+        if self.tree_model:
+            #Throw away everything we had cached so far
+            sel = self.tree_model.set_sortdies(checked)
+            #This invalidates the navigation
+            self.back_menuitem.setEnabled(False)
+            self.forward_menuitem.setEnabled(False)
+            self.followref_menuitem.setEnabled(False)
+            # Navigation stack - empty
+            self.navhistory = []
+            self.navpos = -1
+            self.the_tree.setCurrentIndex(sel)
 
     def on_highlight_code(self):
         self.highlightcode_menuitem.setChecked(True)

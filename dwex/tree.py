@@ -12,6 +12,20 @@ def strip_path(filename):
         p = pbsl
     return filename[p+1:] if p >= 0 else filename
 
+def top_die_file_name(die):
+    source_name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
+    return strip_path(source_name)
+
+def cu_sort_key(cu):
+    return top_die_file_name(cu.get_top_DIE()).lower()
+
+def die_sort_key(die):
+    if 'DW_AT_name' in die.attributes:
+        name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore').lower()
+    else:
+        name = ''
+    return (die.tag, name, die.offset)
+
 #------------------------------------------------
 # CU tree formatter
 #------------------------------------------------    
@@ -22,16 +36,19 @@ def decorate_die(die, i):
     die._children = None
     return die
 
-def load_children(parent_die):
+def load_children(parent_die, sort):
     # Load and cache child DIEs in the parent DIE, if necessary
     # Assumes the check if the DIE has children has been already performed
     if '_children' not in dir(parent_die) or parent_die._children is None:
         # TODO: wait cursor here. It may cause disk I/O
         parent_die._children = [decorate_die(die, i) for (i, die) in enumerate(parent_die.iter_children())]    
-
+        if sort:
+            parent_die._children.sort(key = die_sort_key)
+            for (i, die) in enumerate(parent_die._children):
+                die._i = i
 
 class DWARFTreeModel(QAbstractItemModel):
-    def __init__(self, di, prefix):
+    def __init__(self, di, prefix, sortcus, sortdies):
         QAbstractItemModel.__init__(self)
         self.prefix = prefix
         self.top_dies = [decorate_die(CU.get_top_DIE(), i) for (i, CU) in enumerate(di._CUs)]
@@ -39,6 +56,8 @@ class DWARFTreeModel(QAbstractItemModel):
         fi = QFontInfo(QApplication.font())
         self.bold_font = QFont(fi.family(), fi.pointSize(), QFont.Bold)
         self.blue_brush = QBrush(Qt.GlobalColor.blue)
+        self.sortcus = sortcus
+        self.sortdies = sortdies
 
     # Qt callbacks. QTreeView supports progressive loading, as long as you feed it the "item has children" bit in advance
 
@@ -46,7 +65,7 @@ class DWARFTreeModel(QAbstractItemModel):
         if parent.isValid():
             parent_die = parent.internalPointer()
             # print("child of %s" % parent_die.tag)
-            load_children(parent_die)
+            load_children(parent_die, self.sortdies)
             return self.createIndex(row, col, parent_die._children[row])
         else:
             return self.createIndex(row, col, self.top_dies[row])
@@ -68,7 +87,7 @@ class DWARFTreeModel(QAbstractItemModel):
             if not parent_die.has_children: # Legitimately nothing
                 return 0
             else:
-                load_children(parent_die)
+                load_children(parent_die, self.sortdies)
                 return len(parent_die._children)
         else:
             return len(self.top_dies)
@@ -87,8 +106,7 @@ class DWARFTreeModel(QAbstractItemModel):
         die = index.internalPointer()
         if role == Qt.DisplayRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit': # CU/top die: return file name
-                source_name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
-                return strip_path(source_name)
+                return top_die_file_name(die)
             else: # Return tag, with name if possible
                 s = die.tag if self.prefix or not str(die.tag).startswith('DW_TAG_') else die.tag[7:]
                 if 'DW_AT_name' in die.attributes:
@@ -114,6 +132,40 @@ class DWARFTreeModel(QAbstractItemModel):
             self.dataChanged.emit(
                 self.createIndex(0, 0, self.top_dies[0]),
                 self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]))    
+
+    # returns the model index of the selection
+    def set_sortcus(self, sortcus, sel):
+        if sortcus != self.sortcus:
+            sel_die = sel.internalPointer()
+            self.beginResetModel()
+            self.sortcus = sortcus
+            #Resort the CUs, reload the top_dies
+            di = self.top_dies[0].dwarfinfo
+            sort_key = cu_sort_key if self.sortcus else lambda cu: cu.cu_offset
+            di._CUs.sort(key = sort_key)
+            for (i, cu) in enumerate(di._CUs):
+                cu._i = i
+                self.top_dies[i] = cu.get_top_DIE() # Already decorated, but the index is off
+                self.top_dies[i]._i = i
+            # Reload
+            self.endResetModel()
+            if sel_die.get_parent(): # Not a top level
+                return sel
+            else:
+                return self.createIndex(0, sel_die._i, sel_die)
+
+    def set_sortdies(self, sortdies):
+        if sortdies != self.sortdies:
+            self.sortdies = sortdies
+            self.beginResetModel()
+            for (i, die) in enumerate(self.top_dies):
+                # Fragile! We invalidate the children in the decorated DIEs in the CU DIE cache
+                # To force reloading and sorting
+                for top_die in self.top_dies:
+                    for die in top_die.cu._dielist:
+                        die._children = None
+            self.endResetModel()
+            return self.createIndex(0, 0, self.top_dies[0])
 
     # Identifier for the current tree node that you can navigate to
     # For the back-forward logic
@@ -145,7 +197,7 @@ class DWARFTreeModel(QAbstractItemModel):
             index = False
             while '_i' not in dir(die):
                 parent_die = die.get_parent()
-                load_children(parent_die) # This will populate the _i in all children of parent_die, including die
+                load_children(parent_die, self.sortdies) # This will populate the _i in all children of parent_die, including die
                 if not index: # After the first iteration, the one in the direct parent of target_die, target_die will have _i
                     index = self.createIndex(die._i, 0, die)
                 die = parent_die
