@@ -1,6 +1,6 @@
 import sys, os
-from PyQt5.QtCore import Qt, QModelIndex, QSettings, QUrl
-from PyQt5.QtGui import QFontMetrics, QDesktopServices
+from PyQt5.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
+from PyQt5.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt5.QtWidgets import *
 from .die import DIETableModel, ip_in_range
 from .formats import read_dwarf
@@ -8,11 +8,9 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (0, 60)
+version = (0, 61)
 
 # TODO:
-# Autotest on corpus
-# Test back-forward mouse buttons
 # On MacOS, start without a main window, instead show the Open dialog
 
 #-----------------------------------------------------------------
@@ -255,15 +253,19 @@ class TheWindow(QMainWindow):
         self.followref(index)
 
     # For both back and forward, delta=1 for back, -1 for forward
+    # Checked because back-forward buttons can't be disabled
     def on_nav(self, delta):
-        self.navpos += delta
-        navitem = self.navhistory[self.navpos]
+        np = self.navpos + delta
+        if np < 0 or np >= len(self.navhistory):
+            return
+        self.navpos = np
+        navitem = self.navhistory[np]
         tree_index = self.tree_model.index_for_navitem(navitem)
         self.in_tree_nav = True
         self.the_tree.setCurrentIndex(tree_index) # Causes on_tree_selection internally
         self.in_tree_nav = False
-        self.back_menuitem.setEnabled(self.navpos < len(self.navhistory) - 1)
-        self.forward_menuitem.setEnabled(self.navpos > 0)
+        self.back_menuitem.setEnabled(np < len(self.navhistory) - 1)
+        self.forward_menuitem.setEnabled(np > 0)
 
     def followref(self, index = None):
         self.start_wait() # TODO: only show the wait cursor if it's indeed time consuming
@@ -281,13 +283,13 @@ class TheWindow(QMainWindow):
 
     # Back-forward mouse buttons are shortcuts for back/forward navigation
     # Qt docs claim capturing is not necessary
-    def mouseReleaseEvent(self, evt):
-        QMainWindow.mouseReleaseEvent(self, evt)
-        b = evt.button()
-        if b == Qt.MouseButton.BackButton:
-            self.on_nav(1)
-        elif b == Qt.MouseButton.ForwardButton:
-            self.on_nav(-1)
+    #def mouseReleaseEvent(self, evt):
+    #    QMainWindow.mouseReleaseEvent(self, evt)
+    #    b = evt.button()
+    #    if b == Qt.MouseButton.BackButton:
+    #        self.on_nav(1)
+    #    elif b == Qt.MouseButton.ForwardButton:
+    #        self.on_nav(-1)
         
 
     ##########################################################################
@@ -496,14 +498,30 @@ def on_exception(exctype, exc, tb):
     sys.excepthook = on_exception.prev_exchook
     sys.exit(1)
 
+class TheApp(QApplication):
+    def __init__(self):
+        QApplication.__init__(self, [])
+
+    def notify(self, o, evt):
+        if evt.type() == QEvent.Type.MouseButtonPress and isinstance(o, QWindow):
+            b = evt.button()
+            if b == Qt.MouseButton.BackButton:
+                self.win.on_nav(1)
+            elif b == Qt.MouseButton.ForwardButton:
+                self.win.on_nav(-1)
+        return QApplication.notify(self, o, evt)
+    
+    def start(self):
+        self.win = TheWindow()
+        self.exec_()
+
 def main():     
     if sys.settrace is None: # Lame way to detect a debugger
         on_exception.prev_exchook = sys.excepthook
         sys.excepthook = on_exception
 
-    the_app = QApplication([])
-    win = TheWindow()
-    the_app.exec_()        
+    TheApp().start()
+            
 
 # For running via "python -m dwex"
 # Running this file directly won't work, it relies on being in a module
