@@ -53,6 +53,7 @@ class TheWindow(QMainWindow):
         self.hex = self.sett.value('General/Hex', False, type=bool)
         self.sortcus = self.sett.value('General/SortCUs', True, type=bool)
         self.sortdies = self.sett.value('General/SortDIEs', False, type=bool)
+        self.dwarfregnames = self.sett.value('General/DWARFRegNames', False, type=bool)
         self.mru = []
         for i in range(0, 10):
             f = self.sett.value("General/MRU%d" % i, False)
@@ -117,6 +118,7 @@ class TheWindow(QMainWindow):
             self.findbycondition_menuitem.setEnabled(True)
             self.find_menuitem.setEnabled(True)
             self.findip_menuitem.setEnabled(True)
+            self.on_highlight_nothing()
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
@@ -201,7 +203,7 @@ class TheWindow(QMainWindow):
         die = index.internalPointer()
         die_table = self.die_table
         if not self.die_model:
-            self.die_model = DIETableModel(die, self.prefix, self.lowlevel, self.hex)
+            self.die_model = DIETableModel(die, self.prefix, self.lowlevel, self.hex, self.dwarfregnames)
             die_table.setModel(self.die_model)
             die_table.selectionModel().currentChanged.connect(self.on_attribute_selection)
         else:
@@ -406,6 +408,13 @@ class TheWindow(QMainWindow):
         if self.die_model:
             self.die_model.set_hex(checked)
             self.refresh_details()
+
+    def on_view_regnames(self, checked):        
+        self.dwarfregnames = checked
+        self.sett.setValue('General/DWARFRegNames', self.dwarfregnames)
+        if self.die_model:
+            self.die_model.set_regnames(checked)
+            self.refresh_details()            
 
     def on_sortcus(self, checked):
         self.sortcus = checked

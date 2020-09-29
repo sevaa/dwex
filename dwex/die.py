@@ -2,7 +2,53 @@ from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelInde
 from PyQt5.QtGui import QBrush
 from .dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
 from .dwex_elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
-from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL
+from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
+
+_REG_NAMES_ARM = [
+    'r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7',
+    'r8', 'r9', 'r10', 'r11', 'r12', 'sp', 'lr', 'pc'
+    # Ever higher values for FP or SIMD registers?
+]
+
+# TODO: check against readelf, not sure
+_REG_NAMES_ARM64 = [
+    'x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7',
+    'x8', 'x9', 'x10', 'x11', 'x12', 'x13', 'x14', 'x15',
+    'x16', 'x17', 'x18', 'x19', 'x20', 'x21', 'x22', 'x23',
+    'x24', 'x25', 'x26', 'x27', 'x28', 'x29', 'x30', 'x31'
+]
+
+_REG_NAMES_MIPS = [
+    'zero', 'at', 'v0', 'v1', 'a0', 'a1', 'a2', 'a3',
+    't0', 't1', 't2', 't3', 't4', 't5', 't6', 't7',
+    's0', 's1', 's2', 's3', 's4', 's5', 's6', 's7',
+    't8', 't9', 'k0', 'k1', 'gp', 'sp', 'fp', 'ra'
+] # Lo, hi???
+
+# More? 
+
+# The key here is the machine_arch value in the DWARFConfig struct.
+# Machine arch values are generated differently for ELF, MachO and PE
+# For ELF, see the values in the architecture dict in get_machine_arch() under dwex_elftools.elf.elffile
+# For PE, see IMAGE_FILE_MACHINE in filebytes.pe
+# For MachO, see make_macho_arch_name() in formats.py
+
+_REG_NAME_MAP = dict(
+    x86 = _REG_NAMES_x86,
+    I386 = _REG_NAMES_x86,
+    x64 = _REG_NAMES_x64,
+    AMD64 = _REG_NAMES_x64,
+    X86_64 = _REG_NAMES_x64,
+    ARM = _REG_NAMES_ARM,
+    ARMV6 = _REG_NAMES_ARM,
+    ARMV7 = _REG_NAMES_ARM,
+    ARMV7A = _REG_NAMES_ARM,
+    ARMV7S = _REG_NAMES_ARM,
+    AArch64 = _REG_NAMES_ARM64,
+    ARM64 = _REG_NAMES_ARM64,
+    ARME = _REG_NAMES_ARM64,
+    MIPS = _REG_NAMES_MIPS
+)
 
 #------------------------------------------------
 # DIE formatter
@@ -27,16 +73,19 @@ def get_cu_base(die):
         raise ValueError("Can't find the base address for the location list")
 
 class DIETableModel(QAbstractTableModel):
-    def __init__(self, die, prefix, lowlevel, hex):
+    def __init__(self, die, prefix, lowlevel, hex, regnames):
         QAbstractTableModel.__init__(self)
         self.prefix = prefix
         self.lowlevel = lowlevel
         self.hex = hex
+        self.regnames = regnames
         self.die = die
         self.attributes = die.attributes
         self.keys = list(die.attributes.keys())
         self.headers = _ll_headers if self.lowlevel else _noll_headers
         self.meta_count = _meta_count if lowlevel else 0
+        self.arch = die.dwarfinfo.config.machine_arch
+        self.regnamelist = _REG_NAME_MAP.get(self.arch)
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.DisplayRole:
@@ -116,9 +165,29 @@ class DIETableModel(QAbstractTableModel):
             else:
                 return bytes(s).hex() # Python 3.5+
 
+    def decode_breg(self, regno, offset):
+        if offset < 0:
+            return '[%s-0x%x]' % (self.regnamelist[regno], -offset)
+        else:
+            return '[%s+0x%x]' % (self.regnamelist[regno], offset)
+
     def format_op(self, op, op_name, args):
+        if not self.regnames and self.regnamelist: # Friendly register names
+            if 0x50 <= op <= 0x6f and op - 0x50 < len(self.regnamelist): # reg0...reg31
+                op_name = self.regnamelist[op-0x50]
+            elif 0x70 <= op <= 0x8f and op - 0x70 < len(self.regnamelist) and len(args) > 0: # breg0...breg31(offset)
+                op_name = self.decode_breg(op - 0x70, args[0])
+                args = False
+            elif op == 0x90 and len(args) > 0 and args[0] >= 0 and args[0] < len(self.regnamelist): # regx(regno)
+                op_name = self.regnamelist[args[0]]
+                args = False
+            elif op == 0x92 and len(args) > 1 and args[0] >= 0 and args[0] < len(self.regnamelist): # bregx(regno, offset)
+                op_name = self.decode_breg(args[0], args[1])
+                args = False
+
         if op_name.startswith('DW_OP_') and not self.prefix:
             op_name = op_name[6:]
+
         if args:
             return op_name + ' ' + ', '.join(self.format_arg(s) for s in args)
         else:
@@ -201,6 +270,9 @@ class DIETableModel(QAbstractTableModel):
         self.die = die
         self.attributes = die.attributes
         self.keys = list(die.attributes.keys())
+        if die.dwarfinfo.config.machine_arch != self.arch:
+            self.arch = die.dwarfinfo.config.machine_arch
+            self.regnamelist = _REG_NAME_MAP.get(self.arch)        
         rows_now = len(self.keys)
         if rows_was < rows_now:
             self.rowsInserted.emit(QModelIndex(), rows_was, rows_now-1)
@@ -243,6 +315,11 @@ class DIETableModel(QAbstractTableModel):
     def set_hex(self, hex):
         if hex != self.hex:
             self.hex = hex
+            self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
+
+    def set_regnames(self, regnames):
+        if regnames != self.regnames:
+            self.regnames = regnames
             self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
 
     # Returns a table model for the attribute details table
