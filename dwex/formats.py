@@ -142,7 +142,13 @@ def read_dwarf(filename, resolve_arch):
                 file.seek(0)
                 elffile = ELFFile(file)
                 file = None # Keep the file open
-                return elffile.get_dwarf_info() if elffile.has_dwarf_info() else None
+                if elffile.has_dwarf_info():
+                    return elffile.get_dwarf_info()
+                elif elffile.get_section_by_name(".debug"):
+                    from .dwarfone import parse_dwarf1
+                    return parse_dwarf1(elffile)
+                else:
+                    return None
             elif struct.unpack('>I', signature)[0] in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe):
                 # Mach-O fat binary, or 32/64-bit Mach-O in big/little-endian format
                 return read_macho(filename, resolve_arch, filename)
