@@ -1,7 +1,9 @@
+from bisect import bisect_right
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
 from PyQt5.QtGui import QBrush
 from .dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
 from .dwex_elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
+from .dwarfone import DWARFExprParserV1
 from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
 
 _REG_NAMES_ARM = [
@@ -19,10 +21,10 @@ _REG_NAMES_ARM64 = [
 ]
 
 _REG_NAMES_MIPS = [
-    'zero', 'at', 'v0', 'v1', 'a0', 'a1', 'a2', 'a3',
-    't0', 't1', 't2', 't3', 't4', 't5', 't6', 't7',
-    's0', 's1', 's2', 's3', 's4', 's5', 's6', 's7',
-    't8', 't9', 'k0', 'k1', 'gp', 'sp', 'fp', 'ra'
+    '$zero', '$at', '$v0', '$v1', '$a0', '$a1', '$a2', '$a3',
+    '$t0', '$t1', '$t2', '$t3', '$t4', '$t5', '$t6', '$t7',
+    '$s0', '$s1', '$s2', '$s3', '$s4', '$s5', '$s6', '$s7',
+    '$t8', '$t9', '$k0', '$k1', '$gp', '$sp', '$fp', '$ra'
 ] # Lo, hi???
 
 # More? 
@@ -125,12 +127,12 @@ class DIETableModel(QAbstractTableModel):
             elif col == 4:
                 return self.format_value(attr)
         elif role == Qt.ToolTipRole:
-            if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
+            if attr.form in ('DW_FORM_ref', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return "Double-click to follow"
             elif attr.form in ('DW_FORM_ref_sig8', 'DW_FORM_ref_sup4', 'DW_FORM_ref_sup8'):
                 return "Unsupported reference format"
         elif role == Qt.ForegroundRole:
-            if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
+            if attr.form in ('DW_FORM_ref', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return _blue_brush
 
     # Data for the metadata lines - ones that are not attributes
@@ -178,7 +180,7 @@ class DIETableModel(QAbstractTableModel):
             elif 0x70 <= op <= 0x8f and op - 0x70 < len(self.regnamelist) and len(args) > 0: # breg0...breg31(offset)
                 op_name = self.decode_breg(op - 0x70, args[0])
                 args = False
-            elif op == 0x90 and len(args) > 0 and args[0] >= 0 and args[0] < len(self.regnamelist): # regx(regno)
+            elif (op == 0x90 or (self.die.cu['version'] == 1 and op == 0x1)) and len(args) > 0 and args[0] >= 0 and args[0] < len(self.regnamelist): # regx(regno)
                 op_name = self.regnamelist[args[0]]
                 args = False
             elif op == 0x92 and len(args) > 1 and args[0] >= 0 and args[0] < len(self.regnamelist): # bregx(regno, offset)
@@ -198,7 +200,7 @@ class DIETableModel(QAbstractTableModel):
     # Format: op arg, arg...
     def dump_expr(self, expr):
         if self.die.cu._exprparser is None:
-            self.die.cu._exprparser = DWARFExprParser(self.die.cu.structs)
+            self.die.cu._exprparser = DWARFExprParser(self.die.cu.structs) if self.die.cu['version'] > 1 else DWARFExprParserV1(self.die.cu.structs)
 
         # Challenge: for nested expressions, args is a list with a list of commands
         # For those, the format is: op {op arg, arg; op arg, arg}
@@ -214,7 +216,7 @@ class DIETableModel(QAbstractTableModel):
             return hex(val)
         elif form == 'DW_FORM_flag_present':
             return ''
-        elif form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
+        elif form in ('DW_FORM_ref0', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
             return "Ref: 0x%x" % val # There are several other reference forms in the spec
         elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
             ll = self.parse_location(attr)
@@ -385,19 +387,11 @@ class DIETableModel(QAbstractTableModel):
         attr = self.attributes[self.keys[index.row() - self.meta_count]]
         if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
             return (self.die.cu, attr.value + self.die.cu.cu_offset)
-        elif attr.form == 'DW_FORM_ref_addr':
-            prev_cu = None
-            for cu in self.die.dwarfinfo._CUs: # Don't reparse CUs, reuse cached ones
-                if prev_cu is None:
-                    prev_cu = cu
-                elif cu.cu_offset > attr.value:
-                    return (prev_cu, attr.value)
-                else:
-                    prev_cu = cu
-            if cu.cu_offset < attr.value:
-                return (cu, attr.value)
-        return None
-
+        elif attr.form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
+            i = bisect_right(self.die.cu.dwarfinfo._CU_offsets, attr.value) - 1
+            # Any chance for "not found"?
+            cu = self.die.cu.dwarfinfo._CU_dict[i]
+            return (cu, attr.value)
 
 class GenericTableModel(QAbstractTableModel):
     def __init__(self, headers, values):

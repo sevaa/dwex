@@ -94,6 +94,10 @@ class TheWindow(QMainWindow):
             di._CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
             if not len(di._CUs):
                 return None # Weird, but saw it once - debug sections present, but no CUs
+            # For quick CU search by offset within the info section, regardless of sorting
+            di._CU_offsets = [cu.cu_offset for cu in di._CUs]
+            di._CU_dict = {cu._i: cu for cu in di._CUs}
+
             if self.sortcus:
                 di._CUs.sort(key = cu_sort_key)
                 for (i, cu) in enumerate(di._CUs):
@@ -449,8 +453,13 @@ class TheWindow(QMainWindow):
 
     def on_cuproperties(self):
         cu = self.the_tree.currentIndex().internalPointer().cu
-        props = (cu['version'], cu['unit_length'], cu['debug_abbrev_offset'], cu['address_size'])
-        s = "DWARF version:\t%d\nLength:\t%d\nAbbrev table offset: 0x%x\nAddress size:\t%d" % props
+        ver = cu['version']
+        if ver > 1:
+            props = (ver, cu['unit_length'], cu['debug_abbrev_offset'], cu['address_size'])
+            s = "DWARF version:\t%d\nLength:\t%d\nAbbrev table offset: 0x%x\nAddress size:\t%d" % props
+        else:
+            props = (ver, cu['address_size'])
+            s = "DWARF version:\t%d\nAddress size:\t%d" % props
         t = "CU at 0x%x" % cu.cu_offset
         QMessageBox(QMessageBox.Icon.Information, t, s, QMessageBox.Ok, self).show()
 

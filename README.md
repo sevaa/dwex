@@ -13,7 +13,7 @@ The utility might be of use for anyone who is building DWARF parsers for one or 
 
 Note that regular Windows executables (EXE/DLL files) are PE files but don't, as a rule, contain DWARF information. The Microsoft toolchains (Visual Studio and the like) produce debugging information in Microsoft's own format, Program Database (PDB). There are, though, a couple of toolchains that produce PE files with DWARF debug info in them - notably GCC under Cygwin. DWARF Explorer is compatible with those.
 
-DWARF Explorer supports DWARF versions 2-4, like the pyelftools library it's based on. DWARF v5 exists, and will be eventually supported, but it's not mainstream yet.
+The pyelftools library that dwex is based on supports DWARF versions 2-4, and so does dwex. DWARF v5 exists, and will be eventually supported, but it's not mainstream yet. DWARF v1 is supported experimentally, in ELF files only.
 
 Requirements and Dependencies
 ------------
