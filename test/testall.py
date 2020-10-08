@@ -24,7 +24,7 @@ def test_dwarfinfo(di):
 
                 if not m:
                     # With prefix, with low level data, decimal
-                    m = DIETableModel(die, True, True, False) 
+                    m = DIETableModel(die, True, True, False, True) 
                 else:
                     m.display_DIE(die)
 
