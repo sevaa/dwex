@@ -3,14 +3,14 @@
 from io import BytesIO
 from collections import OrderedDict, namedtuple
 from bisect import bisect_left
-from .dwex_elftools.dwarf.dwarfinfo import DwarfConfig, DebugSectionDescriptor
-from .dwex_elftools.dwarf.die import AttributeValue
-from .dwex_elftools.dwarf.structs import DWARFStructs
-from .dwex_elftools.common.utils import struct_parse, bytelist2string
-from .dwex_elftools.dwarf.enums import ENUM_DW_TAG, ENUM_DW_AT, ENUM_DW_FORM
-from .dwex_elftools.construct import CString
-from .dwex_elftools.dwarf.lineprogram import LineProgramEntry, LineState
-from .dwex_elftools.dwarf.dwarf_expr import DWARFExprOp
+from elftools.dwarf.dwarfinfo import DwarfConfig, DebugSectionDescriptor
+from elftools.dwarf.die import AttributeValue
+from elftools.dwarf.structs import DWARFStructs
+from elftools.common.utils import struct_parse, bytelist2string
+from elftools.dwarf.enums import ENUM_DW_TAG, ENUM_DW_AT, ENUM_DW_FORM
+from elftools.construct import CString
+from elftools.dwarf.lineprogram import LineProgramEntry, LineState
+from elftools.dwarf.dwarf_expr import DWARFExprOp
 
 LineTableHeader = namedtuple('LineTableHeader', 'file_entry')
 

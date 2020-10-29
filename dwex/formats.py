@@ -1,6 +1,6 @@
 import io, struct
 from os import path
-from .dwex_elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
+from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
 
@@ -138,7 +138,7 @@ def read_dwarf(filename, resolve_arch):
             if signature[0:2] == b'MZ': # DOS header - this might be a PE. Don't verify the PE header, just feed it to the parser
                 return read_pe(filename)
             elif signature == b'\x7FELF': #It's an ELF
-                from .dwex_elftools.elf.elffile import ELFFile
+                from elftools.elf.elffile import ELFFile
                 file.seek(0)
                 elffile = ELFFile(file)
                 file = None # Keep the file open

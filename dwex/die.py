@@ -1,10 +1,10 @@
 from bisect import bisect_right
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
 from PyQt5.QtGui import QBrush
-from .dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
-from .dwex_elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
+from elftools.dwarf.locationlists import LocationParser, LocationExpr
+from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
+from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
 from .dwarfone import DWARFExprParserV1
-from .dwex_elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
 
 _REG_NAMES_ARM = [
     'r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7',
@@ -31,7 +31,7 @@ _REG_NAMES_MIPS = [
 
 # The key here is the machine_arch value in the DWARFConfig struct.
 # Machine arch values are generated differently for ELF, MachO and PE
-# For ELF, see the values in the architecture dict in get_machine_arch() under dwex_elftools.elf.elffile
+# For ELF, see the values in the architecture dict in get_machine_arch() under elftools.elf.elffile
 # For PE, see IMAGE_FILE_MACHINE in filebytes.pe
 # For MachO, see make_macho_arch_name() in formats.py
 

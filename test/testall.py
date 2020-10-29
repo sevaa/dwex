@@ -1,7 +1,7 @@
 import os, sys
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
 sys.path.insert(1, os.getcwd()) # To make sure dwex resolves to local path
-from dwex.dwex_elftools.dwarf.locationlists import LocationParser, LocationExpr
+from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from dwex.formats import read_dwarf
 from dwex.die import DIETableModel
 from dwex.tree import strip_path

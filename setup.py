@@ -40,18 +40,11 @@ except:
 
 setup(
     name='dwex',
-    version='0.70',
-    packages=['dwex',
-        'dwex.dwex_elftools',
-        'dwex.dwex_elftools.elf',
-        'dwex.dwex_elftools.common',
-        'dwex.dwex_elftools.dwarf',
-        'dwex.dwex_elftools.construct',
-        'dwex.dwex_elftools.construct.lib'],
+    version='1.0',  # Sync with version in __main__
+    packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
     cmdclass={'install': my_install},
-    
     keywords = ['dwarf', 'debug', 'debugging', 'symbols', 'viewer', 'view', 'browser', 'browse', 'tree'],
     license="BSD",
     author="Seva Alekseyev",
@@ -61,10 +54,10 @@ setup(
     long_description_content_type="text/markdown",
     python_requires=">=3.5",
     setup_requires=[],
-    install_requires=['PyQt5', 'filebytes>=0.10.1'],
+    install_requires=['PyQt5', 'filebytes>=0.10.1', 'pyelftools>=0.27'],
     platforms='any',
     classifiers=[
-        "Development Status :: 4 - Beta",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
@@ -76,6 +69,7 @@ setup(
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: Implementation :: CPython",
         "Topic :: Software Development :: Debuggers"
     ]
