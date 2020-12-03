@@ -20,20 +20,20 @@ Requirements and Dependencies
  - Python 3.5+
  - PyQt5
  - filebytes 0.10.1+
+ - pyelftools 0.27+
 
 Installlation
 -------------
 
-Run `pip install dwex` from the command line, under `sudo` or elevated command line if necessary.
+If necessary, install [the latest Python](https://www.python.org/downloads/) in the way that's appropriate for your OS. Run `pip install dwex` from the command line, under `sudo` or elevated command line if necessary.
 
-On Windows, if `pip` and/or Python is not in PATH, use `c:\Python38\python -m pip install dwex`, substituting your own path to Python 3.
+On Windows, if `pip` and/or Python is not in PATH, use `c:\Python39\python -m pip install dwex`, substituting your own path to Python 3.
 
-Alternatively, get the dwex source tree from Github, and run `python setup.py install` in the root folder of the package. In this scenario, you'd have to install PyQt5 and `filebytes` separately - with `pip install pyqt5 filebytes`.
+Alternatively, get the dwex source tree from Github, and run `python setup.py install` in the root folder of the package. In this scenario, you'd have to install the dependencies separately - with `pip install pyqt5 filebytes pyelftools`.
 
 On Linux, sometimes the `python` command defaults to Python 2 while Python 3 is installed side by side. In this case, use `python3` and `pip3`, respectively. Use `python -V` to check.
 
-Once you install it, there will be a `dwex` command. On Windows, there will be a `dwex.exe` in
-the `Scripts` folder under the Python folder, and also a start menu item "DWARF Explorer".
+Once you install it, there will be a `dwex` command. On Windows, there will be a `dwex.exe` in the `Scripts` folder under the Python folder, and also a start menu item "DWARF Explorer".
 
 Usage
 -----
