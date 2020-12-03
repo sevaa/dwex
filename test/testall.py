@@ -14,8 +14,9 @@ def test_dwarfinfo(di):
 
     m = False
     dummy_index = QModelIndex()
-    for CU in di._CUs:
-        print("%s" % strip_path(CU.get_top_DIE().attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')))
+    for (i, CU) in enumerate(di._CUs):
+        top_die = CU.get_top_DIE()
+        print("%s" % strip_path(top_die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')) if 'DW_AT_name' in top_die.attributes else "(no name)")
         CU._lineprogram = None
         CU._exprparser = None
         for die in CU.iter_DIEs():

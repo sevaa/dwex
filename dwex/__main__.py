@@ -91,12 +91,12 @@ class TheWindow(QMainWindow):
                 cu._lineprogram = None
                 cu._exprparser = None
                 return cu
-            di._CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
-            if not len(di._CUs):
+            di._unsorted_CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
+            if not len(di._unsorted_CUs):
                 return None # Weird, but saw it once - debug sections present, but no CUs
             # For quick CU search by offset within the info section, regardless of sorting
-            di._CU_offsets = [cu.cu_offset for cu in di._CUs]
-            di._CU_dict = {cu._i: cu for cu in di._CUs}
+            di._CU_offsets = [cu.cu_offset for cu in di._unsorted_CUs]
+            di._CUs = list(di._unsorted_CUs)
 
             if self.sortcus:
                 di._CUs.sort(key = cu_sort_key)

@@ -158,12 +158,12 @@ def read_dwarf(filename, resolve_arch):
     elif path.isdir(filename):
         # Is it a dSYM bundle?
         nameparts = path.basename(filename).split('.') # Typical bundle name: appname.app.dSYM
-        if len(nameparts) > 2 and nameparts[-2] == 'app' and nameparts[-1] == 'dSYM':
+        if len(nameparts) > 2 and nameparts[-2] in ('app', 'framework') and nameparts[-1] == 'dSYM':
             dsym_file = path.join(filename, 'Contents', 'Resources', 'DWARF', nameparts[0])
             if path.exists(dsym_file):
                 return read_macho(dsym_file, resolve_arch, filename)
         # Is it an app bundle? appname.app
-        if len(nameparts) > 1 and nameparts[-1] == 'app':
+        if len(nameparts) > 1 and nameparts[-1] in ('app', 'framework'):
             app_file = path.join(filename, nameparts[0])
             if path.exists(app_file):
                 return read_macho(app_file, resolve_arch, filename)

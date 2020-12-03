@@ -262,7 +262,7 @@ class DIETableModel(QAbstractTableModel):
         val = attr.raw_value
         if isinstance(val, int):
             return hex(val) if self.hex else str(val)
-        elif isinstance(val, bytes) or (isinstance(val, list) and isinstance(val[0], int)):
+        elif isinstance(val, bytes) or (isinstance(val, list) and len(val) > 0 and isinstance(val[0], int)):
             return ' '.join("%02x" % b for b in val) if len(val) > 0 else '[]'
         else:
             return str(val)
@@ -390,7 +390,7 @@ class DIETableModel(QAbstractTableModel):
         elif attr.form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
             i = bisect_right(self.die.cu.dwarfinfo._CU_offsets, attr.value) - 1
             # Any chance for "not found"?
-            cu = self.die.cu.dwarfinfo._CU_dict[i]
+            cu = self.die.cu.dwarfinfo._unsorted_CUs[i]
             return (cu, attr.value)
 
 class GenericTableModel(QAbstractTableModel):

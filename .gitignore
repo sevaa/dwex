@@ -1,5 +1,5 @@
 /test/testlocal.py
-/samples
+/samples*
 __pycache__
 .vscode
 /dwex.egg-info

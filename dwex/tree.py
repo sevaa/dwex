@@ -13,8 +13,16 @@ def strip_path(filename):
     return filename[p+1:] if p >= 0 else filename
 
 def top_die_file_name(die):
-    source_name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
-    return strip_path(source_name)
+    if 'DW_AT_name' in die.attributes:
+        source_name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
+        return strip_path(source_name)
+    elif 'DW_AT_decl_file' in die.attributes:
+        val = die.attributes['DW_AT_decl_file'].value
+        if val > 0:
+            if die.cu._lineprogram is None:
+                die.cu._lineprogram = die.dwarfinfo.line_program_for_CU(self.die.cu)
+            return strip_path(die.cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore'))
+    return "(no name)"
 
 def cu_sort_key(cu):
     return top_die_file_name(cu.get_top_DIE()).lower()
