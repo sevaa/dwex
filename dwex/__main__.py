@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (1, 0)
+version = (1, 10)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -315,7 +315,12 @@ class TheWindow(QMainWindow):
     # Exception means false
     def eval_user_condition(self, cond, die):
         try:
-            return eval(cond, {'die' : die})
+            def has_attribute(func):
+                for k in die.attributes:
+                    if func(k, die.attributes[k].value, die.attributes[k].form):
+                        return True
+
+            return eval(cond, {'die' : die, 'has_attribute' : has_attribute})
         except Exception as exc:
             print("Error in user condition: %s" % format(exc))
             return False

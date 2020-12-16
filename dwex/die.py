@@ -1,10 +1,12 @@
 from bisect import bisect_right
 from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
-from PyQt5.QtGui import QBrush
+from PyQt5.QtGui import QBrush, QFont
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
 from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
 from .dwarfone import DWARFExprParserV1
+
+MAX_INLINE_BYTEARRAY_LEN = 32
 
 _REG_NAMES_ARM = [
     'r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7',
@@ -58,6 +60,7 @@ _REG_NAME_MAP = dict(
 
 _blue_brush = QBrush(Qt.GlobalColor.blue)
 _ltgrey_brush = QBrush(Qt.GlobalColor.lightGray)
+_fixed_font = None
 
 _ll_headers = ("Attribute", "Offset", "Form", "Raw", "Value")
 _noll_headers = ("Attribute", "Form", "Value")
@@ -73,6 +76,13 @@ def get_cu_base(die):
     # TODO: ranges?
     else:
         raise ValueError("Can't find the base address for the location list")
+
+def is_int_list(val):
+    return isinstance(val, list) and len(val) > 0 and isinstance(val[0], int)
+
+def is_long_blob(attr):
+    val = attr.value
+    return ((isinstance(val, bytes) and attr.form not in ('DW_FORM_strp', 'DW_FORM_string')) or is_int_list(val)) and len(val) > MAX_INLINE_BYTEARRAY_LEN
 
 class DIETableModel(QAbstractTableModel):
     def __init__(self, die, prefix, lowlevel, hex, regnames):
@@ -131,9 +141,14 @@ class DIETableModel(QAbstractTableModel):
                 return "Double-click to follow"
             elif attr.form in ('DW_FORM_ref_sig8', 'DW_FORM_ref_sup4', 'DW_FORM_ref_sup8'):
                 return "Unsupported reference format"
+            elif is_long_blob(attr):
+                return "Click to see it all"
         elif role == Qt.ForegroundRole:
             if attr.form in ('DW_FORM_ref', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return _blue_brush
+        elif role == Qt.BackgroundRole:
+            if self.lowlevel and index.column() == 3 and attr.raw_value == attr.value:
+                return _ltgrey_brush                
 
     # Data for the metadata lines - ones that are not attributes
     def meta_data(self, index, role):
@@ -243,13 +258,18 @@ class DIETableModel(QAbstractTableModel):
                 return val.decode('utf-8', errors='ignore')
             elif val == b'': # What's a good value for a blank blob?
                 return '[]'
+            elif len(val) > MAX_INLINE_BYTEARRAY_LEN:
+                return ' '.join("%02x" % b for b in val[0:MAX_INLINE_BYTEARRAY_LEN]) + ("...(%s bytes)" % (('0x%x' if self.hex else '%d') % len(val)))
             else:
                 return ' '.join("%02x" % b for b in val) # Something like "01 ff 33 55"
         elif isinstance(val, list): # block1 comes across as this
             if val == []:
                 return '[]'
             elif isinstance(val[0], int): # Assuming it's a byte array diguised as int array
-                return ' '.join("%02x" % b for b in val)
+                if len(val) > MAX_INLINE_BYTEARRAY_LEN:
+                    return ' '.join("%02x" % b for b in val[0:MAX_INLINE_BYTEARRAY_LEN]) + ("...(%s bytes)" % (('0x%x' if self.hex else '%d') % len(val)))
+                else:
+                    return ' '.join("%02x" % b for b in val)
             else: # List of something else
                 return str(val)
         else:
@@ -260,7 +280,9 @@ class DIETableModel(QAbstractTableModel):
 
     def format_raw(self, attr):
         val = attr.raw_value
-        if isinstance(val, int):
+        if val == attr.value:
+            return "(same)"
+        elif isinstance(val, int):
             return hex(val) if self.hex else str(val)
         elif isinstance(val, bytes) or (isinstance(val, list) and len(val) > 0 and isinstance(val[0], int)):
             return ' '.join("%02x" % b for b in val) if len(val) > 0 else '[]'
@@ -380,6 +402,13 @@ class DIETableModel(QAbstractTableModel):
                 # TODO: low level flavor with extra details
                 # TODO: commands vs states
                 return GenericTableModel(('Address', 'File', 'Line', 'Stmt', 'Basic block', 'End seq', 'End prologue', 'Begin epilogue'), states)
+            elif is_long_blob(attr):
+                val = attr.value
+                def format_line(off):
+                    offs = ("0x%x" if self.hex else "%d") % off
+                    return (offs, ' '.join("%02x" % b for b in val[off:off+MAX_INLINE_BYTEARRAY_LEN]))
+                lines = [format_line(off) for off in range(0, len(val), MAX_INLINE_BYTEARRAY_LEN)]
+                return FixedWidthTableModel(('Offset (%s)' % ('hex' if self.hex else 'dec'), 'Bytes'), lines)
         return None
 
     # Returns (cu, die_offset) or None if not a navigable
@@ -412,6 +441,21 @@ class GenericTableModel(QAbstractTableModel):
     def data(self, index, role):
         if role == Qt.DisplayRole:
             return self.values[index.row()][index.column()]
+
+class FixedWidthTableModel(GenericTableModel):
+    def __init__(self, headers, values):
+        GenericTableModel.__init__(self, headers, values)
+
+    def data(self, index, role):
+        if role == Qt.FontRole:
+            global _fixed_font
+            if not _fixed_font:
+                _fixed_font = QFont("Monospace")
+                _fixed_font.setStyleHint(QFont.TypeWriter)
+            return _fixed_font
+        else:
+            return GenericTableModel.data(self, index, role)
+
 
 # Find helper:
 # Returns true if the specified IP is in [low_pc, high_pc)
