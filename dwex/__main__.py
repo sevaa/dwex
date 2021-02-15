@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (1, 10)
+version = (1, 11)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -335,7 +335,7 @@ class TheWindow(QMainWindow):
             self.on_findnext()
 
     def on_findip(self):
-        r = QInputDialog.getText(self, 'Find code address', 'Offset (hex):')
+        r = QInputDialog.getText(self, "Find code address", "Offset (hex), assuming the module is loaded at its preferred address:")
         if r[1] and r[0]:
             try:
                 ip = int(r[0], 16)

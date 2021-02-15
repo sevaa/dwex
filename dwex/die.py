@@ -247,7 +247,7 @@ class DIETableModel(QAbstractTableModel):
             return "%d %s" % (val, _DESCR_DW_ACCESS[val]) if val in _DESCR_DW_ACCESS else val
         elif key == 'DW_AT_inline':
             return "%d %s" % (val, _DESCR_DW_INL[val]) if val in _DESCR_DW_INL else val
-        elif key == 'DW_AT_decl_file':
+        elif key in ('DW_AT_decl_file', 'DW_AT_call_file'):
             if self.die.cu._lineprogram is None:
                 self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
             return "%d: %s" % (val, self.die.cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore')) if val > 0 else "0: (N/A)"
@@ -374,15 +374,27 @@ class DIETableModel(QAbstractTableModel):
                     return GenericTableModel(("Command",), ((cmd,) for cmd in self.dump_expr(ll.loc_expr)))
                 else:
                     cu_base = get_cu_base(self.die)
+                    values = list()
                     if self.lowlevel:
                         headers = ("Start offset", "End offset", "Expr bytes", "Expression")
-                        values = ((hex(cu_base + l.begin_offset),
-                            hex(cu_base + l.end_offset),
-                            ' '.join("%02x" % b for b in l.loc_expr),
-                            '; '.join(self.dump_expr(l.loc_expr))) for l in ll)
+                        for l in ll:
+                            if 'base_address' in l._fields:
+                                cu_base = l.base_address
+                                values.append(("(base)", hex(cu_base), '', ''))
+                            else:
+                                values.append((hex(cu_base + l.begin_offset),
+                                    hex(cu_base + l.end_offset),
+                                    ' '.join("%02x" % b for b in l.loc_expr),
+                                    '; '.join(self.dump_expr(l.loc_expr))))
                     else:
                         headers = ("Start offset", "End offset", "Expression")
-                        values = ((hex(cu_base + l.begin_offset), hex(cu_base + l.end_offset), '; '.join(self.dump_expr(l.loc_expr))) for l in ll)
+                        for l in ll:
+                            if 'base_address' in l._fields:
+                                cu_base = l.base_address
+                            else:
+                                values.append((hex(cu_base + l.begin_offset),
+                                    hex(cu_base + l.end_offset),
+                                    '; '.join(self.dump_expr(l.loc_expr))))                        
                     return GenericTableModel(headers, values)
             elif key == 'DW_AT_stmt_list':
                 if self.die.cu._lineprogram is None:
