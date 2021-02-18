@@ -347,7 +347,7 @@ class DIETableModel(QAbstractTableModel):
             self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
 
     # Returns a table model for the attribute details table
-    # For attributes that refer to larger data structures (ranges, locations), makes sense spell it out into a table
+    # For attributes that refer to larger data structures (ranges, locations), makes sense to spell it out into a table
     # Row is metadata unaware
     def get_attribute_details(self, index):
         row = index.row()

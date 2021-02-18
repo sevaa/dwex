@@ -22,7 +22,7 @@ Requirements and Dependencies
  - filebytes 0.10.1+
  - pyelftools 0.27+
 
-Installlation
+Installation
 -------------
 
 If necessary, install [the latest Python](https://www.python.org/downloads/) in the way that's appropriate for your OS. Run `pip install dwex` from the command line, under `sudo` or elevated command line if necessary.

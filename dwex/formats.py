@@ -3,6 +3,7 @@ from os import path
 from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
+# Format codes: 0 = ELF, 1 = MACHO, 2 = PE
 
 def read_pe(filename):
     from filebytes.pe import PE, IMAGE_FILE_MACHINE
@@ -25,7 +26,7 @@ def read_pe(filename):
 
     machine = pefile.imageNtHeaders.header.FileHeader.Machine
     is64 = machine in (IMAGE_FILE_MACHINE.AMD64, IMAGE_FILE_MACHINE.ARM64, IMAGE_FILE_MACHINE.IA64) # There are also some exotic architectures...
-    return DWARFInfo(
+    di = DWARFInfo(
         config = DwarfConfig(
             little_endian = True,
             default_address_size = 8 if is64 else 4,
@@ -43,6 +44,8 @@ def read_pe(filename):
         debug_pubtypes_sec = data.get('.debug_pubtypes'),
         debug_pubnames_sec = data.get('.debug_pubnames'),
     )
+    di._format = 2
+    return di
 
 # Arch + flavor where flavor matters
 def make_macho_arch_name(macho):
@@ -119,7 +122,10 @@ def read_macho(filename, resolve_arch, friendly_filename):
         debug_pubtypes_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubn?
         debug_pubnames_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubt?
     )
+    di._format = 1
     di._fat_arch = fat_arch
+    text_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == "__TEXT"), False)
+    di._start_address = text_cmd.header.vmaddr if text_cmd else 0
     return di
 
 # UI agnostic - resolve_arch might be interactive
@@ -143,10 +149,14 @@ def read_dwarf(filename, resolve_arch):
                 elffile = ELFFile(file)
                 file = None # Keep the file open
                 if elffile.has_dwarf_info():
-                    return elffile.get_dwarf_info()
+                    di = elffile.get_dwarf_info()
+                    di._format = 0
+                    return di
                 elif elffile.get_section_by_name(".debug"):
                     from .dwarfone import parse_dwarf1
-                    return parse_dwarf1(elffile)
+                    di = parse_dwarf1(elffile)
+                    di._format = 0
+                    return di
                 else:
                     return None
             elif struct.unpack('>I', signature)[0] in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe):
