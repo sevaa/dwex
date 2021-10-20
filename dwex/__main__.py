@@ -542,7 +542,7 @@ class TheApp(QApplication):
         self.exec_()
 
 def main():     
-    if sys.settrace is None: # Lame way to detect a debugger
+    if not sys.gettrace(): # Lame way to detect a debugger
         on_exception.prev_exchook = sys.excepthook
         sys.excepthook = on_exception
 

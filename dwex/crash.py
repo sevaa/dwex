@@ -43,7 +43,7 @@ def make_exc_report(exc, tb, version):
 def report_crash(exc, tb, version):
     try:
         submit_report('[crash][python][dwex][pyexception]', make_exc_report(exc, tb, version))
-    except Exception as nexc:
+    except Exception:
         pass
 
 if __name__ == "__main__":
