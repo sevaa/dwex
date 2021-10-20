@@ -45,6 +45,7 @@ def read_pe(filename):
         debug_pubnames_sec = data.get('.debug_pubnames'),
     )
     di._format = 2
+    di._start_address = None
     return di
 
 # Arch + flavor where flavor matters
@@ -151,11 +152,13 @@ def read_dwarf(filename, resolve_arch):
                 if elffile.has_dwarf_info():
                     di = elffile.get_dwarf_info()
                     di._format = 0
+                    di._start_address = None
                     return di
                 elif elffile.get_section_by_name(".debug"):
                     from .dwarfone import parse_dwarf1
                     di = parse_dwarf1(elffile)
                     di._format = 0
+                    di._start_address = None
                     return di
                 else:
                     return None
