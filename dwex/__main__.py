@@ -431,7 +431,8 @@ class TheWindow(QMainWindow):
         if self.tree_model:
             sel = self.the_tree.currentIndex()
             sel = self.tree_model.set_sortcus(checked, sel) # This will reload the tree
-            self.the_tree.setCurrentIndex(sel)
+            if sel:
+                self.the_tree.setCurrentIndex(sel)
 
     def on_sortdies(self, checked):
         self.sortdies = checked
@@ -446,7 +447,8 @@ class TheWindow(QMainWindow):
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
-            self.the_tree.setCurrentIndex(sel)
+            if sel:
+                self.the_tree.setCurrentIndex(sel)
 
     def on_highlight_code(self):
         self.highlightcode_menuitem.setChecked(True)

@@ -141,10 +141,10 @@ class DWARFTreeModel(QAbstractItemModel):
                 self.createIndex(0, 0, self.top_dies[0]),
                 self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]))    
 
-    # returns the model index of the selection
+    # returns the model index of the selection, or None
     def set_sortcus(self, sortcus, sel):
         if sortcus != self.sortcus:
-            sel_die = sel.internalPointer()
+            sel_die = sel.internalPointer() if sel.isValid() else None
             self.beginResetModel()
             self.sortcus = sortcus
             #Resort the CUs, reload the top_dies
@@ -157,11 +157,13 @@ class DWARFTreeModel(QAbstractItemModel):
                 self.top_dies[i]._i = i
             # Reload
             self.endResetModel()
-            if sel_die.get_parent(): # Not a top level
-                return sel
-            else:
-                return self.createIndex(0, sel_die._i, sel_die)
+            if sel_die:
+                if sel_die.get_parent(): # Not a top level
+                    return sel
+                else:
+                    return self.createIndex(0, sel_die._i, sel_die)
 
+    # Returns the index of the new selection, if any
     def set_sortdies(self, sortdies):
         if sortdies != self.sortdies:
             self.sortdies = sortdies
