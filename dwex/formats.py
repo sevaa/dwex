@@ -45,7 +45,7 @@ def read_pe(filename):
         debug_pubnames_sec = data.get('.debug_pubnames'),
     )
     di._format = 2
-    di._start_address = None
+    di._start_address = pefile.imageNtHeaders.header.OptionalHeader.ImageBase
     return di
 
 # Arch + flavor where flavor matters
@@ -149,19 +149,20 @@ def read_dwarf(filename, resolve_arch):
                 file.seek(0)
                 elffile = ELFFile(file)
                 file = None # Keep the file open
+                # Retrieve the preferred loading address
+                load_segment = next(seg for seg in elffile.iter_segments() if seg.header.p_type == 'PT_LOAD')
+                start_address = load_segment.header.p_vaddr
+                di = None
                 if elffile.has_dwarf_info():
                     di = elffile.get_dwarf_info()
-                    di._format = 0
-                    di._start_address = None
-                    return di
                 elif elffile.get_section_by_name(".debug"):
                     from .dwarfone import parse_dwarf1
                     di = parse_dwarf1(elffile)
+
+                if di:
                     di._format = 0
-                    di._start_address = None
-                    return di
-                else:
-                    return None
+                    di._start_address = start_address
+                return di
             elif struct.unpack('>I', signature)[0] in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe):
                 # Mach-O fat binary, or 32/64-bit Mach-O in big/little-endian format
                 return read_macho(filename, resolve_arch, filename)

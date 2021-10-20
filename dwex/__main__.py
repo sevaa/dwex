@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (1, 11)
+version = (1, 20)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -104,6 +104,7 @@ class TheWindow(QMainWindow):
                     cu._i = i
             di._locparser = None # Created on first use
 
+            self.dwarfinfo = di
             self.tree_model = DWARFTreeModel(di, self.prefix, self.sortcus, self.sortdies)
             self.the_tree.setModel(self.tree_model)
             self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
@@ -335,10 +336,14 @@ class TheWindow(QMainWindow):
             self.on_findnext()
 
     def on_findip(self):
-        r = QInputDialog.getText(self, "Find code address", "Offset (hex), assuming the module is loaded at its preferred address:")
+        start_address = hex(self.dwarfinfo._start_address) if not self.dwarfinfo._start_address is None else "its preferred address"
+        r = QInputDialog.getText(self, "Find code address", "Code address (hex), assuming the module is loaded at %s:" % start_address)
         if r[1] and r[0]:
             try:
-                ip = int(r[0], 16)
+                ip = r[0]
+                if r[0].startswith("0x"):
+                    ip = ip[2:]
+                ip = int(ip, 16)
                 self.findcondition = lambda die: ip_in_range(die, ip)
                 self.findcucondition = lambda cu: ip_in_range(cu.get_top_DIE(), ip)
                 self.findnext_menuitem.setEnabled(True)
