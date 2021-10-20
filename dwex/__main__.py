@@ -390,6 +390,7 @@ class TheWindow(QMainWindow):
 
     def on_exit(self):
         self.destroy()
+        QApplication.quit()
 
     # Checkmark toggling is handled by the framework
     def on_view_prefix(self, checked):
