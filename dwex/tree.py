@@ -189,9 +189,10 @@ class DWARFTreeModel(QAbstractItemModel):
     def index_for_navitem(self, navitem):
         target_cu, target_offset = navitem
         # Random access is a tricky proposition in the current version. Parse the whole CU.
-        for die in target_cu.iter_DIEs():
+        for _ in target_cu.iter_DIEs():
             pass
 
+        # Abusing the structure of the per-CU DIE cache of pyelftools, it's the same in DWWARFv1
         i = bisect_left(target_cu._diemap, target_offset)
         target_die = target_cu._dielist[i]
         return self.index_for_die(target_die)
@@ -235,7 +236,7 @@ class DWARFTreeModel(QAbstractItemModel):
             if cu_cond(cu) if cu_cond else True:
                 for die in cu.iter_DIEs():
                     # Quit condition with search from position - quit once we go past the starting position after the wrap
-                    if cu_offset >= start_cu_offset and die.offset > start_die_offset and wrapped:
+                    if have_start_pos and cu_offset >= start_cu_offset and die.offset > start_die_offset and wrapped:
                         break
                     if (not have_start_pos or cu_offset != start_cu_offset or (not wrapped and die.offset > start_die_offset)) and cond(die):
                         return self.index_for_die(die)

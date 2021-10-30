@@ -90,6 +90,9 @@ class DIEV1(object):
     def iter_children(self):
         return self.cu.iter_children(self)
 
+    def sibling(self):
+        return self.attributes['DW_AT_sibling'].value
+
 class CompileUnitV1(object):
     def __init__(self, di, top_die):
         self.dwarfinfo = di
@@ -102,38 +105,51 @@ class CompileUnitV1(object):
         return self._dielist[0]
 
     def __getitem__(self, name):
-        return self.header[name]        
+        return self.header[name]       
 
+    # Caches
+    def DIE_at_offset(self, offset):
+        i = bisect_left(self._diemap, offset)
+        if i < len(self._diemap) and offset == self._diemap[i]:
+            die = self._dielist[i]
+        else:
+            die = self.dwarfinfo.DIE_at_offset(offset, self)
+            self._dielist.insert(i, die)
+            self._diemap.insert(i, offset)
+        return die
+
+    # pyelftools' iter_DIEs sets parent on discovered DIEs, we should too
     def iter_DIEs(self):
         offset = self.cu_offset
+        parent = None
+        parent_stack = list()
         end_offset = self.get_top_DIE().attributes['DW_AT_sibling'].value
         while offset < end_offset:
-            i = bisect_left(self._diemap, offset)
-            if i < len(self._diemap) and offset == self._diemap[i]:
-                die = self._dielist[i]
-            else:
-                die = self.dwarfinfo.DIE_at_offset(offset, self)
-                self._dielist.insert(i, die)
-                self._diemap.insert(i, offset)
-            yield die
-            offset += die.size
+            die = self.DIE_at_offset(offset)
+
+            if die._parent is None:
+                die._parent = parent
+
+            if not die.is_null():
+                yield die
+                offset += die.size
+                if offset != die.sibling(): # Start of a subtree
+                    parent_stack.append(parent)
+                    parent = die
+            else: # padding - end of a sibling chain
+                parent = parent_stack.pop()
+                offset += die.size
 
     def iter_children(self, parent_die):
         offset = parent_die.offset + parent_die.size
         while offset < self.dwarfinfo.section_size:
-            i = bisect_left(self._diemap, offset)
-            if i < len(self._diemap) and offset == self._diemap[i]:
-                die = self._dielist[i]
-            else:
-                die = self.dwarfinfo.DIE_at_offset(offset, self)
-                self._dielist.insert(i, die)
-                self._diemap.insert(i, offset)
+            die = self.DIE_at_offset(offset)
 
             if die._parent is None:
                 die._parent = parent_die
             if not die.is_null():
                 yield die
-                offset = die.attributes['DW_AT_sibling'].value
+                offset = die.sibling()
             else:
                 break        
 
@@ -202,8 +218,8 @@ class DWARFInfoV1(object):
     def __init__(self, elffile):
         section = elffile.get_section_by_name(".debug")
         section_data = section.data()
-        self.section_size = section_size = len(section_data)
-        self.stm = stm = BytesIO()
+        self.section_size = len(section_data)
+        self.stm = BytesIO()
         self.stm.write(section_data)
         self.stm.seek(0, 0)
 
@@ -237,6 +253,7 @@ class DWARFInfoV1(object):
             else:
                 break
 
+    # Does not cache
     def DIE_at_offset(self, offset, cu):
         self.stm.seek(offset, 0)
         return DIEV1(self.stm, cu, self)

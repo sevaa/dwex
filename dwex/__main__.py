@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (1, 20)
+version = (1, 21)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -369,7 +369,7 @@ class TheWindow(QMainWindow):
     ##########################################################################
 
     def on_about(self):
-        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(str(v) for v in version) + "\n\nSeva Alekseyev, 2020\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
+        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(str(v) for v in version) + "\n\nSeva Alekseyev, 2020-2021\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
             QMessageBox.Ok, self).show()
 
     def on_updatecheck(self):
@@ -524,10 +524,13 @@ class TheWindow(QMainWindow):
         QApplication.restoreOverrideCursor()
 
 def on_exception(exctype, exc, tb):
-    from .crash import report_crash
-    report_crash(exc, tb, version)
-    sys.excepthook = on_exception.prev_exchook
-    sys.exit(1)
+    if isinstance(exc, Exception):
+        from .crash import report_crash
+        report_crash(exc, tb, version)
+        sys.excepthook = on_exception.prev_exchook
+        sys.exit(1)
+    elif on_exception.prev_exchook:
+        on_exception.prev_exchook(exctype, exc, tb)
 
 class TheApp(QApplication):
     def __init__(self):

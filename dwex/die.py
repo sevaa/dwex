@@ -250,7 +250,7 @@ class DIETableModel(QAbstractTableModel):
         elif key in ('DW_AT_decl_file', 'DW_AT_call_file'):
             if self.die.cu._lineprogram is None:
                 self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
-            return "%d: %s" % (val, self.die.cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore')) if val > 0 else "0: (N/A)"
+            return "%d: %s" % (val, self.die.cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore')) if val > 0 and val <= len(self.die.cu._lineprogram.header.file_entry) else "0: (N/A)"
         elif key == 'DW_AT_stmt_list':
             return 'LNP at 0x%x' % val
         elif isinstance(val, bytes):
@@ -403,7 +403,7 @@ class DIETableModel(QAbstractTableModel):
                 files = self.die.cu._lineprogram.header.file_entry
                 def format_state(state):
                     return (hex(state.address),
-                        files[state.file-1].name.decode('utf-8', errors='ignore') if state.file > 0 else '(N/A)',
+                        files[state.file-1].name.decode('utf-8', errors='ignore') if state.file > 0 and state.file <= len(files) else '(N/A)',
                         state.line,
                         'Y' if state.is_stmt  else '',
                         'Y' if state.basic_block else '',
