@@ -15,7 +15,7 @@ def submit_report(subj, body):
 		        'id': id,
 		        'hash': h.digest().hex()}
         reqdata = urllib.parse.urlencode(reqdata).encode('utf-8')
-        urlopen('http://www.yarxi.ru/mobile/mail.php', reqdata).info()
+        urlopen('http://yarxi.ru/mobile/mail.php', reqdata).info()
     except Exception as exc:
         pass
 

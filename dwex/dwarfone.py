@@ -15,6 +15,7 @@ from elftools.dwarf.dwarf_expr import DWARFExprOp
 LineTableHeader = namedtuple('LineTableHeader', 'file_entry')
 
 TAG_reverse = dict((v, k) for k, v in ENUM_DW_TAG.items())
+ENUM_DW_AT['DW_AT_virtual'] = 0x30 # Once they fix and publish, remove this
 ATTR_reverse = dict((v, k) for k, v in ENUM_DW_AT.items())
 FORM_reverse = dict((v, k) for k, v in ENUM_DW_FORM.items())
 

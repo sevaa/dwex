@@ -248,9 +248,11 @@ class DIETableModel(QAbstractTableModel):
         elif key == 'DW_AT_inline':
             return "%d %s" % (val, _DESCR_DW_INL[val]) if val in _DESCR_DW_INL else val
         elif key in ('DW_AT_decl_file', 'DW_AT_call_file'):
-            if self.die.cu._lineprogram is None:
-                self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
-            return "%d: %s" % (val, self.die.cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore')) if val > 0 and val <= len(self.die.cu._lineprogram.header.file_entry) else "0: (N/A)"
+            cu = self.die.cu
+            if cu._lineprogram is None:
+                cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(cu)
+            filename = cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore') if cu._lineprogram and val > 0 and val <= len(cu._lineprogram.header.file_entry) else '(N/A)'
+            return "%d: %s" % (val,  filename)
         elif key == 'DW_AT_stmt_list':
             return 'LNP at 0x%x' % val
         elif isinstance(val, bytes):
@@ -425,14 +427,23 @@ class DIETableModel(QAbstractTableModel):
 
     # Returns (cu, die_offset) or None if not a navigable
     def ref_target(self, index):
-        attr = self.attributes[self.keys[index.row() - self.meta_count]]
-        if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
-            return (self.die.cu, attr.value + self.die.cu.cu_offset)
-        elif attr.form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
-            i = bisect_right(self.die.cu.dwarfinfo._CU_offsets, attr.value) - 1
-            # Any chance for "not found"?
-            cu = self.die.cu.dwarfinfo._unsorted_CUs[i]
-            return (cu, attr.value)
+        try:  # Any chance for "not found"? Probably bug #1450
+            attr = self.attributes[self.keys[index.row() - self.meta_count]]
+            val = attr.value
+            form = attr.form
+            if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
+                return (self.die.cu, attr.value + self.die.cu.cu_offset)
+            elif attr.form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
+                cualen = len(self.die.cu.dwarfinfo._unsorted_CUs)
+                i = bisect_right(self.die.cu.dwarfinfo._CU_offsets, val) - 1
+                cu = self.die.cu.dwarfinfo._unsorted_CUs[i]
+                return (cu, attr.value)
+        except IndexError as exc:
+            from .__main__ import version
+            from .crash import report_crash
+            tb = exc.__traceback__
+            report_crash(exc, tb, version)
+            return None
 
 class GenericTableModel(QAbstractTableModel):
     def __init__(self, headers, values):
