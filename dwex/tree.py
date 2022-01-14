@@ -116,7 +116,10 @@ class DWARFTreeModel(QAbstractItemModel):
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit': # CU/top die: return file name
                 return top_die_file_name(die)
             else: # Return tag, with name if possible
-                s = die.tag if self.prefix or not str(die.tag).startswith('DW_TAG_') else die.tag[7:]
+                if isinstance(die.tag, int): # Happens with user tags, #1472
+                    s = ('DW_TAG_user_%X' if self.prefix else 'user_%X') % die.tag
+                else:
+                    s = die.tag if self.prefix or not str(die.tag).startswith('DW_TAG_') else die.tag[7:]
                 if 'DW_AT_name' in die.attributes:
                     s += ": " + die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
                 return s
@@ -182,7 +185,7 @@ class DWARFTreeModel(QAbstractItemModel):
     # Specifically, (cu, offset within the info section)
     def get_navitem(self, index):
         die = index.internalPointer()
-        return (die.cu, die.offset)
+        return (die.cu, die.offset) if die else None # Issue # 1473, weird.
 
     # navitem is (CU, offset within the info section)
     # returns an index within the tree

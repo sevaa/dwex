@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (1, 23)
+version = (1, 24)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -231,10 +231,11 @@ class TheWindow(QMainWindow):
     def on_tree_selection(self, index, prev = None):
         if not self.in_tree_nav: # Short out the history population logic for back-forward clicks
             navitem = self.tree_model.get_navitem(index)
-            self.navhistory[0:self.navpos] = [navitem]
-            self.navpos = 0
-            self.back_menuitem.setEnabled(len(self.navhistory) > 1)
-            self.forward_menuitem.setEnabled(False)
+            if navitem: # Weird, should never happen - yet #1473
+                self.navhistory[0:self.navpos] = [navitem]
+                self.navpos = 0
+                self.back_menuitem.setEnabled(len(self.navhistory) > 1)
+                self.forward_menuitem.setEnabled(False)
         self.display_die(index) # Will clear the selection in the attribute table
 
     # Selection changed in the DIE table - either user or program
