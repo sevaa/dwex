@@ -56,7 +56,7 @@ except:
 
 setup(
     name='dwex',
-    version='1.24',  # Sync with version in __main__
+    version='2.0',  # Sync with version in __main__
     packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
@@ -68,9 +68,9 @@ setup(
     description="GUI viewer for DWARF debug information",
     long_description=long_desc,
     long_description_content_type="text/markdown",
-    python_requires=">=3.5",
+    python_requires=">=3.6.1",
     setup_requires=[],
-    install_requires=['PyQt5', 'filebytes>=0.10.1', 'pyelftools>=0.27'],
+    install_requires=['PyQt6', 'filebytes>=0.10.1', 'pyelftools>=0.27'],
     platforms='any',
     classifiers=[
         "Development Status :: 5 - Production/Stable",

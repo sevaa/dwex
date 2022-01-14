@@ -1,14 +1,14 @@
 import sys, os
-from PyQt5.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
-from PyQt5.QtGui import QFontMetrics, QDesktopServices, QWindow
-from PyQt5.QtWidgets import *
+from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
+from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
+from PyQt6.QtWidgets import *
 from .die import DIETableModel, ip_in_range
 from .formats import read_dwarf
 from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (1, 24)
+version = (2, 0)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -146,11 +146,11 @@ class TheWindow(QMainWindow):
             if self.open_file(filename, arch) is None:
                 QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer",
                     "The file contains no DWARF information, or it is in an unsupported format.",
-                    QMessageBox.Ok, self).show()
+                    QMessageBox.StandardButton.Ok, self).show()
         except Exception as exc:
             QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
                 "Error opening the file:\n\n" + format(exc),
-                QMessageBox.Ok, self).show()
+                QMessageBox.StandardButton.Ok, self).show()
 
     # TODO: list the extensions for the open file dialog?
     def on_open(self):
@@ -354,7 +354,7 @@ class TheWindow(QMainWindow):
 
     def on_findbycondition(self):
         dlg = ScriptDlg(self)
-        if dlg.exec() == QDialog.Accepted:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             cond = dlg.cond
             self.findcondition = lambda die: self.eval_user_condition(cond, die)
             self.findcucondition = None
@@ -371,7 +371,7 @@ class TheWindow(QMainWindow):
 
     def on_about(self):
         QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(str(v) for v in version) + "\n\nSeva Alekseyev, 2020-2021\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
-            QMessageBox.Ok, self).show()
+            QMessageBox.StandardButton.Ok, self).show()
 
     def on_updatecheck(self):
         from urllib.request import urlopen
@@ -390,7 +390,7 @@ class TheWindow(QMainWindow):
                         s = "DWARF Explorer v." + max_tag + " is out. Use \"pip install --upgrade dwex\" to update."
                     else: 
                         s = "You have the latest version."
-                    QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", s, QMessageBox.Ok, self).show()
+                    QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", s, QMessageBox.StandardButton.Ok, self).show()
         except:
             self.end_wait()
 
@@ -475,7 +475,7 @@ class TheWindow(QMainWindow):
             props = (ver, cu['address_size'])
             s = "DWARF version:\t%d\nAddress size:\t%d" % props
         t = "CU at 0x%x" % cu.cu_offset
-        QMessageBox(QMessageBox.Icon.Information, t, s, QMessageBox.Ok, self).show()
+        QMessageBox(QMessageBox.Icon.Information, t, s, QMessageBox.StandardButton.Ok, self).show()
 
     def on_copy(self, v):
         cb = QApplication.clipboard()
@@ -485,13 +485,13 @@ class TheWindow(QMainWindow):
     def on_copyvalue(self):
         t = self.details_table if self.details_table.hasFocus() else self.die_table
         m = t.model()
-        self.on_copy(m.data(t.currentIndex(), Qt.DisplayRole))
+        self.on_copy(m.data(t.currentIndex(), Qt.ItemDataRole.DisplayRole))
 
     def on_copyline(self):
         t = self.details_table if self.details_table.hasFocus() else self.die_table
         m = t.model()
         row = t.currentIndex().row()
-        line = "\t".join(m.data(m.index(row, c, QModelIndex()), Qt.DisplayRole)
+        line = "\t".join(m.data(m.index(row, c, QModelIndex()), Qt.ItemDataRole.DisplayRole)
             for c in range(0, m.columnCount(QModelIndex())))
         self.on_copy(line)
 
@@ -499,7 +499,7 @@ class TheWindow(QMainWindow):
         t = self.details_table if self.details_table.hasFocus() else self.die_table
         m = t.model()
         table_text = "\n".join(
-                "\t".join(m.data(m.index(r, c, QModelIndex()), Qt.DisplayRole)
+                "\t".join(m.data(m.index(r, c, QModelIndex()), Qt.ItemDataRole.DisplayRole)
                 for c in range(0, m.columnCount(QModelIndex())))
             for r in range(0, m.rowCount(QModelIndex())))
         self.on_copy(table_text)
@@ -519,7 +519,7 @@ class TheWindow(QMainWindow):
 
     # Doesn't quite work for the delay on tree expansion :(
     def start_wait(self):
-        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 
     def end_wait(self):
         QApplication.restoreOverrideCursor()
@@ -548,7 +548,7 @@ class TheApp(QApplication):
     
     def start(self):
         self.win = TheWindow()
-        self.exec_()
+        self.exec()
 
 def main():     
     if not sys.gettrace(): # Lame way to detect a debugger

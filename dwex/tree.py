@@ -1,7 +1,7 @@
 from bisect import bisect_left
-from PyQt5.QtCore import Qt, QAbstractItemModel, QModelIndex
-from PyQt5.QtGui import QFont, QFontInfo, QBrush
-from PyQt5.QtWidgets import QApplication
+from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex
+from PyQt6.QtGui import QFont, QFontInfo, QBrush
+from PyQt6.QtWidgets import QApplication
 
 # Supports both / and \ - current system separator might not match the system the file came from
 # so os.path.basename won't do
@@ -62,7 +62,7 @@ class DWARFTreeModel(QAbstractItemModel):
         self.top_dies = [decorate_die(CU.get_top_DIE(), i) for (i, CU) in enumerate(di._CUs)]
         self.highlight_condition = None
         fi = QFontInfo(QApplication.font())
-        self.bold_font = QFont(fi.family(), fi.pointSize(), QFont.Bold)
+        self.bold_font = QFont(fi.family(), fi.pointSize(), QFont.Weight.Bold)
         self.blue_brush = QBrush(Qt.GlobalColor.blue)
         self.sortcus = sortcus
         self.sortdies = sortdies
@@ -80,9 +80,9 @@ class DWARFTreeModel(QAbstractItemModel):
         return QModelIndex()
 
     def flags(self, index):
-        f = Qt.ItemIsSelectable | Qt.ItemIsEnabled
+        f = Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
         if index.isValid() and not index.internalPointer().has_children:
-            f = f | Qt.ItemNeverHasChildren
+            f = f | Qt.ItemFlag.ItemNeverHasChildren
         return f
 
     def hasChildren(self, index):
@@ -112,7 +112,7 @@ class DWARFTreeModel(QAbstractItemModel):
 
     def data(self, index, role):
         die = index.internalPointer()
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit': # CU/top die: return file name
                 return top_die_file_name(die)
             else: # Return tag, with name if possible
@@ -123,19 +123,19 @@ class DWARFTreeModel(QAbstractItemModel):
                 if 'DW_AT_name' in die.attributes:
                     s += ": " + die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
                 return s
-        elif role == Qt.ToolTipRole:
+        elif role == Qt.ItemDataRole.ToolTipRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
                 return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
-        elif role == Qt.ForegroundRole and self.highlight_condition and self.highlight_condition(die):
+        elif role == Qt.ItemDataRole.ForegroundRole and self.highlight_condition and self.highlight_condition(die):
             return self.blue_brush
-        elif role == Qt.FontRole and self.highlight_condition and self.highlight_condition(die):
+        elif role == Qt.ItemDataRole.FontRole and self.highlight_condition and self.highlight_condition(die):
             return self.bold_font
 
     # The rest is not Qt callbacks
 
     def highlight(self, condition):
         self.highlight_condition = condition
-        self.dataChanged.emit(self.createIndex(0, 0, self.top_dies[0]), self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]), (Qt.ForegroundRole, Qt.FontRole))
+        self.dataChanged.emit(self.createIndex(0, 0, self.top_dies[0]), self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]), (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.FontRole))
 
     def set_prefix(self, prefix):
         if prefix != self.prefix:

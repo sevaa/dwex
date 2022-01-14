@@ -17,8 +17,8 @@ The pyelftools library that dwex is based on supports DWARF versions 2-4, and so
 
 Requirements and Dependencies
 ------------
- - Python 3.5+
- - PyQt5
+ - Python 3.6.1+
+ - PyQt6
  - filebytes 0.10.1+
  - pyelftools 0.27+
 
@@ -34,6 +34,9 @@ Alternatively, get the dwex source tree from Github, and run `python setup.py in
 On Linux, sometimes the `python` command defaults to Python 2 while Python 3 is installed side by side. In this case, use `python3` and `pip3`, respectively. Use `python -V` to check.
 
 Once you install it, there will be a `dwex` command. On Windows, there will be a `dwex.exe` in the `Scripts` folder under the Python folder, and also a start menu item "DWARF Explorer".
+
+In January 2022, the utility was migrated from PyQt5 to PyQt6, and the major version was bumped to 2. That cut off support for Python 3.5. The 1.x version that is compatible with Python 3.5 is still out in the repository, and pip should resolve it. 
+If it doesn not, install by running `pip install "dwex<2"`.
 
 Usage
 -----

@@ -1,5 +1,5 @@
 import os, sys
-from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
+from PyQt6.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
 sys.path.insert(1, os.getcwd()) # To make sure dwex resolves to local path
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from dwex.formats import read_dwarf
@@ -52,7 +52,7 @@ def test_dwarfinfo(di):
 
                     # Now check the spell out logic
                     for c in range(0, cc):
-                        m.data(m.index(r, c, dummy_index), Qt.DisplayRole)
+                        m.data(m.index(r, c, dummy_index), Qt.ItemDataRole.DisplayRole)
                     details = m.get_attribute_details(m.index(r, 0, dummy_index))
                     if form == 'DW_FORM_section_offset':
                         assert details is not None

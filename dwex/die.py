@@ -1,6 +1,6 @@
 from bisect import bisect_right
-from PyQt5.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
-from PyQt5.QtGui import QBrush, QFont
+from PyQt6.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
+from PyQt6.QtGui import QBrush, QFont
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
 from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
@@ -100,7 +100,7 @@ class DIETableModel(QAbstractTableModel):
         self.regnamelist = _REG_NAME_MAP.get(self.arch)
 
     def headerData(self, section, ori, role):
-        if ori == Qt.Orientation.Horizontal and role == Qt.DisplayRole:
+        if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             return self.headers[section]
 
     def rowCount(self, parent):
@@ -123,7 +123,7 @@ class DIETableModel(QAbstractTableModel):
         row = index.row() - self.meta_count
         key = self.keys[row]
         attr = self.attributes[key]
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             col = index.column()
             if col == 0:
                 # Unknown keys come across as ints
@@ -136,24 +136,24 @@ class DIETableModel(QAbstractTableModel):
                 return self.format_raw(attr) if self.lowlevel else self.format_value(attr)
             elif col == 4:
                 return self.format_value(attr)
-        elif role == Qt.ToolTipRole:
+        elif role == Qt.ItemDataRole.ToolTipRole:
             if attr.form in ('DW_FORM_ref', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return "Double-click to follow"
             elif attr.form in ('DW_FORM_ref_sig8', 'DW_FORM_ref_sup4', 'DW_FORM_ref_sup8'):
                 return "Unsupported reference format"
             elif is_long_blob(attr):
                 return "Click to see it all"
-        elif role == Qt.ForegroundRole:
+        elif role == Qt.ItemDataRole.ForegroundRole:
             if attr.form in ('DW_FORM_ref', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return _blue_brush
-        elif role == Qt.BackgroundRole:
+        elif role == Qt.ItemDataRole.BackgroundRole:
             if self.lowlevel and index.column() == 3 and attr.raw_value == attr.value:
                 return _ltgrey_brush                
 
     # Data for the metadata lines - ones that are not attributes
     def meta_data(self, index, role):
         row = index.row()
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             col = index.column()
             if col == 0:
                 return _meta_desc[row]
@@ -166,7 +166,7 @@ class DIETableModel(QAbstractTableModel):
                     return str(self.die.abbrev_code)                    
                 elif row == 3:
                     return str(self.die.has_children)
-        elif role == Qt.BackgroundRole:
+        elif role == Qt.ItemDataRole.BackgroundRole:
             return _ltgrey_brush
 
     # End of Qt callbacks
@@ -452,7 +452,7 @@ class GenericTableModel(QAbstractTableModel):
         self.values = tuple(values)
 
     def headerData(self, section, ori, role):
-        if ori == Qt.Orientation.Horizontal and role == Qt.DisplayRole:
+        if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             return self.headers[section]
 
     def rowCount(self, parent):
@@ -462,7 +462,7 @@ class GenericTableModel(QAbstractTableModel):
         return len(self.headers)
 
     def data(self, index, role):
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             return self.values[index.row()][index.column()]
 
 class FixedWidthTableModel(GenericTableModel):
@@ -470,11 +470,11 @@ class FixedWidthTableModel(GenericTableModel):
         GenericTableModel.__init__(self, headers, values)
 
     def data(self, index, role):
-        if role == Qt.FontRole:
+        if role == Qt.ItemDataRole.FontRole:
             global _fixed_font
             if not _fixed_font:
                 _fixed_font = QFont("Monospace")
-                _fixed_font.setStyleHint(QFont.TypeWriter)
+                _fixed_font.setStyleHint(QFont.StyleHint.TypeWriter)
             return _fixed_font
         else:
             return GenericTableModel.data(self, index, role)

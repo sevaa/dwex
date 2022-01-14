@@ -1,12 +1,12 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import *
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QKeySequence, QAction
+from PyQt6.QtWidgets import *
 
 def setup_menu(win):
     menu = win.menuBar()
     file_menu = menu.addMenu("&File")
     open_menuitem = file_menu.addAction("Open...")
-    open_menuitem.setShortcut(QKeySequence.Open)
+    open_menuitem.setShortcut(QKeySequence.StandardKey.Open)
     open_menuitem.triggered.connect(win.on_open)
     win.mru_menu = file_menu.addMenu("Recent files")
     if len(win.mru):
@@ -14,8 +14,8 @@ def setup_menu(win):
     else:
         win.mru_menu.setEnabled(False)
     exit_menuitem = file_menu.addAction("E&xit")
-    exit_menuitem.setMenuRole(QAction.QuitRole)
-    exit_menuitem.setShortcut(QKeySequence.Quit)
+    exit_menuitem.setMenuRole(QAction.MenuRole.QuitRole)
+    exit_menuitem.setShortcut(QKeySequence.StandardKey.Quit)
     exit_menuitem.triggered.connect(win.on_exit)
     #########
     view_menu = menu.addMenu("View")
@@ -59,7 +59,7 @@ def setup_menu(win):
     #########
     edit_menu = menu.addMenu("Edit")
     win.copy_menuitem = edit_menu.addAction("Copy value")
-    win.copy_menuitem.setShortcut(QKeySequence.Copy)
+    win.copy_menuitem.setShortcut(QKeySequence.StandardKey.Copy)
     win.copy_menuitem.setEnabled(False)
     win.copy_menuitem.triggered.connect(win.on_copyvalue)
     win.copyline_menuitem = edit_menu.addAction("Copy line")
@@ -71,21 +71,21 @@ def setup_menu(win):
     #########
     nav_menu = menu.addMenu("Navigate")
     win.back_menuitem = nav_menu.addAction("Back")
-    win.back_menuitem.setShortcut(QKeySequence.Back)
+    win.back_menuitem.setShortcut(QKeySequence.StandardKey.Back)
     win.back_menuitem.setEnabled(False);
     win.back_menuitem.triggered.connect(lambda: win.on_nav(1))
     win.forward_menuitem = nav_menu.addAction("Forward")
-    win.forward_menuitem.setShortcut(QKeySequence.Forward)
+    win.forward_menuitem.setShortcut(QKeySequence.StandardKey.Forward)
     win.forward_menuitem.setEnabled(False);
     win.forward_menuitem.triggered.connect(lambda: win.on_nav(-1))
     win.followref_menuitem = nav_menu.addAction("Follow the ref")
     win.followref_menuitem.setEnabled(False);
-    win.followref_menuitem.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_Return))
+    win.followref_menuitem.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_Return))
     win.followref_menuitem.triggered.connect(win.on_followref)        
     nav_menu.addSeparator()
     win.find_menuitem = nav_menu.addAction("Find...")
     win.find_menuitem.setEnabled(False)
-    win.find_menuitem.setShortcut(QKeySequence.Find)
+    win.find_menuitem.setShortcut(QKeySequence.StandardKey.Find)
     win.find_menuitem.triggered.connect(win.on_find)
     win.findip_menuitem = nav_menu.addAction("Find code address...")
     win.findip_menuitem.setEnabled(False)
@@ -95,12 +95,12 @@ def setup_menu(win):
     win.findbycondition_menuitem.triggered.connect(win.on_findbycondition)
     win.findnext_menuitem = nav_menu.addAction("Find next")
     win.findnext_menuitem.setEnabled(False)
-    win.findnext_menuitem.setShortcut(QKeySequence.FindNext)
+    win.findnext_menuitem.setShortcut(QKeySequence.StandardKey.FindNext)
     win.findnext_menuitem.triggered.connect(win.on_findnext)
     ########
     help_menu = menu.addMenu("Help")
     about_menuitem = help_menu.addAction("About...")
-    about_menuitem.setMenuRole(QAction.AboutRole)
+    about_menuitem.setMenuRole(QAction.MenuRole.AboutRole)
     about_menuitem.triggered.connect(win.on_about) 
     help_menu.addAction('Check for updates...').triggered.connect(win.on_updatecheck)
     help_menu.addAction('Homepage').triggered.connect(win.on_homepage)
