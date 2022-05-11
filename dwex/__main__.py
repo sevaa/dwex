@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (2, 10)
+version = (2, 11)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -554,6 +554,9 @@ def main():
     if not sys.gettrace(): # Lame way to detect a debugger
         on_exception.prev_exchook = sys.excepthook
         sys.excepthook = on_exception
+
+    from .patch import monkeypatch
+    monkeypatch()
 
     TheApp().start()
             

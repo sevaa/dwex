@@ -58,28 +58,33 @@ class DIEV1(object):
             if tag_code not in TAG_reverse:
                 raise ValueError("%d not a known tag" % (tag_code))
             self.tag = TAG_reverse[tag_code]
-            while stm.tell() < self.offset + self.size:
-                attr_offset = self.stream.tell()
-                attr = struct_parse(structs.Dwarf_uint16(''), stm)
-                form = FORM_reverse[attr & 0xf]
-                attr >>= 4
-                if attr in ATTR_reverse:
-                    name = ATTR_reverse[attr]
-                elif 0x200 <= attr <= 0x3ff: #DW_AT_MIPS represented as 0x204???
-                    name = 'DW_AT_user_0x%x' % attr
-                else:
-                    raise ValueError("%d not a known attribute" % (attr))
+            if self.tag == 'DW_TAG_null': # TAG_padding in DWARF1 spec
+                # No attributes, just advance the stream
+                stm.seek(self.size-6, 1)
+                self.has_children = False
+            else:
+                while stm.tell() < self.offset + self.size:
+                    attr_offset = self.stream.tell()
+                    attr = struct_parse(structs.Dwarf_uint16(''), stm)
+                    form = FORM_reverse[attr & 0xf]
+                    attr >>= 4
+                    if attr in ATTR_reverse:
+                        name = ATTR_reverse[attr]
+                    elif 0x200 <= attr <= 0x3ff: #DW_AT_MIPS represented as 0x204???
+                        name = 'DW_AT_user_0x%x' % attr
+                    else:
+                        raise ValueError("%d not a known attribute" % (attr))
 
-                raw_value = struct_parse(structs.Dwarf_dw_form[form], stm)
-                value = raw_value
+                    raw_value = struct_parse(structs.Dwarf_dw_form[form], stm)
+                    value = raw_value
 
-                self.attributes[name] = AttributeValue(
-                    name=name,
-                    form=form,
-                    value=value,
-                    raw_value=raw_value,
-                    offset=attr_offset)
-            self.has_children = self.attributes['DW_AT_sibling'].value >= self.offset + self.size + 8
+                    self.attributes[name] = AttributeValue(
+                        name=name,
+                        form=form,
+                        value=value,
+                        raw_value=raw_value,
+                        offset=attr_offset)
+                self.has_children = self.attributes['DW_AT_sibling'].value >= self.offset + self.size + 8
 
     def get_parent(self):
         return self._parent

@@ -428,7 +428,11 @@ class DIETableModel(QAbstractTableModel):
     # Returns (cu, die_offset) or None if not a navigable
     def ref_target(self, index):
         try:  # Any chance for "not found"? Probably bug #1450
-            attr = self.attributes[self.keys[index.row() - self.meta_count]]
+            irow = index.row()
+            meta_count = self.meta_count
+            attr_index = irow - meta_count
+            attr_index = self.keys[attr_index]
+            attr = self.attributes[attr_index]
             val = attr.value
             form = attr.form
             if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
