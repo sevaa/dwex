@@ -65,7 +65,7 @@ _fixed_font = None
 _ll_headers = ("Attribute", "Offset", "Form", "Raw", "Value")
 _noll_headers = ("Attribute", "Form", "Value")
 _meta_desc = ('DIE offset', 'DIE size', 'Abbrev code', 'Has children') # Anything else?
-_meta_count = 4
+_meta_count = 4 # Extra rows if low level detail showing is set
 
 def get_cu_base(die):
     top_die = die.cu.get_top_DIE()
@@ -292,24 +292,24 @@ class DIETableModel(QAbstractTableModel):
             return str(val)
 
     def display_DIE(self, die):
-        rows_was = len(self.keys)
+        rows_was = len(self.keys) + self.meta_count
         self.die = die
         self.attributes = die.attributes
         self.keys = list(die.attributes.keys())
         if die.dwarfinfo.config.machine_arch != self.arch:
             self.arch = die.dwarfinfo.config.machine_arch
             self.regnamelist = _REG_NAME_MAP.get(self.arch)        
-        rows_now = len(self.keys)
+        rows_now = self.meta_count + len(self.keys)
         if rows_was < rows_now:
             self.rowsInserted.emit(QModelIndex(), rows_was, rows_now-1)
         elif rows_was > rows_now:
             self.rowsRemoved.emit(QModelIndex(), rows_now, rows_was-1)
-        self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(rows_now-1, 3))
+        self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(rows_now - 1, len(self.headers)-1))
 
     def set_prefix(self, prefix):
         if prefix != self.prefix:
             self.prefix = prefix
-            self.dataChanged.emit(self.createIndex(0, 2), self.createIndex(len(self.keys)-1, 3))
+            self.refresh_values()
 
     # Index is the current selected index
     # Returns the new selected index, if there was one
@@ -337,16 +337,19 @@ class DIETableModel(QAbstractTableModel):
                     new_index = QModelIndex() # Select none
         return new_index
 
+    # Force a reload of values on the whole table without row/column count change
+    def refresh_values(self):
+        self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(self.meta_count + len(self.keys)-1, len(self.headers)-1))
 
     def set_hex(self, hex):
         if hex != self.hex:
             self.hex = hex
-            self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
+            self.refresh_values()
 
     def set_regnames(self, regnames):
         if regnames != self.regnames:
             self.regnames = regnames
-            self.dataChanged.emit(self.createIndex(0, 0), self.createIndex(len(self.keys)-1, 0))
+            self.refresh_values()
 
     # Returns a table model for the attribute details table
     # For attributes that refer to larger data structures (ranges, locations), makes sense to spell it out into a table
