@@ -43,6 +43,8 @@ def read_pe(filename):
         debug_line_sec = data.get('.debug_line'),
         debug_pubtypes_sec = data.get('.debug_pubtypes'),
         debug_pubnames_sec = data.get('.debug_pubnames'),
+        debug_addr_sec = data.get('.debug_addr'),
+        debug_str_offsets_sec = data.get('.debug_str_offsets')
     )
     di._format = 2
     di._start_address = pefile.imageNtHeaders.header.OptionalHeader.ImageBase
@@ -122,6 +124,8 @@ def read_macho(filename, resolve_arch, friendly_filename):
         debug_line_sec = data.get('__debug_line'),
         debug_pubtypes_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubn?
         debug_pubnames_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubt?
+        debug_addr_sec = data.get('__debug_addr'),
+        debug_str_offsets_sec = data.get('__debug_str_offsets')
     )
     di._format = 1
     di._fat_arch = fat_arch
