@@ -37,7 +37,7 @@ def make_exc_report(exc, tb, version):
     stacklines = [se.name + ' (' + os.path.basename(se.filename) + ':' + str(se.lineno) + ")\n" for se in stack]
     report += "".join(stacklines[::-1]) + "\n"
 
-    report += "PyLocals:\n" + ''.join(k + ": " + str(locals[k]) + "\n" for k in locals)
+    report += "PyLocals:\n" + ''.join(k + ": " + str(locals[k]) + "\n" for k in locals).replace("\n\n","\n_\n")
     return report
 
 def report_crash(exc, tb, version):

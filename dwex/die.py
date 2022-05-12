@@ -120,6 +120,10 @@ class DIETableModel(QAbstractTableModel):
         return self.attr_data(index, role) if row >= self.meta_count else self.meta_data(index, role)
 
     def attr_data(self, index, role):
+        irow = index.row()
+        meta_count = self.meta_count
+        self_keys_len = len(self.keys)
+        self_die_keys_len = len(self.die.attributes.keys())
         row = index.row() - self.meta_count
         key = self.keys[row]
         attr = self.attributes[key]
@@ -434,13 +438,15 @@ class DIETableModel(QAbstractTableModel):
             irow = index.row()
             meta_count = self.meta_count
             attr_index = irow - meta_count
-            attr_index = self.keys[attr_index]
-            attr = self.attributes[attr_index]
+            self_keys_len = len(self.keys)
+            self_die_attr_keys_len = len(self.die.attributes.keys())
+            attr_name = self.keys[attr_index]
+            attr = self.attributes[attr_name]
             val = attr.value
             form = attr.form
-            if attr.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
+            if form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
                 return (self.die.cu, attr.value + self.die.cu.cu_offset)
-            elif attr.form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
+            elif form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
                 cualen = len(self.die.cu.dwarfinfo._unsorted_CUs)
                 i = bisect_right(self.die.cu.dwarfinfo._CU_offsets, val) - 1
                 cu = self.die.cu.dwarfinfo._unsorted_CUs[i]
