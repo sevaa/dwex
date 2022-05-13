@@ -32,7 +32,8 @@ def die_sort_key(die):
         name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore').lower()
     else:
         name = ''
-    return (die.tag, name, die.offset)
+    tag = '%X' % die.tag if isinstance(die.tag, int) else die.tag
+    return (tag, name, die.offset)
 
 #------------------------------------------------
 # CU tree formatter
