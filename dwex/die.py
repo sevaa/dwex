@@ -4,6 +4,7 @@ from PyQt6.QtGui import QBrush, QFont
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
 from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
+from elftools.common.exceptions import ELFParseError
 from .dwarfone import DWARFExprParserV1
 
 MAX_INLINE_BYTEARRAY_LEN = 32
@@ -228,58 +229,70 @@ class DIETableModel(QAbstractTableModel):
 
     # Big DIE attribute value interpreter
     def format_value(self, attr):
-        key = attr.name
-        val = attr.value
-        form = attr.form
-        if form == 'DW_FORM_addr' and isinstance(val, int):
-            return hex(val)
-        elif form == 'DW_FORM_flag_present':
-            return ''
-        elif form in ('DW_FORM_ref0', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
-            return "Ref: 0x%x" % val # There are several other reference forms in the spec
-        elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
-            ll = self.parse_location(attr)
-            if isinstance(ll, LocationExpr):
-                return '; '.join(self.dump_expr(ll.loc_expr))
-            else:
-                return "Loc list: 0x%x" % attr.value
-        elif key == 'DW_AT_language':
-            return "%d %s" % (val, _DESCR_DW_LANG[val]) if val in _DESCR_DW_LANG else val
-        elif key == 'DW_AT_encoding':
-            return "%d %s" % (val, _DESCR_DW_ATE[val]) if val in _DESCR_DW_ATE else val
-        elif key == 'DW_AT_accessibility':
-            return "%d %s" % (val, _DESCR_DW_ACCESS[val]) if val in _DESCR_DW_ACCESS else val
-        elif key == 'DW_AT_inline':
-            return "%d %s" % (val, _DESCR_DW_INL[val]) if val in _DESCR_DW_INL else val
-        elif key in ('DW_AT_decl_file', 'DW_AT_call_file'):
+        try:
+            die = self.die
             cu = self.die.cu
-            if cu._lineprogram is None:
-                cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(cu)
-            filename = cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore') if cu._lineprogram and val > 0 and val <= len(cu._lineprogram.header.file_entry) else '(N/A)'
-            return "%d: %s" % (val,  filename)
-        elif key == 'DW_AT_stmt_list':
-            return 'LNP at 0x%x' % val
-        elif isinstance(val, bytes):
-            if form in ('DW_FORM_strp', 'DW_FORM_string'):
-                return val.decode('utf-8', errors='ignore')
-            elif val == b'': # What's a good value for a blank blob?
-                return '[]'
-            elif len(val) > MAX_INLINE_BYTEARRAY_LEN:
-                return ' '.join("%02x" % b for b in val[0:MAX_INLINE_BYTEARRAY_LEN]) + ("...(%s bytes)" % (('0x%x' if self.hex else '%d') % len(val)))
-            else:
-                return ' '.join("%02x" % b for b in val) # Something like "01 ff 33 55"
-        elif isinstance(val, list): # block1 comes across as this
-            if val == []:
-                return '[]'
-            elif isinstance(val[0], int): # Assuming it's a byte array diguised as int array
-                if len(val) > MAX_INLINE_BYTEARRAY_LEN:
+            header = self.die.cu.header
+            dwarf_version = self.die.cu.header.version                               
+
+            key = attr.name
+            val = attr.value
+            form = attr.form
+            if form == 'DW_FORM_addr' and isinstance(val, int):
+                return hex(val)
+            elif form == 'DW_FORM_flag_present':
+                return ''
+            elif form in ('DW_FORM_ref0', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
+                return "Ref: 0x%x" % val # There are several other reference forms in the spec
+            elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
+                ll = self.parse_location(attr)
+                if isinstance(ll, LocationExpr):
+                    return '; '.join(self.dump_expr(ll.loc_expr))
+                else:
+                    return "Loc list: 0x%x" % attr.value
+            elif key == 'DW_AT_language':
+                return "%d %s" % (val, _DESCR_DW_LANG[val]) if val in _DESCR_DW_LANG else val
+            elif key == 'DW_AT_encoding':
+                return "%d %s" % (val, _DESCR_DW_ATE[val]) if val in _DESCR_DW_ATE else val
+            elif key == 'DW_AT_accessibility':
+                return "%d %s" % (val, _DESCR_DW_ACCESS[val]) if val in _DESCR_DW_ACCESS else val
+            elif key == 'DW_AT_inline':
+                return "%d %s" % (val, _DESCR_DW_INL[val]) if val in _DESCR_DW_INL else val
+            elif key in ('DW_AT_decl_file', 'DW_AT_call_file'):
+                cu = self.die.cu
+                if cu._lineprogram is None:
+                    cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(cu)
+                filename = cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore') if cu._lineprogram and val > 0 and val <= len(cu._lineprogram.header.file_entry) else '(N/A)'
+                return "%d: %s" % (val,  filename)
+            elif key == 'DW_AT_stmt_list':
+                return 'LNP at 0x%x' % val
+            elif isinstance(val, bytes):
+                if form in ('DW_FORM_strp', 'DW_FORM_string'):
+                    return val.decode('utf-8', errors='ignore')
+                elif val == b'': # What's a good value for a blank blob?
+                    return '[]'
+                elif len(val) > MAX_INLINE_BYTEARRAY_LEN:
                     return ' '.join("%02x" % b for b in val[0:MAX_INLINE_BYTEARRAY_LEN]) + ("...(%s bytes)" % (('0x%x' if self.hex else '%d') % len(val)))
                 else:
-                    return ' '.join("%02x" % b for b in val)
-            else: # List of something else
-                return str(val)
-        else:
-            return hex(val) if self.hex and isinstance(val, int) else str(val)
+                    return ' '.join("%02x" % b for b in val) # Something like "01 ff 33 55"
+            elif isinstance(val, list): # block1 comes across as this
+                if val == []:
+                    return '[]'
+                elif isinstance(val[0], int): # Assuming it's a byte array diguised as int array
+                    if len(val) > MAX_INLINE_BYTEARRAY_LEN:
+                        return ' '.join("%02x" % b for b in val[0:MAX_INLINE_BYTEARRAY_LEN]) + ("...(%s bytes)" % (('0x%x' if self.hex else '%d') % len(val)))
+                    else:
+                        return ' '.join("%02x" % b for b in val)
+                else: # List of something else
+                    return str(val)
+            else:
+                return hex(val) if self.hex and isinstance(val, int) else str(val)
+        except ELFParseError as exc:
+            from .__main__ import version
+            from .crash import report_crash
+            tb = exc.__traceback__
+            report_crash(exc, tb, version)
+            return "(parse error)"
 
     def format_form(self, form):
         return form if self.prefix or not str(form).startswith('DW_FORM_') else form[8:]
