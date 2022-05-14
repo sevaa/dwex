@@ -89,6 +89,9 @@ def is_long_blob(attr):
     val = attr.value
     return ((isinstance(val, bytes) and attr.form not in ('DW_FORM_strp', 'DW_FORM_string')) or is_int_list(val)) and len(val) > MAX_INLINE_BYTEARRAY_LEN
 
+def is_block(form):
+    return form in ('DW_FORM_block', 'DW_FORM_block1', 'DW_FORM_block2', 'DW_FORM_block4')
+
 class DIETableModel(QAbstractTableModel):
     def __init__(self, die, prefix, lowlevel, hex, regnames):
         QAbstractTableModel.__init__(self)
@@ -248,6 +251,8 @@ class DIETableModel(QAbstractTableModel):
                 return ''
             elif form in ('DW_FORM_ref0', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return "Ref: 0x%x" % val # There are several other reference forms in the spec
+            elif form == 'DW_FORM_flag':
+                return str(bool(val))
             elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
                 ll = self.parse_location(attr)
                 if isinstance(ll, LocationExpr):
@@ -270,6 +275,8 @@ class DIETableModel(QAbstractTableModel):
                 return "%d: %s" % (val,  filename)
             elif key == 'DW_AT_stmt_list':
                 return 'LNP at 0x%x' % val
+            elif key in ('DW_AT_upper_bound', 'DW_AT_lower_bound') and is_block(form):
+                return '; '.join(self.dump_expr(val))
             elif isinstance(val, bytes):
                 if form in ('DW_FORM_strp', 'DW_FORM_string'):
                     return val.decode('utf-8', errors='ignore')
@@ -448,6 +455,8 @@ class DIETableModel(QAbstractTableModel):
                 # TODO: low level flavor with extra details
                 # TODO: commands vs states
                 return GenericTableModel(('Address', 'File', 'Line', 'Stmt', 'Basic block', 'End seq', 'End prologue', 'Begin epilogue'), states)
+            elif key in ('DW_AT_upper_bound', 'DW_AT_lower_bound') and is_block(form):
+                return GenericTableModel(("Command",), [(o,) for o in self.dump_expr(attr.value)])
             elif is_long_blob(attr):
                 val = attr.value
                 def format_line(off):
