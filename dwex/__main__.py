@@ -263,17 +263,18 @@ class TheWindow(QMainWindow):
     # For both back and forward, delta=1 for back, -1 for forward
     # Checked because back-forward buttons can't be disabled
     def on_nav(self, delta):
-        np = self.navpos + delta
-        if np < 0 or np >= len(self.navhistory):
-            return
-        self.navpos = np
-        navitem = self.navhistory[np]
-        tree_index = self.tree_model.index_for_navitem(navitem)
-        self.in_tree_nav = True
-        self.the_tree.setCurrentIndex(tree_index) # Causes on_tree_selection internally
-        self.in_tree_nav = False
-        self.back_menuitem.setEnabled(np < len(self.navhistory) - 1)
-        self.forward_menuitem.setEnabled(np > 0)
+        if self.tree_model: # Maybe fix for #1461? Short out nav if no file loaded
+            np = self.navpos + delta
+            if np < 0 or np >= len(self.navhistory):
+                return
+            self.navpos = np
+            navitem = self.navhistory[np]
+            tree_index = self.tree_model.index_for_navitem(navitem)
+            self.in_tree_nav = True
+            self.the_tree.setCurrentIndex(tree_index) # Causes on_tree_selection internally
+            self.in_tree_nav = False
+            self.back_menuitem.setEnabled(np < len(self.navhistory) - 1)
+            self.forward_menuitem.setEnabled(np > 0)
 
     def followref(self, index = None):
         self.start_wait() # TODO: only show the wait cursor if it's indeed time consuming

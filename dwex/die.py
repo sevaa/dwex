@@ -68,6 +68,10 @@ _noll_headers = ("Attribute", "Form", "Value")
 _meta_desc = ('DIE offset', 'DIE size', 'Abbrev code', 'Has children') # Anything else?
 _meta_count = 4 # Extra rows if low level detail showing is set
 
+class NoBaseError(Exception):
+    pass
+
+#May return None!
 def get_cu_base(die):
     top_die = die.cu.get_top_DIE()
     if 'DW_AT_low_pc' in top_die.attributes:
@@ -76,7 +80,7 @@ def get_cu_base(die):
         return top_die.attributes['DW_AT_entry_pc'].value
     # TODO: ranges?
     else:
-        raise ValueError("Can't find the base address for the location list")
+        raise NoBaseError()
 
 def is_int_list(val):
     return isinstance(val, list) and len(val) > 0 and isinstance(val[0], int)
@@ -386,9 +390,17 @@ class DIETableModel(QAbstractTableModel):
                     return None
                 ranges = di._ranges.get_range_list_at_offset(attr.value)
                 # TODO: handle base addresses. Never seen those so far...
-                cu_base = get_cu_base(self.die)
-                return GenericTableModel(("Start offset", "End offset"),
-                    ((hex(cu_base + r.begin_offset), hex(cu_base + r.end_offset)) for r in ranges))
+                try:
+                    top_die = self.die.cu.get_top_DIE() 
+                    cu_base = get_cu_base(self.die)
+                    return GenericTableModel(("Start offset", "End offset"),
+                        ((hex(cu_base + r.begin_offset), hex(cu_base + r.end_offset)) for r in ranges))
+                except NoBaseError as exc:
+                    from .__main__ import version
+                    from .crash import report_crash
+                    tb = exc.__traceback__
+                    report_crash(exc, tb, version)
+                    return None
             elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
                 # Expression is a list of ints
                 ll = self.parse_location(attr)
