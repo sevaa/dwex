@@ -468,23 +468,20 @@ class DIETableModel(QAbstractTableModel):
 
     # Returns (cu, die_offset) or None if not a navigable
     def ref_target(self, index):
-        try:  # Any chance for "not found"? Probably bug #1450
-            irow = index.row()
-            meta_count = self.meta_count
-            attr_index = irow - meta_count
-            self_keys_len = len(self.keys)
-            self_die_attr_keys_len = len(self.die.attributes.keys())
-            attr_name = self.keys[attr_index]
-            attr = self.attributes[attr_name]
-            val = attr.value
-            form = attr.form
-            if form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
-                return (self.die.cu, attr.value + self.die.cu.cu_offset)
-            elif form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
-                cualen = len(self.die.cu.dwarfinfo._unsorted_CUs)
-                i = bisect_right(self.die.cu.dwarfinfo._CU_offsets, val) - 1
-                cu = self.die.cu.dwarfinfo._unsorted_CUs[i]
-                return (cu, attr.value)
+        try:  # Any chance for "not found"? Probably bug #1450, #1450
+            row = index.row()
+            if row >= self.meta_count:
+                attr_name = self.keys[row - self.meta_count]
+                attr = self.attributes[attr_name]
+                val = attr.value
+                form = attr.form
+                if form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
+                    return (self.die.cu, attr.value + self.die.cu.cu_offset)
+                elif form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
+                    cualen = len(self.die.cu.dwarfinfo._unsorted_CUs)
+                    i = bisect_right(self.die.cu.dwarfinfo._CU_offsets, val) - 1
+                    cu = self.die.cu.dwarfinfo._unsorted_CUs[i]
+                    return (cu, attr.value)
         except IndexError as exc:
             from .__main__ import version
             from .crash import report_crash
