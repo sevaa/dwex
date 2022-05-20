@@ -1,5 +1,6 @@
 import elftools.dwarf.structs
 import elftools.dwarf.die
+import elftools.dwarf.compileunit
 from elftools.construct import Struct, Enum, If
 from elftools.dwarf.enums import *
 from elftools.common.construct_utils import RepeatUntilExcluding
@@ -68,4 +69,54 @@ def monkeypatch():
 
         self.size = self.stream.tell() - self.offset
 
+    def iter_DIE_children_ex(self, die):
+        """ Given a DIE, yields either its children, without null DIE list
+            terminator, or nothing, if that DIE has no children.
+            The null DIE terminator is saved in that DIE when iteration ended.
+        """
+        if not die.has_children:
+            return
+
+        # `cur_offset` tracks the stream offset of the next DIE to yield
+        # as we iterate over our children,
+        cur_offset = die.offset + die.size
+
+        while True:
+            child = self._get_cached_DIE(cur_offset)
+
+            child.set_parent(die)
+
+            if child.is_null():
+                die._terminator = child
+                return
+
+            yield child
+
+            if not child.has_children:
+                cur_offset += child.size
+            elif "DW_AT_sibling" in child.attributes:
+                sibling = child.attributes["DW_AT_sibling"]
+                if sibling.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref'):
+                    cur_offset = sibling.value + self.cu_offset
+                elif sibling.form == 'DW_FORM_ref_addr':
+                    cur_offset = sibling.value
+                else:
+                    raise NotImplementedError('Sibling in form %s' % sibling.form)
+            else:
+                # If no DW_AT_sibling attribute is provided by the producer
+                # then the whole child subtree must be parsed to find its next
+                # sibling. There is one zero byte representing null DIE
+                # terminating children list. It is used to locate child subtree
+                # bounds.
+
+                # If children are not parsed yet, this instruction will manage
+                # to recursive call of this function which will result in
+                # setting of `_terminator` attribute of the `child`.
+                if child._terminator is None:
+                    for _ in self.iter_DIE_children(child):
+                        pass
+
+                cur_offset = child._terminator.offset + child._terminator.size
+
     elftools.dwarf.die.DIE._parse_DIE = _parse_DIE_ex
+    elftools.dwarf.compileunit.CompileUnit.iter_DIE_children = iter_DIE_children_ex
