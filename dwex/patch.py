@@ -22,7 +22,7 @@ def monkeypatch():
                     Enum(self.Dwarf_uleb128('form'), **ENUM_DW_FORM),
                     If(lambda ctx: ctx['form'] == 'DW_FORM_implicit_const',
                         self.Dwarf_sleb128('value')))))
-    elftools.dwarf.structs.DWARFStructs._create_abbrev_declaration = _create_abbrev_declaration_ex
+    elftools.dwarf.structs.DWARFStructs._create_abbrev_declaration = _create_abbrev_declaration_ex                        
 
     def _parse_DIE_ex(self):
         """ Parses the DIE info from the section, based on the abbreviation
@@ -68,6 +68,7 @@ def monkeypatch():
                 offset=attr_offset)
 
         self.size = self.stream.tell() - self.offset
+    elftools.dwarf.die.DIE._parse_DIE = _parse_DIE_ex
 
     def iter_DIE_children_ex(self, die):
         """ Given a DIE, yields either its children, without null DIE list
@@ -117,6 +118,4 @@ def monkeypatch():
                         pass
 
                 cur_offset = child._terminator.offset + child._terminator.size
-
-    elftools.dwarf.die.DIE._parse_DIE = _parse_DIE_ex
     elftools.dwarf.compileunit.CompileUnit.iter_DIE_children = iter_DIE_children_ex

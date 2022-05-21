@@ -13,6 +13,7 @@ from elftools.dwarf.lineprogram import LineProgramEntry, LineState
 from elftools.dwarf.dwarf_expr import DWARFExprOp
 
 LineTableHeader = namedtuple('LineTableHeader', 'file_entry')
+CUv1Header = namedtuple('CUv1Header', 'version unit_length debug_abbrev_offset address_size')
 
 TAG_reverse = dict((v, k) for k, v in ENUM_DW_TAG.items())
 ATTR_reverse = dict((v, k) for k, v in ENUM_DW_AT.items())
@@ -102,7 +103,7 @@ class CompileUnitV1(object):
     def __init__(self, di, top_die):
         self.dwarfinfo = di
         self.structs = di.structs
-        self.header = dict(version = 1, unit_length = None, debug_abbrev_offset = None, address_size = 4)
+        self.header = CUv1Header(version = 1, unit_length = None, debug_abbrev_offset = None, address_size = 4)
         self._dielist = [top_die]
         self._diemap = [top_die.offset]
 
@@ -110,7 +111,7 @@ class CompileUnitV1(object):
         return self._dielist[0]
 
     def __getitem__(self, name):
-        return self.header[name]       
+        return self.header._asdict()[name]
 
     # Caches
     def DIE_at_offset(self, offset):
