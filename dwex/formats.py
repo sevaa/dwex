@@ -154,8 +154,8 @@ def read_dwarf(filename, resolve_arch):
                 elffile = ELFFile(file)
                 file = None # Keep the file open
                 # Retrieve the preferred loading address
-                load_segment = next(seg for seg in elffile.iter_segments() if seg.header.p_type == 'PT_LOAD')
-                start_address = load_segment.header.p_vaddr
+                load_segment = next((seg for seg in elffile.iter_segments() if seg.header.p_type == 'PT_LOAD'), None)
+                start_address = load_segment.header.p_vaddr if load_segment else 0
                 di = None
                 if elffile.has_dwarf_info():
                     di = elffile.get_dwarf_info()
