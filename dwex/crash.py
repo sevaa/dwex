@@ -19,6 +19,32 @@ def submit_report(subj, body):
     except Exception as exc:
         pass
 
+def get_crash_die(locals):
+    try:
+        if "self" in locals:
+            return locals['self'].die
+    except AttributeError:
+        pass
+
+    if "die" in locals:
+        return locals['die']
+    return False
+
+def get_crash_die_context(locals):
+    s = ''
+    try:
+        crash_die = get_crash_die(locals)
+        if crash_die:
+            top = crash_die.cu.get_top_DIE()
+            if top:
+                if 'DW_AT_language' in top.attributes:
+                    s += "Source language: 0x%x\n" % (top.attributes['DW_AT_language'].value,)
+                if 'DW_AT_producer' in top.attributes:
+                    s += "Producer: %s\n" % (top.attributes['DW_AT_producer'].value.decode('utf-8', errors='ignore'),)
+    except:
+        pass
+    return s
+
 def make_exc_report(exc, tb, version):
     while tb.tb_next:
         tb = tb.tb_next
@@ -31,6 +57,7 @@ def make_exc_report(exc, tb, version):
     report += "DWEX " + '.'.join(str(v) for v in version) + "\n"
     report += "Python " + sys.version + "\n"
     report +=  platform.platform() + "\n"
+    report += get_crash_die_context(locals)
     report += "".join(traceback.format_exception_only(type(exc), exc)) + "\n"
 
     report += "PyStack:\n"
