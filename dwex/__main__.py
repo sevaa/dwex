@@ -515,6 +515,9 @@ class TheWindow(QMainWindow):
                 self.details_table.resizeColumnsToContents()
         self.die_table.resizeColumnsToContents()
 
+    def on_issue(self):
+        QDesktopServices.openUrl(QUrl('https://github.com/sevaa/dwex/issues/new'))
+
     def on_homepage(self):
         QDesktopServices.openUrl(QUrl('https://github.com/sevaa/dwex'))
 

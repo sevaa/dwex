@@ -103,6 +103,7 @@ def setup_menu(win):
     about_menuitem.setMenuRole(QAction.MenuRole.AboutRole)
     about_menuitem.triggered.connect(win.on_about) 
     help_menu.addAction('Check for updates...').triggered.connect(win.on_updatecheck)
+    help_menu.addAction('Report an issue').triggered.connect(win.on_issue)
     help_menu.addAction('Homepage').triggered.connect(win.on_homepage)
 
 def setup_ui(win):
