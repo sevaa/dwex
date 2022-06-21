@@ -248,7 +248,7 @@ class DIETableModel(QAbstractTableModel):
             if form == 'DW_FORM_addr' and isinstance(val, int):
                 return hex(val)
             elif form == 'DW_FORM_flag_present':
-                return ''
+                return 'True'
             elif form in ('DW_FORM_ref0', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return "Ref: 0x%x" % val # There are several other reference forms in the spec
             elif form == 'DW_FORM_flag':
