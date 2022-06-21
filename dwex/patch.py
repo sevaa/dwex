@@ -57,16 +57,13 @@ def monkeypatch():
             if form == 'DW_FORM_implicit_const':
                 value = spec.value
                 raw_value = value
-            if form == 'DW_FORM_indirect':
-                # Lose the indirectness
-                from collections import namedtuple
-                data = struct_parse(structs.Dwarf_dw_form[form], self.stream)
-                raw_datatype = namedtuple('indirect_value', 'form value')
-                raw_value = raw_datatype(data.form, data.value)
-                form = data.form
-                value = data.value
             else:
                 raw_value = struct_parse(structs.Dwarf_dw_form[form], self.stream)
+                if form == 'DW_FORM_indirect':
+                    # Lose the indirectness; raw_value is (form, value)
+                    # Raw form is lost, oh well
+                    form = raw_value.form
+                    raw_value = raw_value.value
                 value = self._translate_attr_value(form, raw_value)
 
             self.attributes[name] = AttributeValue(
