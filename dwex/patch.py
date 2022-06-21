@@ -1,7 +1,7 @@
 import elftools.dwarf.structs
 import elftools.dwarf.die
 import elftools.dwarf.compileunit
-from elftools.construct import Struct, Enum, If
+from elftools.construct import Struct, Enum, If, Switch
 from elftools.dwarf.enums import *
 from elftools.common.construct_utils import RepeatUntilExcluding
 from elftools.common.utils import struct_parse
@@ -57,9 +57,18 @@ def monkeypatch():
             if form == 'DW_FORM_implicit_const':
                 value = spec.value
                 raw_value = value
+            if form == 'DW_FORM_indirect':
+                # Lose the indirectness
+                from collections import namedtuple
+                data = struct_parse(structs.Dwarf_dw_form[form], self.stream)
+                raw_datatype = namedtuple('indirect_value', 'form value')
+                raw_value = raw_datatype(data.form, data.value)
+                form = data.form
+                value = data.value
             else:
                 raw_value = struct_parse(structs.Dwarf_dw_form[form], self.stream)
                 value = self._translate_attr_value(form, raw_value)
+
             self.attributes[name] = AttributeValue(
                 name=name,
                 form=form,
@@ -97,7 +106,7 @@ def monkeypatch():
                 cur_offset += child.size
             elif "DW_AT_sibling" in child.attributes:
                 sibling = child.attributes["DW_AT_sibling"]
-                if sibling.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref'):
+                if sibling.form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref', 'DW_FORM_ref_udata'):
                     cur_offset = sibling.value + self.cu_offset
                 elif sibling.form == 'DW_FORM_ref_addr':
                     cur_offset = sibling.value
@@ -119,3 +128,12 @@ def monkeypatch():
 
                 cur_offset = child._terminator.offset + child._terminator.size
     elftools.dwarf.compileunit.CompileUnit.iter_DIE_children = iter_DIE_children_ex
+
+    # Patch for DW_FORM_indirect
+    def _create_dw_form_ex(self):
+        self._create_dw_form_base()
+        self.Dwarf_dw_form['DW_FORM_indirect'] = Struct('indirect',
+            Enum(self.Dwarf_uleb128('form'), **ENUM_DW_FORM),
+            Switch('value', lambda ctxt: ctxt.form, self.Dwarf_dw_form))
+    elftools.dwarf.structs.DWARFStructs._create_dw_form_base = elftools.dwarf.structs.DWARFStructs._create_dw_form
+    elftools.dwarf.structs.DWARFStructs._create_dw_form = _create_dw_form_ex

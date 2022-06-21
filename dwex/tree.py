@@ -206,7 +206,7 @@ class DWARFTreeModel(QAbstractItemModel):
     # Assumes all parent DIEs of the current one are already parsed
     # and cached in the CU, so get_parent will always return a valid parent DIE
     def index_for_die(self, die):
-        if '_i' in dir(die): # DIE already iterated over
+        if hasattr(die, '_i'): # DIE already iterated over
             return self.createIndex(die._i, 0, die)
         else: # Found the DIE, but the tree was never opened this deep. Read the tree along the path to the target DIE
             index = False

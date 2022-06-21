@@ -20,15 +20,12 @@ def submit_report(subj, body):
         pass
 
 def get_crash_die(locals):
-    try:
-        if "self" in locals:
-            return locals['self'].die
-    except AttributeError:
-        pass
-
-    if "die" in locals:
+    if "self" in locals and hasattr(locals['self'], 'die'):
+        return locals['self'].die
+    elif "die" in locals:
         return locals['die']
-    return False
+    else:
+        return False
 
 def get_crash_die_context(locals):
     s = ''
