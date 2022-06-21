@@ -155,6 +155,12 @@ class CompileUnitV1(object):
                 die._parent = parent_die
             if not die.is_null():
                 yield die
+                # Troubleshooting #1497
+                tag = die.tag
+                attr = die.attributes
+                off = die.offset
+                size = die.size
+                has_children = die.has_children
                 offset = die.sibling()
             else:
                 break        

@@ -5,6 +5,7 @@ from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
 from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
 from elftools.common.exceptions import ELFParseError
+import elftools.dwarf.ranges as ranges
 from .dwarfone import DWARFExprParserV1
 
 MAX_INLINE_BYTEARRAY_LEN = 32
@@ -79,6 +80,20 @@ def get_cu_base(die):
     elif 'DW_AT_entry_pc' in top_die.attributes:
         return top_die.attributes['DW_AT_entry_pc'].value
     # TODO: ranges?
+    elif 'DW_AT_ranges' in top_die.attributes:
+        di = die.dwarfinfo
+        if not di._ranges:
+            di._ranges = di.range_lists()
+        if not di._ranges: # Absent in the DWARF file
+            raise NoBaseError()
+        rl = di._ranges.get_range_list_at_offset(top_die.attributes['DW_AT_ranges'].value)
+        base = None
+        for r in rl:
+            if isinstance(r, ranges.BaseAddressEntry) and (base is None or r.base_address < base):
+                base = r.base_address
+        if base is None:
+            raise NoBaseError()
+        return base
     else:
         raise NoBaseError()
 
