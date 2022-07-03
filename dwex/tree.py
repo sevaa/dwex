@@ -210,7 +210,7 @@ class DWARFTreeModel(QAbstractItemModel):
             return self.createIndex(die._i, 0, die)
         else: # Found the DIE, but the tree was never opened this deep. Read the tree along the path to the target DIE
             index = False
-            while '_i' not in dir(die):
+            while not hasattr(die, '_i'):
                 parent_die = die.get_parent()
                 load_children(parent_die, self.sortdies) # This will populate the _i in all children of parent_die, including die
                 if not index: # After the first iteration, the one in the direct parent of target_die, target_die will have _i
