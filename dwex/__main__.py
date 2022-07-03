@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (2, 15)
+version = (2, 16)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -123,6 +123,7 @@ class TheWindow(QMainWindow):
             self.findbycondition_menuitem.setEnabled(True)
             self.find_menuitem.setEnabled(True)
             self.findip_menuitem.setEnabled(True)
+            self.byoffset_menuitem.setEnabled(True)
             self.on_highlight_nothing()
             # Navigation stack - empty
             self.navhistory = []
@@ -352,6 +353,24 @@ class TheWindow(QMainWindow):
                 self.on_findnext()            
             except ValueError:
                 pass
+
+    def on_byoffset(self):
+        r = QInputDialog.getText(self, "Find DIE by offset", "DIE offset (hex), relative to the section start:")
+        if r[1] and r[0]:
+            try:
+                offset = r[0]
+                if offset.startswith("0x"):
+                    offset = offset[2:]
+                offset = int(offset, 16)
+                index = self.tree_model.find_offset(offset)
+                if index:
+                    self.the_tree.setCurrentIndex(index)
+                else:
+                    QMessageBox(QMessageBox.Icon.Warning, "DwARF Explorer", "The specified offset was not found. It could be beyond the section size, or fall into a CU header area.",
+                        QMessageBox.StandardButton.Ok, self)
+            except ValueError:
+                pass
+
 
     def on_findbycondition(self):
         dlg = ScriptDlg(self)

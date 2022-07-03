@@ -1,4 +1,4 @@
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex
 from PyQt6.QtGui import QFont, QFontInfo, QBrush
 from PyQt6.QtWidgets import QApplication
@@ -20,7 +20,7 @@ def top_die_file_name(die):
         val = die.attributes['DW_AT_decl_file'].value
         if val > 0:
             if die.cu._lineprogram is None:
-                die.cu._lineprogram = die.dwarfinfo.line_program_for_CU(self.die.cu)
+                die.cu._lineprogram = die.dwarfinfo.line_program_for_CU(die.cu)
             return strip_path(die.cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore'))
     return "(no name)"
 
@@ -255,6 +255,25 @@ class DWARFTreeModel(QAbstractItemModel):
                 break
 
         return False
+    
+    def find_offset(self, offset):
+        cu = next(td.cu
+            for td
+            in self.top_dies
+            if 0 <= offset-td.cu.cu_die_offset < td.cu.header.unit_length)
+        if not cu:
+            return None
+        # On an off chance it's already parsed and the offset is precise
+        i = bisect_right(cu._diemap, offset)
+        if offset == cu._diemap[i - 1]:
+            return self.index_for_die(cu._dielist[i - 1])
+        # Now the hard way
+        # It would be possible to optimize that, parse not all DIEs but just some
+        # But let's not.
+        for die in cu.iter_DIEs():
+            pass
+        i = bisect_right(cu._diemap, offset)
+        return self.index_for_die(cu._dielist[i - 1])
 
 # Highlighter function(s)
 def has_code_location(die):

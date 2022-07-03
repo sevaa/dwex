@@ -5,7 +5,7 @@ from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
 from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
 from elftools.common.exceptions import ELFParseError
-import elftools.dwarf.ranges as ranges
+from elftools.dwarf.ranges import BaseAddressEntry as RangeBaseAddressEntry
 from .dwarfone import DWARFExprParserV1
 
 MAX_INLINE_BYTEARRAY_LEN = 32
@@ -89,7 +89,7 @@ def get_cu_base(die):
         rl = di._ranges.get_range_list_at_offset(top_die.attributes['DW_AT_ranges'].value)
         base = None
         for r in rl:
-            if isinstance(r, ranges.BaseAddressEntry) and (base is None or r.base_address < base):
+            if isinstance(r, RangeBaseAddressEntry) and (base is None or r.base_address < base):
                 base = r.base_address
         if base is None:
             raise NoBaseError()
@@ -553,7 +553,9 @@ def ip_in_range(die, ip):
         cu_base = get_cu_base(die)
         rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value)
         for r in rl:
-            if r.begin_offset <= ip - cu_base < r.end_offset:
+            if isinstance(r, RangeBaseAddressEntry):
+                cu_base = r.base_address
+            elif r.begin_offset <= ip - cu_base < r.end_offset:
                 return True
     if 'DW_AT_low_pc' in die.attributes and 'DW_AT_high_pc' in die.attributes:
         l = die.attributes['DW_AT_low_pc'].value
