@@ -86,7 +86,7 @@ def get_cu_base(die):
             di._ranges = di.range_lists()
         if not di._ranges: # Absent in the DWARF file
             raise NoBaseError()
-        rl = di._ranges.get_range_list_at_offset(top_die.attributes['DW_AT_ranges'].value)
+        rl = di._ranges.get_range_list_at_offset(top_die.attributes['DW_AT_ranges'].value, cu=die.cu)
         base = None
         for r in rl:
             if isinstance(r, RangeBaseAddressEntry) and (base is None or r.base_address < base):
@@ -106,6 +106,12 @@ def is_long_blob(attr):
 
 def is_block(form):
     return form in ('DW_FORM_block', 'DW_FORM_block1', 'DW_FORM_block2', 'DW_FORM_block4')
+
+def DIE_name(die):
+    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
+
+def safe_DIE_name(die, default = ''):
+    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else default
 
 class DIETableModel(QAbstractTableModel):
     def __init__(self, die, prefix, lowlevel, hex, regnames):
@@ -136,7 +142,7 @@ class DIETableModel(QAbstractTableModel):
         di = self.die.dwarfinfo
         if di._locparser is None:
             di._locparser = LocationParser(di.location_lists())
-        return di._locparser.parse_from_attribute(attr, self.die.cu['version'])
+        return di._locparser.parse_from_attribute(attr, self.die.cu['version'], die = self.die)
 
     def data(self, index, role):
         row = index.row()
@@ -215,7 +221,7 @@ class DIETableModel(QAbstractTableModel):
         else:
             return '[%s+0x%x]' % (self.regnamelist[regno], offset)
 
-    def format_op(self, op, op_name, args):
+    def format_op(self, op, op_name, args, offset):
         if not self.regnames and self.regnamelist: # Friendly register names
             if 0x50 <= op <= 0x6f and op - 0x50 < len(self.regnamelist): # reg0...reg31
                 op_name = self.regnamelist[op-0x50]
@@ -286,14 +292,21 @@ class DIETableModel(QAbstractTableModel):
                 cu = self.die.cu
                 if cu._lineprogram is None:
                     cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(cu)
-                filename = cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore') if cu._lineprogram and val > 0 and val <= len(cu._lineprogram.header.file_entry) else '(N/A)'
+                if cu._lineprogram.header.version >= 5:
+                    filename = cu._lineprogram.header.file_entry[val].name.decode('utf-8', errors='ignore') if cu._lineprogram and val >= 0 and val < len(cu._lineprogram.header.file_entry) else '(N/A)'
+                else:
+                    if val == 0:
+                        filename = safe_DIE_name(cu.get_top_DIE(), 'N/A')
+                    else:
+                        filename = cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore') if cu._lineprogram and val > 0 and val <= len(cu._lineprogram.header.file_entry) else '(N/A)'
                 return "%d: %s" % (val,  filename)
             elif key == 'DW_AT_stmt_list':
                 return 'LNP at 0x%x' % val
             elif key in ('DW_AT_upper_bound', 'DW_AT_lower_bound') and is_block(form):
                 return '; '.join(self.dump_expr(val))
             elif isinstance(val, bytes):
-                if form in ('DW_FORM_strp', 'DW_FORM_string'):
+                if form in ('DW_FORM_strp', 'DW_FORM_string', 'DW_FORM_line_strp', 'DW_FORM_strp_sup',
+                    'DW_FORM_strx', 'DW_FORM_strx1', 'DW_FORM_strx2', 'DW_FORM_strx3', 'DW_FORM_strx4'):
                     return val.decode('utf-8', errors='ignore')
                 elif val == b'': # What's a good value for a blank blob?
                     return '[]'
@@ -317,7 +330,7 @@ class DIETableModel(QAbstractTableModel):
             from .__main__ import version
             from .crash import report_crash
             tb = exc.__traceback__
-            report_crash(exc, tb, version)
+            report_crash(exc, tb, version, ctxt = {'attr': attr, 'die':die, 'cu_header':header, 'dwarf_version':dwarf_version})
             return "(parse error)"
 
     def format_form(self, form):
@@ -410,7 +423,7 @@ class DIETableModel(QAbstractTableModel):
                     di._ranges = di.range_lists()
                 if not di._ranges: # Absent in the DWARF file
                     return None
-                ranges = di._ranges.get_range_list_at_offset(attr.value)
+                ranges = di._ranges.get_range_list_at_offset(attr.value, cu = self.die.cu)
                 # TODO: handle base addresses. Never seen those so far...
                 try:
                     top_die = self.die.cu.get_top_DIE() 
@@ -457,9 +470,20 @@ class DIETableModel(QAbstractTableModel):
                     self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
                 lpe = self.die.cu._lineprogram.get_entries()
                 files = self.die.cu._lineprogram.header.file_entry
+                ver5 = self.die.cu._lineprogram.header.version >= 5
+                def_file = safe_DIE_name(self.die.cu.get_top_DIE(), 'N/A')
                 def format_state(state):
+                    filename = 'N/A'
+                    if ver5:
+                        if state.file >= 0 and state.file < len(files):
+                            filename = files[state.file].name.decode('utf-8', errors='ignore')
+                    else:
+                        if state.file == 0:
+                            filename = def_file
+                        elif state.file >= 1 and state.file <= len(files):
+                            filename = files[state.file-1].name.decode('utf-8', errors='ignore')
                     return (hex(state.address),
-                        files[state.file-1].name.decode('utf-8', errors='ignore') if state.file > 0 and state.file <= len(files) else '(N/A)',
+                        filename,
                         state.line,
                         'Y' if state.is_stmt  else '',
                         'Y' if state.basic_block else '',
@@ -551,7 +575,7 @@ def ip_in_range(die, ip):
             return False
         # TODO: handle base addresses. Never seen those so far...
         cu_base = get_cu_base(die)
-        rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value)
+        rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value, cu = die.cu)
         for r in rl:
             if isinstance(r, RangeBaseAddressEntry):
                 cu_base = r.base_address

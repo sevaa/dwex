@@ -56,7 +56,7 @@ except:
 
 setup(
     name='dwex',
-    version='2.17',  # Sync with version in __main__
+    version='2.20',  # Sync with version in __main__
     packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
@@ -70,7 +70,7 @@ setup(
     long_description_content_type="text/markdown",
     python_requires=">=3.6.1",
     setup_requires=[],
-    install_requires=['PyQt6', 'filebytes>=0.10.1', 'pyelftools>=0.28'],
+    install_requires=['PyQt6', 'filebytes>=0.10.1', 'pyelftools>=0.29'],
     platforms='any',
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -85,6 +85,7 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: Implementation :: CPython",
         "Topic :: Software Development :: Debuggers"
     ]

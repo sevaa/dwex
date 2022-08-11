@@ -44,7 +44,12 @@ def read_pe(filename):
         debug_pubtypes_sec = data.get('.debug_pubtypes'),
         debug_pubnames_sec = data.get('.debug_pubnames'),
         debug_addr_sec = data.get('.debug_addr'),
-        debug_str_offsets_sec = data.get('.debug_str_offsets')
+        debug_str_offsets_sec = data.get('.debug_str_offsets'),
+        debug_line_str_sec = data.get('.debug_line_str_name'),
+        debug_loclists_sec = data.get('.debug_loclists_sec_name'),
+        debug_rnglists_sec = data.get('.debug_rnglists_sec_name'),
+        debug_sup_sec = data.get('.debug_sup_name'),
+        gnu_debugaltlink_sec = data.get('.gnu_debugaltlink_name')
     )
     di._format = 2
     di._start_address = pefile.imageNtHeaders.header.OptionalHeader.ImageBase
@@ -125,7 +130,12 @@ def read_macho(filename, resolve_arch, friendly_filename):
         debug_pubtypes_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubn?
         debug_pubnames_sec = data.get('__debug_pubtypes'), #__debug_gnu_pubt?
         debug_addr_sec = data.get('__debug_addr'),
-        debug_str_offsets_sec = data.get('__debug_str_offsets')
+        debug_str_offsets_sec = data.get('__debug_str_offsets'),
+        debug_line_str_sec = data.get('__debug_line_str_name'),
+        debug_loclists_sec = data.get('__debug_loclists_sec_name'),
+        debug_rnglists_sec = data.get('__debug_rnglists_sec_name'),
+        debug_sup_sec = data.get('__debug_sup_name'),
+        gnu_debugaltlink_sec = data.get('__gnu_debugaltlink_name')
     )
     di._format = 1
     di._fat_arch = fat_arch

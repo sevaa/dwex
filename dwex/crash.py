@@ -27,10 +27,12 @@ def get_crash_die(locals):
     else:
         return False
 
-def get_crash_die_context(locals):
+def get_crash_die_context(locals, ctxt = None):
     s = ''
     try:
         crash_die = get_crash_die(locals)
+        if not crash_die and ctxt:
+            crash_die = get_crash_die(ctxt)
         if crash_die:
             top = crash_die.cu.get_top_DIE()
             if top:
@@ -42,7 +44,7 @@ def get_crash_die_context(locals):
         pass
     return s
 
-def make_exc_report(exc, tb, version):
+def make_exc_report(exc, tb, version, ctxt=None):
     while tb.tb_next:
         tb = tb.tb_next
     ss = traceback.extract_tb(tb)
@@ -54,7 +56,7 @@ def make_exc_report(exc, tb, version):
     report += "DWEX " + '.'.join(str(v) for v in version) + "\n"
     report += "Python " + sys.version + "\n"
     report +=  platform.platform() + "\n"
-    report += get_crash_die_context(locals)
+    report += get_crash_die_context(locals, ctxt=ctxt)
     report += "".join(traceback.format_exception_only(type(exc), exc)) + "\n"
 
     report += "PyStack:\n"
@@ -62,11 +64,15 @@ def make_exc_report(exc, tb, version):
     report += "".join(stacklines[::-1]) + "\n"
 
     report += "PyLocals:\n" + ''.join(k + ": " + str(locals[k]) + "\n" for k in locals).replace("\n\n","\n")
+
+    if ctxt:
+        report += "\nPyContext:\n" + ''.join(k + ": " + str(ctxt[k]) + "\n" for k in ctxt).replace("\n\n","\n")
+
     return report
 
-def report_crash(exc, tb, version):
+def report_crash(exc, tb, version, ctxt=None):
     try:
-        submit_report('[crash][python][dwex][pyexception]', make_exc_report(exc, tb, version))
+        submit_report('[crash][python][dwex][pyexception]', make_exc_report(exc, tb, version, ctxt=ctxt))
     except Exception:
         pass
 

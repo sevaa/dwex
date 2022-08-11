@@ -198,7 +198,11 @@ class DWARFTreeModel(QAbstractItemModel):
 
         # Abusing the structure of the per-CU DIE cache of pyelftools, it's the same in DWWARFv1
         i = bisect_left(target_cu._diemap, target_offset)
+        if target_cu._diemap[i] != target_offset:
+            return None
         target_die = target_cu._dielist[i]
+        if target_die.is_null():
+            return None
         return self.index_for_die(target_die)
 
     # Takes a die that might not have an _i
@@ -257,10 +261,10 @@ class DWARFTreeModel(QAbstractItemModel):
         return False
     
     def find_offset(self, offset):
-        cu = next(td.cu
+        cu = next((td.cu
             for td
             in self.top_dies
-            if 0 <= offset-td.cu.cu_die_offset < td.cu.header.unit_length)
+            if 0 <= offset-td.cu.cu_die_offset < td.cu.header.unit_length), False)
         if not cu:
             return None
         # On an off chance it's already parsed and the offset is precise

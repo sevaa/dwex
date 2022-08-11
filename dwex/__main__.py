@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (2, 17)
+version = (2, 20)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -284,7 +284,8 @@ class TheWindow(QMainWindow):
         navitem = self.die_model.ref_target(index)  # Retrieve the ref target from the DIE model...
         if navitem:
             target_tree_index = self.tree_model.index_for_navitem(navitem) # ...and feed it to the tree model.
-            self.the_tree.setCurrentIndex(target_tree_index) # Calls on_tree_selection internally
+            if target_tree_index:
+                self.the_tree.setCurrentIndex(target_tree_index) # Calls on_tree_selection internally
         self.end_wait()
 
     # Called for double-click on a reference type attribute, and via the menu
