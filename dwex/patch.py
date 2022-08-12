@@ -1,14 +1,5 @@
 import elftools.dwarf.structs
-import elftools.dwarf.die
-import elftools.dwarf.compileunit
-from elftools.construct import Struct, Enum, If, Switch
-from elftools.dwarf.enums import *
-from elftools.common.construct_utils import RepeatUntilExcluding
-from elftools.common.utils import struct_parse
-from elftools.dwarf.die import AttributeValue
-from elftools.construct.adapters import ExprAdapter
 from elftools.construct.macros import Array
-
 
 # Fixes to pyelftools that are not in the released version yet
 # Not sure about form_indirect, no binaries.
