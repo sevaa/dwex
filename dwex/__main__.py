@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (2, 20)
+version = (2, 21)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -562,7 +562,7 @@ class TheApp(QApplication):
         QApplication.__init__(self, [])
 
     def notify(self, o, evt):
-        if evt.type() == QEvent.Type.MouseButtonPress and isinstance(o, QWindow):
+        if evt.type() == QEvent.Type.MouseButtonPress and isinstance(o, QWindow) and hasattr(evt, "button"):
             b = evt.button()
             if b == Qt.MouseButton.BackButton:
                 self.win.on_nav(1)
