@@ -1,7 +1,7 @@
 from bisect import bisect_left, bisect_right
 from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex
 from PyQt6.QtGui import QFont, QFontInfo, QBrush
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QMessageBox
 
 # Supports both / and \ - current system separator might not match the system the file came from
 # so os.path.basename won't do
@@ -48,13 +48,20 @@ def decorate_die(die, i):
 def load_children(parent_die, sort):
     # Load and cache child DIEs in the parent DIE, if necessary
     # Assumes the check if the DIE has children has been already performed
-    if '_children' not in dir(parent_die) or parent_die._children is None:
+    if not hasattr(parent_die, "_children") or parent_die._children is None:
         # TODO: wait cursor here. It may cause disk I/O
-        parent_die._children = [decorate_die(die, i) for (i, die) in enumerate(parent_die.iter_children())]    
-        if sort:
-            parent_die._children.sort(key = die_sort_key)
-            for (i, die) in enumerate(parent_die._children):
-                die._i = i
+        try:
+            parent_die._children = [decorate_die(die, i) for (i, die) in enumerate(parent_die.iter_children())]    
+            if sort:
+                parent_die._children.sort(key = die_sort_key)
+                for (i, die) in enumerate(parent_die._children):
+                    die._i = i
+        except KeyError as ke:
+            # Catching #1516
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer",
+                "This executable file is corrupt or incompatible with the current version of DWARF Explorer. Please consider creating a new issue at https://github.com/sevaa/dwex/, and share this file with the tech support.",
+                QMessageBox.StandardButton.Ok, QApplication.instance().win).show()
+            parent_die._children = []
 
 class DWARFTreeModel(QAbstractItemModel):
     def __init__(self, di, prefix, sortcus, sortdies):

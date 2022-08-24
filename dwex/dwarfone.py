@@ -12,7 +12,7 @@ from elftools.construct import CString
 from elftools.dwarf.lineprogram import LineProgramEntry, LineState
 from elftools.dwarf.dwarf_expr import DWARFExprOp
 
-LineTableHeader = namedtuple('LineTableHeader', 'file_entry')
+LineTableHeader = namedtuple('LineTableHeader', 'version file_entry')
 CUv1Header = namedtuple('CUv1Header', 'version unit_length debug_abbrev_offset address_size')
 
 TAG_reverse = dict((v, k) for k, v in ENUM_DW_TAG.items())
@@ -172,7 +172,7 @@ class LineTableV1(object):
         self.len = len
         self.pc = pc
         self._decoded_entries = None
-        self.header = LineTableHeader((None))
+        self.header = LineTableHeader(1, (None))
 
     def get_entries(self):
         if self._decoded_entries is None:
@@ -222,7 +222,7 @@ class DWARFExprParserV1(object):
             else:
                 args = []
 
-            parsed.append(DWARFExprOp(op=op, op_name=op_name, args=args))
+            parsed.append(DWARFExprOp(op=op, op_name=op_name, args=args, offset=stm.tell()))
 
         return parsed
 
