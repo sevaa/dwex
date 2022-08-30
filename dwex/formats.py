@@ -177,7 +177,8 @@ def read_dwarf(filename, resolve_arch):
                     di._format = 0
                     di._start_address = start_address
                 return di
-            elif struct.unpack('>I', signature)[0] in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe):
+            elif signature in (sig.to_bytes(4, "big") for sig in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe)):
+                # Java .class files also have CAFEBABE, but the Mach-O parser exceptions on those.
                 # Mach-O fat binary, or 32/64-bit Mach-O in big/little-endian format
                 return read_macho(filename, resolve_arch, filename)
         finally:
