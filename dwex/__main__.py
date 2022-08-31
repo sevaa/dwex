@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (2, 22)
+version = (2, 23)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -487,16 +487,18 @@ class TheWindow(QMainWindow):
         self.tree_model.highlight(None)
 
     def on_cuproperties(self):
-        cu = self.the_tree.currentIndex().internalPointer().cu
-        ver = cu['version']
-        if ver > 1:
-            props = (ver, cu['unit_length'], cu['debug_abbrev_offset'], cu['address_size'])
-            s = "DWARF version:\t%d\nLength:\t%d\nAbbrev table offset: 0x%x\nAddress size:\t%d" % props
-        else:
-            props = (ver, cu['address_size'])
-            s = "DWARF version:\t%d\nAddress size:\t%d" % props
-        t = "CU at 0x%x" % cu.cu_offset
-        QMessageBox(QMessageBox.Icon.Information, t, s, QMessageBox.StandardButton.Ok, self).show()
+        die = self.the_tree.currentIndex().internalPointer()
+        if die:
+            cu = die.cu
+            ver = cu['version']
+            if ver > 1:
+                props = (ver, cu['unit_length'], cu['debug_abbrev_offset'], cu['address_size'])
+                s = "DWARF version:\t%d\nLength:\t%d\nAbbrev table offset: 0x%x\nAddress size:\t%d" % props
+            else:
+                props = (ver, cu['address_size'])
+                s = "DWARF version:\t%d\nAddress size:\t%d" % props
+            t = "CU at 0x%x" % cu.cu_offset
+            QMessageBox(QMessageBox.Icon.Information, t, s, QMessageBox.StandardButton.Ok, self).show()
 
     def on_copy(self, v):
         cb = QApplication.clipboard()
