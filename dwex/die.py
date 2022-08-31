@@ -292,14 +292,17 @@ class DIETableModel(QAbstractTableModel):
                 cu = self.die.cu
                 if cu._lineprogram is None:
                     cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(cu)
-                if cu._lineprogram.header.version >= 5:
-                    filename = cu._lineprogram.header.file_entry[val].name.decode('utf-8', errors='ignore') if cu._lineprogram and val >= 0 and val < len(cu._lineprogram.header.file_entry) else '(N/A)'
-                else:
-                    if val == 0:
-                        filename = safe_DIE_name(cu.get_top_DIE(), 'N/A')
+                if cu._lineprogram:
+                    if cu._lineprogram.header.version >= 5:
+                        filename = cu._lineprogram.header.file_entry[val].name.decode('utf-8', errors='ignore') if cu._lineprogram and val >= 0 and val < len(cu._lineprogram.header.file_entry) else '(N/A)'
                     else:
-                        filename = cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore') if cu._lineprogram and val > 0 and val <= len(cu._lineprogram.header.file_entry) else '(N/A)'
-                return "%d: %s" % (val,  filename)
+                        if val == 0:
+                            filename = safe_DIE_name(cu.get_top_DIE(), 'N/A')
+                        else:
+                            filename = cu._lineprogram.header.file_entry[val-1].name.decode('utf-8', errors='ignore') if cu._lineprogram and val > 0 and val <= len(cu._lineprogram.header.file_entry) else '(N/A)'
+                    return "%d: %s" % (val,  filename)
+                else: # Lineprogram not found in the top DIE - how's that possible?
+                    return "%d (no lineprogram found)" % (val,)
             elif key == 'DW_AT_stmt_list':
                 return 'LNP at 0x%x' % val
             elif key in ('DW_AT_upper_bound', 'DW_AT_lower_bound') and is_block(form):
