@@ -144,7 +144,7 @@ def read_macho(filename, resolve_arch, friendly_filename):
     return di
 
 # UI agnostic - resolve_arch might be interactive
-# Returns DWARFInfo
+# Returns slightly augmented DWARFInfo
 # Or None if not a DWARF containing file (or unrecognized)
 # Or False if user has cancelled
 # Or throws an exception
@@ -177,8 +177,10 @@ def read_dwarf(filename, resolve_arch):
                     di._format = 0
                     di._start_address = start_address
                 return di
-            elif signature in (sig.to_bytes(4, "big") for sig in (0xcafebabe, 0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe)):
-                # Java .class files also have CAFEBABE, but the Mach-O parser exceptions on those.
+            elif signature in (b'\xCA\xFE\xBA\xBE', b'\xFE\xED\xFA\xCE', b'\xFE\xED\xFA\xCF', b'\xCE\xFA\xED\xFE', b'\xCF\xFA\xED\xFE'):
+                if signature == b'\xCA\xFE\xBA\xBE' and int.from_bytes(file.read(4), 'big') >= 0x20:
+                    # Java .class files also have CAFEBABE, check the fat binary arch count
+                    return None
                 # Mach-O fat binary, or 32/64-bit Mach-O in big/little-endian format
                 return read_macho(filename, resolve_arch, filename)
         finally:
