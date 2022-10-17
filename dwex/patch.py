@@ -2,6 +2,7 @@ import elftools.dwarf.structs
 from elftools.construct.macros import Array
 import elftools.dwarf.locationlists
 from elftools.common.exceptions import DWARFError
+import elftools.dwarf.enums
 
 # Fixes to pyelftools that are not in the released version yet
 # Not sure about form_indirect, no binaries.
@@ -21,3 +22,6 @@ def monkeypatch():
         section = self._loclists if die.cu.header.version >= 5 else self._loc
         return section.get_location_list_at_offset(offset, die)
     elftools.dwarf.locationlists.LocationListsPair.get_location_list_at_offset = get_location_list_at_offset_ex
+    elftools.dwarf.enums.ENUM_DW_AT["DW_AT_GNU_dwo_name"] = 0x2130
+    elftools.dwarf.enums.ENUM_DW_AT["DW_AT_GNU_ranges_base"] = 0x2132
+    elftools.dwarf.enums.ENUM_DW_AT["DW_AT_GNU_addr_base"] = 0x2133
