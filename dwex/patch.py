@@ -1,7 +1,7 @@
 import elftools.dwarf.structs
 from elftools.construct.macros import Array
 import elftools.dwarf.locationlists
-from elftools.dwarf.dwarf_util import DWARFError
+from elftools.common.exceptions import DWARFError
 
 # Fixes to pyelftools that are not in the released version yet
 # Not sure about form_indirect, no binaries.
