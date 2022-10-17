@@ -133,7 +133,7 @@ class DWARFTreeModel(QAbstractItemModel):
                 return s
         elif role == Qt.ItemDataRole.ToolTipRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
-                return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
+                return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else None
         elif role == Qt.ItemDataRole.ForegroundRole and self.highlight_condition and self.highlight_condition(die):
             return self.blue_brush
         elif role == Qt.ItemDataRole.FontRole and self.highlight_condition and self.highlight_condition(die):
