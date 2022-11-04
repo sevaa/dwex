@@ -56,6 +56,9 @@ def make_exc_report(exc, tb, version, ctxt=None):
     report += "DWEX " + '.'.join(str(v) for v in version) + "\n"
     report += "Python " + sys.version + "\n"
     report +=  platform.platform() + "\n"
+    from .cookie import cookie
+    if cookie:
+        report += "Cookie: " + cookie + "\n"
     report += get_crash_die_context(locals, ctxt=ctxt)
     report += "".join(traceback.format_exception_only(type(exc), exc)) + "\n"
 
