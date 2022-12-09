@@ -1,6 +1,6 @@
 from subprocess import run
 from setuptools import setup
-from setuptools.command.install import install
+from setuptools.command.install import install, uninstall
 import platform, sys, os
 from os import path, environ
 
@@ -23,6 +23,15 @@ def create_shortcut():
     except:
         pass
 
+def safe_remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+def delete_shortcut(root):
+    safe_remove(path.join(environ[root], "Microsoft\Windows\Start Menu\Programs\DWARF Explorer.lnk"))
+
 #--------------------------------------    
 
 def register_desktop_app():
@@ -37,6 +46,18 @@ def register_desktop_app():
     except:
         pass
 
+def register_desktop_app():
+    try:
+        import base64
+        with open('/usr/share/applications/dwex.desktop', 'w') as f:
+            f.write("[Desktop Entry]\nVersion=1.1\nType=Application\nName=DWARF Explorer\nComment=Debug information visualizer\nExec=dwex\nTerminal=false\nIcon=dwex\nCategories=Development;Debugger;\n")
+        with open('/usr/share/icons/hicolor/48x48/apps/dwex.png', 'wb') as f:
+            f.write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwBAMAAAClLOS0AAAAKnRFWHRDcmVhdGlvbiBUaW1lANHhIDYg7e7/IDIwMjEgMTM6MDg6NDcgLTA1MDBuo0qzAAAAB3RJTUUH5QsGEQ8VL0d/PwAAAAlwSFlzAAALEgAACxIB0t1+/AAAAARnQU1BAACxjwv8YQUAAAAGUExURf///wAAAFXC034AAACkSURBVHjavdNREoUgCAXQyw5g/5sNxEoEpvc+yim0OcUoJvBRE2sAaeQRAkgB0NdBbJcPfgMNbglI8w9AAu1tDjXQv8DEUgH1gAwaDKQEu3kDWzBVIBNCReaG+Fc7oIAvGt1/g61cnsGnaM9nn0B89Rloq9UF4JDJd9VHsSILSIR7jiHTAm0qbiHNau7StlEXlCU5T0ALS65Zdh5lp+VwtvByOwCIiA5ALXz03AAAAABJRU5ErkJggg=="))
+        import subprocess
+        subprocess.call('update-desktop-database')
+    except:
+        pass    
+
 #--------------------------------------
 
 class my_install(install):
@@ -46,6 +67,21 @@ class my_install(install):
             create_shortcut()
         elif platform.system() == 'Linux':
             register_desktop_app()
+
+class my_uninstall(uninstall):
+    def run(self):
+        uninstall.run(self)
+        if platform.system() == 'Windows':
+            delete_shortcut('ALLUSERSPROFILE')
+            delete_shortcut('APPDATA')
+        elif platform.system() == 'Linux':
+            safe_remove('/usr/share/applications/dwex.desktop')
+            safe_remove('/usr/share/icons/hicolor/48x48/apps/dwex.png')
+            try:
+                import subprocess
+                subprocess.call('update-desktop-database')
+            except:
+                pass
 
 # Pull the long desc from the readme
 try:
@@ -60,7 +96,7 @@ setup(
     packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
-    cmdclass={'install': my_install},
+    cmdclass={'install': my_install, 'uninstall': my_uninstall},
     keywords = ['dwarf', 'debug', 'debugging', 'symbols', 'viewer', 'view', 'browser', 'browse', 'tree'],
     license="BSD",
     author="Seva Alekseyev",
@@ -86,6 +122,7 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: Implementation :: CPython",
         "Topic :: Software Development :: Debuggers"
     ]
