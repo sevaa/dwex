@@ -1,4 +1,3 @@
-from subprocess import run
 from setuptools import setup
 from setuptools.command.install import install
 import platform, sys, os, site
@@ -15,11 +14,15 @@ def create_shortcut_under(root, exepath):
     s += "$s.TargetPath='" + exepath + "';$s.Save()"
     return subprocess.call(['powershell', s], stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL) == 0
 
-def create_shortcut():
+def create_shortcut(inst):
     try:
-        exepath = path.join(path.dirname(sys.executable), "Scripts", "dwex.exe")
-        if not path.exists(exepath):
-            exepath = path.join(path.dirname(site.getusersitepackages()), "Scripts", "dwex.exe")
+        if hasattr(inst, "install_scripts"):
+            exepath = path.join(inst.install_scripts, "dwex.exe")
+        else:
+            exepath = path.join(path.dirname(sys.executable), "Scripts", "dwex.exe")
+            if not path.exists(exepath):
+                exepath = path.join(path.dirname(site.getusersitepackages()), "Scripts", "dwex.exe")
+
         if not create_shortcut_under('ALLUSERSPROFILE', exepath):
             create_shortcut_under('APPDATA', exepath)
     except:
@@ -38,12 +41,11 @@ def delete_shortcut(root):
 
 def register_desktop_app():
     try:
-        import base64
+        import base64, subprocess
         with open('/usr/share/applications/dwex.desktop', 'w') as f:
             f.write("[Desktop Entry]\nVersion=1.1\nType=Application\nName=DWARF Explorer\nComment=Debug information visualizer\nExec=dwex\nTerminal=false\nIcon=dwex\nCategories=Development;Debugger;\n")
         with open('/usr/share/icons/hicolor/48x48/apps/dwex.png', 'wb') as f:
             f.write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwBAMAAAClLOS0AAAAKnRFWHRDcmVhdGlvbiBUaW1lANHhIDYg7e7/IDIwMjEgMTM6MDg6NDcgLTA1MDBuo0qzAAAAB3RJTUUH5QsGEQ8VL0d/PwAAAAlwSFlzAAALEgAACxIB0t1+/AAAAARnQU1BAACxjwv8YQUAAAAGUExURf///wAAAFXC034AAACkSURBVHjavdNREoUgCAXQyw5g/5sNxEoEpvc+yim0OcUoJvBRE2sAaeQRAkgB0NdBbJcPfgMNbglI8w9AAu1tDjXQv8DEUgH1gAwaDKQEu3kDWzBVIBNCReaG+Fc7oIAvGt1/g61cnsGnaM9nn0B89Rloq9UF4JDJd9VHsSILSIR7jiHTAm0qbiHNau7StlEXlCU5T0ALS65Zdh5lp+VwtvByOwCIiA5ALXz03AAAAABJRU5ErkJggg=="))
-        import subprocess
         subprocess.call('update-desktop-database')
     except:
         pass
@@ -54,7 +56,7 @@ class my_install(install):
     def run(self):
         install.run(self)
         if platform.system() == 'Windows':
-            create_shortcut()
+            create_shortcut(self)
         elif platform.system() == 'Linux':
             register_desktop_app()
 
