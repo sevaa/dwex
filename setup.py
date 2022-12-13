@@ -16,12 +16,9 @@ def create_shortcut_under(root, exepath):
 
 def create_shortcut(inst):
     try:
-        if hasattr(inst, "install_scripts"):
-            exepath = path.join(inst.install_scripts, "dwex.exe")
-        else:
-            exepath = path.join(path.dirname(sys.executable), "Scripts", "dwex.exe")
-            if not path.exists(exepath):
-                exepath = path.join(path.dirname(site.getusersitepackages()), "Scripts", "dwex.exe")
+        exepath = path.join(path.dirname(sys.executable), "Scripts", "dwex.exe")
+        if not path.exists(exepath):
+            exepath = path.join(path.dirname(site.getusersitepackages()), "Scripts", "dwex.exe")
 
         if not create_shortcut_under('ALLUSERSPROFILE', exepath):
             create_shortcut_under('APPDATA', exepath)
@@ -60,7 +57,7 @@ except:
 
 setup(
     name='dwex',
-    version='2.26',  # Sync with version in __main__
+    version='2.27',  # Sync with version in __main__
     packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
