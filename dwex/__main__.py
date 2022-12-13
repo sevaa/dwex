@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (2, 25)
+version = (2, 26)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
