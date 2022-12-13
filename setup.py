@@ -28,15 +28,6 @@ def create_shortcut(inst):
     except:
         pass
 
-def safe_remove(path):
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-
-def delete_shortcut(root):
-    safe_remove(path.join(environ[root], "Microsoft\Windows\Start Menu\Programs\DWARF Explorer.lnk"))
-
 #--------------------------------------    
 
 def register_desktop_app():
