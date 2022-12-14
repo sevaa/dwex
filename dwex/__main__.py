@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (2, 27)
+version = (2, 30)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -246,6 +246,11 @@ class TheWindow(QMainWindow):
             self.details_table.setModel(details_model)
             if details_model is not None:
                 self.details_table.resizeColumnsToContents()
+                self.details_warning.setVisible(details_model.warning is not None)
+                if details_model.warning is not None:
+                    self.details_warning.setText(details_model.warning)
+            else:
+                self.details_warning.setVisible(False)
             self.followref_menuitem.setEnabled(self.die_model.ref_target(index) is not None)
             self.copy_menuitem.setEnabled(True)
             self.copyline_menuitem.setEnabled(True)

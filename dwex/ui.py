@@ -122,9 +122,18 @@ def setup_ui(win):
     die_table.doubleClicked.connect(win.on_attribute_dclick)
     rpane.addWidget(die_table)
 
+    
+    rbpane = QVBoxLayout()
+    rbpane.setContentsMargins(0, 0, 0, 0)
+    details_warning = win.details_warning = QLabel()
+    details_warning.setVisible(False)
+    rbpane.addWidget(details_warning)
     details_table = win.details_table = QTableView()
     details_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-    rpane.addWidget(details_table)
+    rbpane.addWidget(details_table)
+    rbp = QWidget()
+    rbp.setLayout(rbpane)
+    rpane.addWidget(rbp)
     # All the resizing goes into the bottom pane
     rpane.setStretchFactor(0, 0)
     rpane.setStretchFactor(1, 1)

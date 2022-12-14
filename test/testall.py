@@ -81,7 +81,7 @@ def test_tree_for(path, on_di):
     for f in os.listdir(path):
         full_path = os.path.join(path, f)
         # See what can be done about JiPad ones
-        if f.endswith('.dSYM') or f.endswith('.o') or (f.endswith('.so') and not f.endswith('libJiPadLib.so')):
+        if f.endswith('.dSYM') or f.endswith('.o') or f.endswith('.elf') or (f.endswith('.so') and not f.endswith('libJiPadLib.so')):
             test_file_for(full_path, on_di)
         elif os.path.isdir(full_path):
             test_tree_for(full_path, on_di)        

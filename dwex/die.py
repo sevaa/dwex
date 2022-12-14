@@ -5,7 +5,7 @@ from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp, DW_OP_opcode2name
 from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _REG_NAMES_x86, _REG_NAMES_x64
 from elftools.common.exceptions import ELFParseError
-from elftools.dwarf.ranges import BaseAddressEntry as RangeBaseAddressEntry
+from elftools.dwarf.ranges import BaseAddressEntry as RangeBaseAddressEntry, RangeEntry
 from .dwarfone import DWARFExprParserV1
 
 MAX_INLINE_BYTEARRAY_LEN = 32
@@ -427,18 +427,29 @@ class DIETableModel(QAbstractTableModel):
                 if not di._ranges: # Absent in the DWARF file
                     return None
                 ranges = di._ranges.get_range_list_at_offset(attr.value, cu = self.die.cu)
-                # TODO: handle base addresses. Never seen those so far...
-                try:
-                    top_die = self.die.cu.get_top_DIE() 
-                    cu_base = get_cu_base(self.die)
-                    return GenericTableModel(("Start offset", "End offset"),
-                        ((hex(cu_base + r.begin_offset), hex(cu_base + r.end_offset)) for r in ranges))
-                except NoBaseError as exc:
-                    from .__main__ import version
-                    from .crash import report_crash
-                    tb = exc.__traceback__
-                    report_crash(exc, tb, version)
-                    return None
+                top_die = self.die.cu.get_top_DIE() 
+                warn = None
+                lines = []                
+                if len(ranges):
+                    cu_base = 0
+                    # Do we need the base address? We might not.
+                    has_relative_entries = next((r for r in ranges if isinstance(r, RangeEntry) and not r.is_absolute), False)
+                    if has_relative_entries and not isinstance(ranges[0], RangeBaseAddressEntry):
+                        try:
+                            cu_base = get_cu_base(self.die)
+                        except NoBaseError:
+                            warn = "Base address not found, assuming 0"
+
+                    # TODO: low level view?
+                    for r in ranges:
+                        if isinstance(r, RangeEntry):
+                            base = 0 if r.is_absolute else cu_base
+                            lines.append((hex(base + r.begin_offset), hex(base + r.end_offset)))
+                        else:
+                            cu_base = r.base_address
+                else:
+                    warn = "Empty range list"
+                return GenericTableModel(("Start offset", "End offset"), lines, warn)
             elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
                 # Expression is a list of ints
                 ll = self.parse_location(attr)
@@ -532,10 +543,11 @@ class DIETableModel(QAbstractTableModel):
             return None
 
 class GenericTableModel(QAbstractTableModel):
-    def __init__(self, headers, values):
+    def __init__(self, headers, values, warning = None):
         QAbstractTableModel.__init__(self)
         self.headers = headers
         self.values = tuple(values)
+        self.warning = warning
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
