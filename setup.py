@@ -8,11 +8,23 @@ from os import path, environ
 #------------------------------------
 
 def create_shortcut_under(root, exepath):
-    import subprocess
     profile = environ[root]
-    s = "$s=(New-Object -COM WScript.Shell).CreateShortcut('" + profile + "\\Microsoft\\Windows\\Start Menu\\Programs\\DWARF Explorer.lnk');"
-    s += "$s.TargetPath='" + exepath + "';$s.Save()"
-    return subprocess.call(['powershell', s], stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL) == 0
+    link_path = path.join(profile, "Microsoft", "Windows", "Start Menu", "Programs", "DWARF Explorer.lnk")
+    try:
+        from win32com.client import Dispatch
+        from pywintypes import com_error
+        try:
+            sh = Dispatch('WScript.Shell')
+            link = sh.CreateShortcut(link_path)
+            link.TargetPath = exepath
+            link.Save()
+            return True
+        except com_error:
+            return False
+    except ImportError:
+        import subprocess
+        s = "$s=(New-Object -COM WScript.Shell).CreateShortcut('" + link_path + "');$s.TargetPath='" + exepath + "';$s.Save()"
+        return subprocess.call(['powershell', s], stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL) == 0
 
 def create_shortcut(inst):
     try:
