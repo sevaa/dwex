@@ -1,5 +1,5 @@
 import io
-from os import path
+from os import path, listdir
 from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
@@ -188,17 +188,19 @@ def read_dwarf(filename, resolve_arch):
                 file.close()                
     elif path.isdir(filename):
         # Is it a dSYM bundle?
-        nameparts = path.basename(filename).split('.') # Typical bundle name: appname.app.dSYM
-        if len(nameparts) > 2 and nameparts[-2] in ('app', 'framework') and nameparts[-1] == 'dSYM':
-            dsym_file = path.join(filename, 'Contents', 'Resources', 'DWARF', nameparts[0])
-            if path.exists(dsym_file):
-                return read_macho(dsym_file, resolve_arch, filename)
+        nameparts = path.basename(filename).split('.') 
+        if nameparts[-1] == 'dSYM' and path.exists(path.join(filename, 'Contents', 'Resources', 'DWARF')):
+            files = listdir(path.join(filename, 'Contents', 'Resources', 'DWARF'))
+            if len(files) > 0:
+                # When are there multiple DWARF files in a dSYM bundle?
+                # TODO: let the user choose?
+                dsym_file_path = path.join(filename, 'Contents', 'Resources', 'DWARF', files[0])
+                return read_macho(dsym_file_path, resolve_arch, filename)
         # Is it an app bundle? appname.app
         if len(nameparts) > 1 and nameparts[-1] in ('app', 'framework'):
-            app_file = path.join(filename, nameparts[0])
+            app_file = path.join(filename, '.'.join(nameparts[0:-1]))
             if path.exists(app_file):
                 return read_macho(app_file, resolve_arch, filename)
-
 
         # Any other bundle formats we should be aware of?
     return None

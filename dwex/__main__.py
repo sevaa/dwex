@@ -8,7 +8,7 @@ from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 
-version = (2, 30)
+version = (2, 31)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -145,8 +145,11 @@ class TheWindow(QMainWindow):
     def open_file_interactive(self, filename, arch = None):
         try:
             if self.open_file(filename, arch) is None:
-                QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer",
-                    "The file contains no DWARF information, or it is in an unsupported format.",
+                if os.path.isdir(filename):
+                    s = "The directory (bundle) could not be resolved to a DWARF containing file, or the file contains no DWARF information. Try navigating inside and open the executable file directly."
+                else:
+                    s = "The file contains no DWARF information, or it is in an unsupported format."
+                QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", s,
                     QMessageBox.StandardButton.Ok, self).show()
         except Exception as exc:
             QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",

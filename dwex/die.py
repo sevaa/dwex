@@ -334,7 +334,7 @@ class DIETableModel(QAbstractTableModel):
             from .crash import report_crash
             tb = exc.__traceback__
             report_crash(exc, tb, version, ctxt = {'attr': attr, 'die':die, 'cu_header':header, 'dwarf_version':dwarf_version})
-            return "(parse error)"
+            return "(parse error - please report at github.com/sevaa/dwex)"
 
     def format_form(self, form):
         return form if self.prefix or not str(form).startswith('DW_FORM_') else form[8:]

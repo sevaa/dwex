@@ -9,13 +9,13 @@ from os import path, environ
 
 def create_shortcut_under(root, exepath):
     profile = environ[root]
-    link_path = path.join(profile, "Microsoft", "Windows", "Start Menu", "Programs", "DWARF Explorer.lnk")
+    linkpath = path.join(profile, "Microsoft", "Windows", "Start Menu", "Programs", "DWARF Explorer.lnk")
     try:
         from win32com.client import Dispatch
         from pywintypes import com_error
         try:
             sh = Dispatch('WScript.Shell')
-            link = sh.CreateShortcut(link_path)
+            link = sh.CreateShortcut(linkpath)
             link.TargetPath = exepath
             link.Save()
             return True
@@ -23,7 +23,7 @@ def create_shortcut_under(root, exepath):
             return False
     except ImportError:
         import subprocess
-        s = "$s=(New-Object -COM WScript.Shell).CreateShortcut('" + link_path + "');$s.TargetPath='" + exepath + "';$s.Save()"
+        s = "$s=(New-Object -COM WScript.Shell).CreateShortcut('" + linkpath + "');$s.TargetPath='" + exepath + "';$s.Save()"
         return subprocess.call(['powershell', s], stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL) == 0
 
 def create_shortcut(inst):
@@ -69,7 +69,7 @@ except:
 
 setup(
     name='dwex',
-    version='2.30',  # Sync with version in __main__
+    version='2.31',  # Sync with version in __main__
     packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
