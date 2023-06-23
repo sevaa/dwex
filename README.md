@@ -29,11 +29,12 @@ If necessary, install [the latest Python](https://www.python.org/downloads/) in 
 
 On Windows, if `pip` and/or Python is not in PATH, use `c:\Python39\python -m pip install dwex`, substituting your own path to Python 3.
 
-Alternatively, get the dwex source tree from Github, and run `python setup.py install` in the root folder of the package. In this scenario, you'd have to install the dependencies separately - with `pip install pyqt5 filebytes pyelftools`.
+Alternatively, get the dwex source tree from Github, and run `python setup.py install` in the root folder of the package. In this scenario, you'd have to install the dependencies separately - with `pip install pyqt6 filebytes pyelftools`.
 
 On Linux, sometimes the `python` command defaults to Python 2 while Python 3 is installed side by side. In this case, use `python3` and `pip3`, respectively. Use `python -V` to check.
 
-Once you install it, there will be a `dwex` command. On Windows, there will be a `dwex.exe` in the `Scripts` folder under the Python folder, and also a start menu item "DWARF Explorer".
+Once you install it, there will be a `dwex` command. On Windows, there will be a `dwex.exe` in the `Scripts` folder under the Python folder, and also a start menu item "DWARF Explorer". On Linux, there
+will be a "DWARF Explorer" in the app menu (tested under GNOME).
 
 In January 2022, the utility was migrated from PyQt5 to PyQt6, and the major version was bumped to 2. That cut off support for Python 3.5. The 1.x version that is compatible with Python 3.5 is still out in the repository, and pip should resolve it. 
 If it does not, install by running `pip install "dwex<2"`.
