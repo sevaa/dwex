@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
 from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 from .die import DIETableModel, ip_in_range
-from .formats import read_dwarf
+from .formats import read_dwarf, get_debug_sections
 from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
@@ -17,6 +17,12 @@ version = (2, 31)
 # The one and only main window class
 # Pretty much DWARF unaware, all the DWARF visualization logic is in tree.py and die.py
 #-----------------------------------------------------------------
+
+# "Opened, could not parse"
+class DWARFParseError(Exception):
+    def __init__(self, exc, di):
+        Exception.__init__(self, "DWARF parsing error: " + format(exc))
+        self.dwarfinfo = di
 
 class TheWindow(QMainWindow):
     def __init__(self):
@@ -71,7 +77,7 @@ class TheWindow(QMainWindow):
     def resolve_arch(self, arches):
         r = QInputDialog.getItem(self, 'Mach-O Fat Binary', 'Choose an architecture:', arches, 0, False, Qt.WindowType.Dialog)
         return arches.index(r[0]) if r[1] else None
-
+    
     # Can throw an exception
     # Returns None if it doesn't seem to contain DWARF
     # False if the user cancelled
@@ -82,54 +88,60 @@ class TheWindow(QMainWindow):
             di = read_dwarf(filename, self.resolve_arch if arch is None else lambda arches: arches.index(arch))
             if not di: # Covers both False and None
                 return di
-
-            # Some cached top level stuff
-            # Notably, iter_CUs doesn't cache
-            di._ranges = None # Loaded on first use
-            def decorate_cu(cu, i):
-                cu._i = i
-                cu._lineprogram = None
-                cu._exprparser = None
-                return cu
-            di._unsorted_CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
-            if not len(di._unsorted_CUs):
-                return None # Weird, but saw it once - debug sections present, but no CUs
-            # For quick CU search by offset within the info section, regardless of sorting
-            di._CU_offsets = [cu.cu_offset for cu in di._unsorted_CUs]
-            di._CUs = list(di._unsorted_CUs)
-
-            if self.sortcus:
-                di._CUs.sort(key = cu_sort_key)
-                for (i, cu) in enumerate(di._CUs):
+            
+            # Some degree of graceful handling of wrong format
+            try:
+                # Some cached top level stuff
+                # Notably, iter_CUs doesn't cache
+                di._ranges = None # Loaded on first use
+                def decorate_cu(cu, i):
                     cu._i = i
-            di._locparser = None # Created on first use
+                    cu._lineprogram = None
+                    cu._exprparser = None
+                    return cu
+                di._unsorted_CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
+                if not len(di._unsorted_CUs):
+                    return None # Weird, but saw it once - debug sections present, but no CUs
+                # For quick CU search by offset within the info section, regardless of sorting
+                di._CU_offsets = [cu.cu_offset for cu in di._unsorted_CUs]
+                di._CUs = list(di._unsorted_CUs)
 
-            self.dwarfinfo = di
-            self.tree_model = DWARFTreeModel(di, self.prefix, self.sortcus, self.sortdies)
-            self.the_tree.setModel(self.tree_model)
-            self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
-            s = os.path.basename(filename)
-            if arch is not None:
-                s += ' (' + arch + ')'
-            self.setWindowTitle("DWARF Explorer - " + s)
-            self.back_menuitem.setEnabled(False)
-            self.forward_menuitem.setEnabled(False)
-            self.followref_menuitem.setEnabled(False)
-            self.highlightcode_menuitem.setEnabled(True)
-            self.highlightnothing_menuitem.setEnabled(True)
-            self.copy_menuitem.setEnabled(False)
-            self.copyline_menuitem.setEnabled(False)
-            self.copytable_menuitem.setEnabled(False)
-            self.findbycondition_menuitem.setEnabled(True)
-            self.find_menuitem.setEnabled(True)
-            self.findip_menuitem.setEnabled(True)
-            self.byoffset_menuitem.setEnabled(True)
-            self.on_highlight_nothing()
-            # Navigation stack - empty
-            self.navhistory = []
-            self.navpos = -1
-            self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
-            return True
+                if self.sortcus:
+                    di._CUs.sort(key = cu_sort_key)
+                    for (i, cu) in enumerate(di._CUs):
+                        cu._i = i
+                di._locparser = None # Created on first use
+
+                self.dwarfinfo = di
+                self.filename = filename
+                self.tree_model = DWARFTreeModel(di, self.prefix, self.sortcus, self.sortdies)
+                self.the_tree.setModel(self.tree_model)
+                self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
+                s = os.path.basename(filename)
+                if arch is not None:
+                    s += ' (' + arch + ')'
+                self.setWindowTitle("DWARF Explorer - " + s)
+                self.savesection_menuitem.setEnabled(True)
+                self.back_menuitem.setEnabled(False)
+                self.forward_menuitem.setEnabled(False)
+                self.followref_menuitem.setEnabled(False)
+                self.highlightcode_menuitem.setEnabled(True)
+                self.highlightnothing_menuitem.setEnabled(True)
+                self.copy_menuitem.setEnabled(False)
+                self.copyline_menuitem.setEnabled(False)
+                self.copytable_menuitem.setEnabled(False)
+                self.findbycondition_menuitem.setEnabled(True)
+                self.find_menuitem.setEnabled(True)
+                self.findip_menuitem.setEnabled(True)
+                self.byoffset_menuitem.setEnabled(True)
+                self.on_highlight_nothing()
+                # Navigation stack - empty
+                self.navhistory = []
+                self.navpos = -1
+                self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
+                return True
+            except AssertionError as ass: # Covers exeptions during parsing
+                raise DWARFParseError(ass, di)
         finally:
             self.end_wait()
 
@@ -151,10 +163,46 @@ class TheWindow(QMainWindow):
                     s = "The file contains no DWARF information, or it is in an unsupported format."
                 QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", s,
                     QMessageBox.StandardButton.Ok, self).show()
+        except DWARFParseError as dperr:
+            mb =  QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
+                "Error parsing the DWARF information in this file. Would you like to save the debug section contents for manual analysis?",
+                QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No, self)
+            mb.setEscapeButton(QMessageBox.StandardButton.No)
+            r = mb.exec()
+            if r == QMessageBox.StandardButton.Yes:
+                self.save_sections(filename, dperr.dwarfinfo)
         except Exception as exc:
             QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
                 "Error opening the file:\n\n" + format(exc),
                 QMessageBox.StandardButton.Ok, self).show()
+            
+    def save_sections(self, filename, di):
+        dir = QFileDialog.getExistingDirectory(self, "Choose a save location", os.path.dirname(filename))
+        if dir:
+            sections = get_debug_sections(di)
+            basename = os.path.basename(filename)
+            overwrite_all = False
+            for (name, section) in sections.items():
+                try:
+                    section_file = os.path.join(dir, basename + '.' + name)
+                    skip = False
+                    if os.path.exists(section_file) and not overwrite_all:
+                        mb = QMessageBox(QMessageBox.Icon.Question, "DWARF Explorer",
+                            "File %s exists, overwrite?" % section_file,
+                            QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.YesAll|QMessageBox.StandardButton.No|QMessageBox.StandardButton.Cancel, self)
+                        mb.setEscapeButton(QMessageBox.StandardButton.Cancel)
+                        r = mb.exec()
+                        if r == QMessageBox.StandardButton.Cancel:
+                            return
+                        elif r == QMessageBox.StandardButton.YesAll:
+                            overwrite_all = True
+                        elif r == QMessageBox.StandardButton.No:
+                            skip = True
+                    if not skip:
+                        with open(section_file, 'wb') as f:
+                            f.write(section.stream.getbuffer())
+                except:
+                    pass
 
     # TODO: list the extensions for the open file dialog?
     def on_open(self):
@@ -201,7 +249,29 @@ class TheWindow(QMainWindow):
             evt.accept()
 
     def dropEvent(self, evt):
-        self.open_file_interactive(os.path.normpath(evt.mimeData().urls()[0].toLocalFile()))               
+        self.open_file_interactive(os.path.normpath(evt.mimeData().urls()[0].toLocalFile()))
+
+    # Save sections as
+    def on_savesection(self):
+        di = self.dwarfinfo
+        # Maps display name to field name in DWARFInfo
+        sections = get_debug_sections(di)
+        
+        names = sections.keys()
+        r = QInputDialog.getItem(self, 'Save a Section', 'Choose a section:', names, 0, False, Qt.WindowType.Dialog)
+        if r[1]:
+            section_name = r[0]
+            r = QFileDialog.getSaveFileName(self, "Save a section", self.filename + '.' + section_name)
+            if r[0]:
+                try:
+                    section = sections[section_name]
+                    with open(r[0], 'wb') as f:
+                        # Assumes the section is a BytesIO - implementation dependent
+                        f.write(section.stream.getbuffer())
+                except Exception as exc:
+                    QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
+                        "Error saving the section data:\n\n" + format(exc),
+                        QMessageBox.StandardButton.Ok, self).show()
 
     #############################################################
     # Done with file stuff, now tree navigation

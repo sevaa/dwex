@@ -8,6 +8,9 @@ def setup_menu(win):
     open_menuitem = file_menu.addAction("Open...")
     open_menuitem.setShortcut(QKeySequence.StandardKey.Open)
     open_menuitem.triggered.connect(win.on_open)
+    win.savesection_menuitem = file_menu.addAction("Save a section as...")
+    win.savesection_menuitem.triggered.connect(win.on_savesection)
+    win.savesection_menuitem.setEnabled(False)
     win.mru_menu = file_menu.addMenu("Recent files")
     if len(win.mru):
         win.populate_mru_menu()

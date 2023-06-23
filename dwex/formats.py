@@ -204,3 +204,18 @@ def read_dwarf(filename, resolve_arch):
 
         # Any other bundle formats we should be aware of?
     return None
+
+def get_debug_sections(di):
+    section_names = {name: "debug_%s_sec" % name
+            for name in 
+            ('info', 'aranges', 'abbrev', 'frame',
+            'str', 'loc', 'ranges', 'line', 'addr',
+            'str_offsets', 'line_str', 'pubtypes',
+            'pubnames', 'loclists', 'rnglists', 'sup')}
+    section_names['eh_frame'] = 'eh_frame_sec'
+    section_names['gnu_debugaltlink'] = 'eh_frame_sec'
+
+    # Display name to section object
+    return {display_name: di.__dict__[field_name]
+        for (display_name, field_name) in section_names.items()
+        if di.__dict__[field_name]}    
