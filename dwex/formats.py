@@ -36,7 +36,7 @@ def read_pe(filename):
         debug_aranges_sec = data.get('.debug_aranges'),
         debug_abbrev_sec = data.get('.debug_abbrev'),
         debug_frame_sec = data.get('.debug_frame'),
-        eh_frame_sec = None, # Haven't see one in the wild so far
+        eh_frame_sec = None, # Haven't seen one in the wild so far
         debug_str_sec = data.get('.debug_str'),
         debug_loc_sec = data.get('.debug_loc'),
         debug_ranges_sec = data.get('.debug_ranges'),
@@ -45,11 +45,11 @@ def read_pe(filename):
         debug_pubnames_sec = data.get('.debug_pubnames'),
         debug_addr_sec = data.get('.debug_addr'),
         debug_str_offsets_sec = data.get('.debug_str_offsets'),
-        debug_line_str_sec = data.get('.debug_line_str_name'),
-        debug_loclists_sec = data.get('.debug_loclists_sec_name'),
-        debug_rnglists_sec = data.get('.debug_rnglists_sec_name'),
-        debug_sup_sec = data.get('.debug_sup_name'),
-        gnu_debugaltlink_sec = data.get('.gnu_debugaltlink_name')
+        debug_line_str_sec = data.get('.debug_line_str'),
+        debug_loclists_sec = data.get('.debug_loclists'),
+        debug_rnglists_sec = data.get('.debug_rnglists'),
+        debug_sup_sec = data.get('.debug_sup'),
+        gnu_debugaltlink_sec = data.get('.gnu_debugaltlink')
     )
     di._format = 2
     di._start_address = pefile.imageNtHeaders.header.OptionalHeader.ImageBase
