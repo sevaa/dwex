@@ -112,8 +112,18 @@ def setup_menu(win):
     help_menu.addAction('Report an issue').triggered.connect(win.on_issue)
     help_menu.addAction('Homepage').triggered.connect(win.on_homepage)
 
+def setup_toolbar(win):
+    #https://realpython.com/python-menus-toolbars/#creating-toolbars
+    #tb = win.addToolBar("Main")
+    #tb.setFloatable(False)
+    #tb.setMovable(False)
+    #tb.addAction("Open", QIcon())
+    pass
+    
+
 def setup_ui(win):
     setup_menu(win)
+    setup_toolbar(win)
     # Set up the left pane and the right pane
     tree = win.the_tree = QTreeView()
     tree.header().hide()
