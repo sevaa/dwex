@@ -128,6 +128,8 @@ class TheWindow(QMainWindow):
                 self.forward_menuitem.setEnabled(False)
                 self.followref_menuitem.setEnabled(False)
                 self.highlightcode_menuitem.setEnabled(True)
+                self.highlightsubstring_menuitem.setEnabled(True)
+                self.highlightcondition_menuitem.setEnabled(True)
                 self.highlightnothing_menuitem.setEnabled(True)
                 self.copy_menuitem.setEnabled(False)
                 self.copyline_menuitem.setEnabled(False)
@@ -584,11 +586,32 @@ class TheWindow(QMainWindow):
 
     def on_highlight_code(self):
         self.highlightcode_menuitem.setChecked(True)
-        self.tree_model.highlight(has_code_location)
+        self.tree_model.add_highlight(1, has_code_location)        
+
+    def on_highlight_substring(self):
+        r = QInputDialog.getText(self, 'Highlight', 'Highlight DIEs with substring:')
+        if r[1] and r[0]:
+            s = r[0].lower()
+            self.highlightsubstring_menuitem.setChecked(True)
+            self.tree_model.add_highlight(2, lambda die:self.findbytext(die, s))
+        else:
+            self.highlightsubstring_menuitem.setChecked(False)
+            self.tree_model.remove_highlight(2)
+
+    def on_highlight_condition(self):
+        dlg = ScriptDlg(self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            cond = dlg.cond
+            self.tree_model.add_highlight(3, lambda die: self.eval_user_condition(cond, die))
+        else:
+            self.highlightcondition_menuitem.setChecked(False)
+            self.tree_model.remove_highlight(3)
 
     def on_highlight_nothing(self):
         self.highlightcode_menuitem.setChecked(False)
-        self.tree_model.highlight(None)
+        self.highlightsubstring_menuitem.setChecked(False)
+        self.highlightcondition_menuitem.setChecked(False)
+        self.tree_model.clear_highlight(None)
 
     def on_cuproperties(self):
         die = self.the_tree.currentIndex().internalPointer()

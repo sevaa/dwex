@@ -134,15 +134,31 @@ class DWARFTreeModel(QAbstractItemModel):
         elif role == Qt.ItemDataRole.ToolTipRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
                 return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else None
-        elif role == Qt.ItemDataRole.ForegroundRole and self.highlight_condition and self.highlight_condition(die):
+        elif role == Qt.ItemDataRole.ForegroundRole and self.is_highlighted(die):
             return self.blue_brush
-        elif role == Qt.ItemDataRole.FontRole and self.highlight_condition and self.highlight_condition(die):
+        elif role == Qt.ItemDataRole.FontRole and self.is_highlighted(die):
             return self.bold_font
 
     # The rest is not Qt callbacks
 
-    def highlight(self, condition):
-        self.highlight_condition = condition
+    def is_highlighted(self, die):
+        if not self.highlight_condition:
+            return False
+        return next((True for v in self.highlight_condition.values() if v(die)), False)
+
+    def add_highlight(self, key, condition):
+        if not self.highlight_condition:
+            self.highlight_condition = {key:condition}
+        else:
+            self.highlight_condition[key] = condition
+        self.dataChanged.emit(self.createIndex(0, 0, self.top_dies[0]), self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]), (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.FontRole))
+
+    def remove_highlight(self, key):
+        del self.highlight_condition[key]
+        self.dataChanged.emit(self.createIndex(0, 0, self.top_dies[0]), self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]), (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.FontRole))
+
+    def clear_highlight(self, key):
+        self.highlight_condition = None
         self.dataChanged.emit(self.createIndex(0, 0, self.top_dies[0]), self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]), (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.FontRole))
 
     def set_prefix(self, prefix):
