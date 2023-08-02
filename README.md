@@ -62,3 +62,9 @@ Disclaimer
 ----------
 
 This project is unrelated to [ragundo/DwarfExplorer](https://github.com/ragundo/DwarfExplorer). That one deals with a different kind of dwarves. Although, interestingly enough, they also use the Qt library for their GUI.
+
+Prior art
+---------
+
+There is also a GUI DWARF visualizer at [simark/dwarftree](https://github.com/simark/dwarftree). Also based on pyelftools,
+with gtk based UI. It's been inactive since 2015. I didn't know about it when I started.

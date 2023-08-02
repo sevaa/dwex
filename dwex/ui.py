@@ -104,6 +104,11 @@ def setup_menu(win):
     win.findnext_menuitem.setShortcut(QKeySequence.StandardKey.FindNext)
     win.findnext_menuitem.triggered.connect(win.on_findnext)
     ########
+    ana_menu = menu.addMenu("Analysis")
+    win.localsat_menuitem = ana_menu.addAction("Locals at address...")
+    win.localsat_menuitem.setEnabled(False)
+    win.localsat_menuitem.triggered.connect(win.on_localsat)
+    ########
     help_menu = menu.addMenu("Help")
     about_menuitem = help_menu.addAction("About...")
     about_menuitem.setMenuRole(QAction.MenuRole.AboutRole)

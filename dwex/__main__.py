@@ -7,6 +7,7 @@ from .formats import read_dwarf, get_debug_sections
 from .tree import DWARFTreeModel, has_code_location, cu_sort_key
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
+from .locals import LocalsDlg
 
 version = (2, 32)
 
@@ -94,6 +95,7 @@ class TheWindow(QMainWindow):
                 # Some cached top level stuff
                 # Notably, iter_CUs doesn't cache
                 di._ranges = None # Loaded on first use
+                di._aranges = None
                 def decorate_cu(cu, i):
                     cu._i = i
                     cu._lineprogram = None
@@ -134,6 +136,7 @@ class TheWindow(QMainWindow):
                 self.find_menuitem.setEnabled(True)
                 self.findip_menuitem.setEnabled(True)
                 self.byoffset_menuitem.setEnabled(True)
+                self.localsat_menuitem.setEnabled(True)
                 self.on_highlight_nothing()
                 # Navigation stack - empty
                 self.navhistory = []
@@ -152,6 +155,9 @@ class TheWindow(QMainWindow):
                 self.sett.setValue("General/MRUArch%d" % i, fa[1])
             else:
                 self.sett.remove("General/MRUArch%d" % i)
+        for i in range(len(self.mru), 10):
+            self.sett.remove("General/MRU%d" % i)
+            self.sett.remove("General/MRUArch%d" % i)
 
     # Open a file, display an error if failure
     def open_file_interactive(self, filename, arch = None):
@@ -218,7 +224,17 @@ class TheWindow(QMainWindow):
                 self.fa = fa
                 self.win = win
             def __call__(self):
-                self.win.open_file_interactive(*self.fa)
+                fa = self.fa
+                if os.path.exists(self.fa[0]):
+                    self.win.open_file_interactive(*fa)
+                else:
+                    mb =  QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
+                        "The file or bundle %s does not exist or is not accessible. Shall we remove it from the recent file menu?" % (fa[0],),
+                        QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No, self.win)
+                    mb.setEscapeButton(QMessageBox.StandardButton.No)
+                    r = mb.exec()
+                    if r == QMessageBox.StandardButton.Yes:
+                        self.win.delete_from_mru(fa)
 
         for i, fa in enumerate(self.mru):
             s = fa[0]
@@ -241,7 +257,17 @@ class TheWindow(QMainWindow):
             self.save_mru()
             self.mru_menu.setEnabled(True)
             self.mru_menu.clear()
-            self.populate_mru_menu()    
+            self.populate_mru_menu()
+
+    def delete_from_mru(self, mru_record):
+        try:
+            self.mru.remove(mru_record) # ValueError if not found
+            self.save_mru()
+            self.mru_menu.setEnabled(len(self.mru) > 0)
+            self.mru_menu.clear()
+            self.populate_mru_menu()
+        except ValueError:
+            pass
 
     # File drag/drop handling - equivalent to open
     def dragEnterEvent(self, evt):
@@ -604,6 +630,10 @@ class TheWindow(QMainWindow):
                 for c in range(0, m.columnCount(QModelIndex())))
             for r in range(0, m.rowCount(QModelIndex())))
         self.on_copy(table_text)
+
+    def on_localsat(self):
+        dlg = LocalsDlg(self, self.dwarfinfo)
+        dlg.exec()
 
     # If the details pane has data - reload that
     def refresh_details(self):
