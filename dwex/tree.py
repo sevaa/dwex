@@ -157,9 +157,12 @@ class DWARFTreeModel(QAbstractItemModel):
         del self.highlight_condition[key]
         self.dataChanged.emit(self.createIndex(0, 0, self.top_dies[0]), self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]), (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.FontRole))
 
-    def clear_highlight(self, key):
+    def clear_highlight(self):
         self.highlight_condition = None
         self.dataChanged.emit(self.createIndex(0, 0, self.top_dies[0]), self.createIndex(len(self.top_dies)-1, 0, self.top_dies[-1]), (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.FontRole))
+
+    def has_highlight(self, key):
+        return self.highlight_condition and key in self.highlight_condition
 
     def set_prefix(self, prefix):
         if prefix != self.prefix:

@@ -465,10 +465,7 @@ class TheWindow(QMainWindow):
         r = QInputDialog.getText(self, "Find DIE by offset", "DIE offset (hex), relative to the section start:")
         if r[1] and r[0]:
             try:
-                offset = r[0]
-                if offset.startswith("0x"):
-                    offset = offset[2:]
-                offset = int(offset, 16)
+                offset = int(r[0], 16)
                 index = self.tree_model.find_offset(offset)
                 if index:
                     self.the_tree.setCurrentIndex(index)
@@ -478,9 +475,11 @@ class TheWindow(QMainWindow):
             except ValueError:
                 pass
 
+    def sample_die(self):
+        return self.the_tree.currentIndex().internalPointer() or self.dwarfinfo._CUs[0].get_top_DIE()
 
     def on_findbycondition(self):
-        dlg = ScriptDlg(self)
+        dlg = ScriptDlg(self, self.sample_die())
         if dlg.exec() == QDialog.DialogCode.Accepted:
             cond = dlg.cond
             self.findcondition = lambda die: self.eval_user_condition(cond, die)
@@ -585,33 +584,43 @@ class TheWindow(QMainWindow):
                 self.the_tree.setCurrentIndex(sel)
 
     def on_highlight_code(self):
-        self.highlightcode_menuitem.setChecked(True)
-        self.tree_model.add_highlight(1, has_code_location)        
+        if self.tree_model.has_highlight(1):
+            self.highlightcode_menuitem.setChecked(False)
+            self.tree_model.remove_highlight(1)
+        else:
+            self.highlightcode_menuitem.setChecked(True)
+            self.tree_model.add_highlight(1, has_code_location)        
 
     def on_highlight_substring(self):
-        r = QInputDialog.getText(self, 'Highlight', 'Highlight DIEs with substring:')
-        if r[1] and r[0]:
-            s = r[0].lower()
-            self.highlightsubstring_menuitem.setChecked(True)
-            self.tree_model.add_highlight(2, lambda die:self.findbytext(die, s))
-        else:
+        if self.tree_model.has_highlight(2):
             self.highlightsubstring_menuitem.setChecked(False)
             self.tree_model.remove_highlight(2)
+        else:
+            r = QInputDialog.getText(self, 'Highlight', 'Highlight DIEs with substring:')
+            if r[1] and r[0]:
+                s = r[0].lower()
+                self.highlightsubstring_menuitem.setChecked(True)
+                self.tree_model.add_highlight(2, lambda die:self.findbytext(die, s))
+            else:
+                self.highlightsubstring_menuitem.setChecked(False)
 
     def on_highlight_condition(self):
-        dlg = ScriptDlg(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            cond = dlg.cond
-            self.tree_model.add_highlight(3, lambda die: self.eval_user_condition(cond, die))
-        else:
+        if self.tree_model.has_highlight(3):
             self.highlightcondition_menuitem.setChecked(False)
             self.tree_model.remove_highlight(3)
+        else:
+            dlg = ScriptDlg(self, self.sample_die())
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                cond = dlg.cond
+                self.tree_model.add_highlight(3, lambda die: self.eval_user_condition(cond, die))
+            else:
+                self.highlightcondition_menuitem.setChecked(False)
 
     def on_highlight_nothing(self):
         self.highlightcode_menuitem.setChecked(False)
         self.highlightsubstring_menuitem.setChecked(False)
         self.highlightcondition_menuitem.setChecked(False)
-        self.tree_model.clear_highlight(None)
+        self.tree_model.clear_highlight()
 
     def on_cuproperties(self):
         die = self.the_tree.currentIndex().internalPointer()
