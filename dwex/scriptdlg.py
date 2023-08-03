@@ -1,10 +1,9 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import *
-from sys import version_info
-import webbrowser
 
 class ScriptDlg(QDialog):
     def __init__(self, win, sample_die):
+        from sys import version_info
         QDialog.__init__(self, win, Qt.WindowType.Dialog)
         self.sample_die = sample_die
         ly = QVBoxLayout()
@@ -23,6 +22,7 @@ class ScriptDlg(QDialog):
 
     def on_see_guide(self, link):
         try:
+            import webbrowser
             webbrowser.open(link, new=0, autoraise=True)
         except:
             pass

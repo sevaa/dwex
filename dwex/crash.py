@@ -73,9 +73,9 @@ def make_exc_report(exc, tb, version, ctxt=None):
 
     return report
 
-def report_crash(exc, tb, version, ctxt=None):
+def report_crash(exc, tb, version, is_crash, ctxt=None):
     try:
-        submit_report('[crash][python][dwex][pyexception]', make_exc_report(exc, tb, version, ctxt=ctxt))
+        submit_report('[python][dwex][pyexception]%s' % ('[crash]' if is_crash else '',), make_exc_report(exc, tb, version, ctxt=ctxt))
     except Exception:
         pass
 

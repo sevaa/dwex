@@ -583,44 +583,62 @@ class TheWindow(QMainWindow):
             if sel:
                 self.the_tree.setCurrentIndex(sel)
 
+    # Tree highlighting business
+
+    def manage_hlnavigation(self, b = None):
+        if b is None:
+            b = self.tree_model.has_any_highlights()
+        self.prevhl_menuitem.setEnabled(b)
+        self.nexthl_menuitem.setEnabled(b)            
+
+    def highlight_off(self, key):
+        self.tree_model.remove_highlight(key)
+        self.manage_hlnavigation()
+
     def on_highlight_code(self):
         if self.tree_model.has_highlight(1):
-            self.highlightcode_menuitem.setChecked(False)
-            self.tree_model.remove_highlight(1)
+            self.highlight_off(1)
         else:
-            self.highlightcode_menuitem.setChecked(True)
             self.tree_model.add_highlight(1, has_code_location)        
+            self.manage_hlnavigation(True)
 
     def on_highlight_substring(self):
         if self.tree_model.has_highlight(2):
-            self.highlightsubstring_menuitem.setChecked(False)
-            self.tree_model.remove_highlight(2)
+            self.highlight_off(2)
         else:
             r = QInputDialog.getText(self, 'Highlight', 'Highlight DIEs with substring:')
             if r[1] and r[0]:
                 s = r[0].lower()
-                self.highlightsubstring_menuitem.setChecked(True)
                 self.tree_model.add_highlight(2, lambda die:self.findbytext(die, s))
+                self.manage_hlnavigation(True)
             else:
                 self.highlightsubstring_menuitem.setChecked(False)
 
     def on_highlight_condition(self):
         if self.tree_model.has_highlight(3):
-            self.highlightcondition_menuitem.setChecked(False)
-            self.tree_model.remove_highlight(3)
+            self.highlight_off(3)
         else:
             dlg = ScriptDlg(self, self.sample_die())
             if dlg.exec() == QDialog.DialogCode.Accepted:
                 cond = dlg.cond
                 self.tree_model.add_highlight(3, lambda die: self.eval_user_condition(cond, die))
+                self.manage_hlnavigation(True)
             else:
                 self.highlightcondition_menuitem.setChecked(False)
+            # Accepted with blank or bogus expression is not supported
 
     def on_highlight_nothing(self):
         self.highlightcode_menuitem.setChecked(False)
         self.highlightsubstring_menuitem.setChecked(False)
         self.highlightcondition_menuitem.setChecked(False)
+        self.manage_hlnavigation(False)
         self.tree_model.clear_highlight()
+
+    def on_nexthl(self):
+        pass
+
+    def on_prevhl(self):
+        pass    
 
     def on_cuproperties(self):
         die = self.the_tree.currentIndex().internalPointer()
@@ -693,7 +711,7 @@ class TheWindow(QMainWindow):
 def on_exception(exctype, exc, tb):
     if isinstance(exc, Exception):
         from .crash import report_crash
-        report_crash(exc, tb, version)
+        report_crash(exc, tb, version, True)
         sys.excepthook = on_exception.prev_exchook
         sys.exit(1)
     elif on_exception.prev_exchook:
