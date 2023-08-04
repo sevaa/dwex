@@ -40,13 +40,30 @@ class ScriptDlg(QDialog):
                     "Python syntax error: " + format(exc), QMessageBox.StandardButton.Ok, self).show()
                 return
             try:
-                eval(self.cond, {'die' : self.sample_die, 'has_attribute' : lambda f:True})
+                eval(self.cond, make_execution_environment(self.sample_die))
             except Exception as exc:
-                QMessageBox(QMessageBox.Icon.Warning, "Python error",
-                    "Python execution error: " + format(exc), QMessageBox.StandardButton.Ok, self).show()
-                return
+                mb = QMessageBox(QMessageBox.Icon.Question, "Python error",
+                    "Python execution error (%s) on a sample DIE. Use anyway?\n\n%s" % (type(exc).__name__, format(exc)),
+                    QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No, self)
+                mb.setEscapeButton(QMessageBox.StandardButton.No)
+                if mb.exec() == QMessageBox.StandardButton.No:
+                    return
             
             QDialog.accept(self)
+
+def make_execution_environment(die):
+    def has_attribute(func):
+        for k in die.attributes:
+            if func(k, die.attributes[k].value, die.attributes[k].form):
+                return True
+            
+    d = {'die' : die,
+            'tag': die.tag,
+            'attr': die.attributes,
+            'has_attribute' : has_attribute}
+    for k, a in die.attributes.items():
+        d[k] = a.value
+    return d
             
 
 

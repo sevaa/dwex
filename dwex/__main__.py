@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import *
 from .die import DIETableModel, ip_in_range
 from .formats import read_dwarf, get_debug_sections
 from .tree import DWARFTreeModel, has_code_location, cu_sort_key
-from .scriptdlg import ScriptDlg
+from .scriptdlg import ScriptDlg, make_execution_environment
 from .ui import setup_ui
 from .locals import LocalsDlg
 
@@ -172,7 +172,7 @@ class TheWindow(QMainWindow):
                 QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", s,
                     QMessageBox.StandardButton.Ok, self).show()
         except DWARFParseError as dperr:
-            mb =  QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
+            mb = QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
                 "Error parsing the DWARF information in this file. Would you like to save the debug section contents for manual analysis?",
                 QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No, self)
             mb.setEscapeButton(QMessageBox.StandardButton.No)
@@ -426,12 +426,7 @@ class TheWindow(QMainWindow):
     # Exception means false
     def eval_user_condition(self, cond, die):
         try:
-            def has_attribute(func):
-                for k in die.attributes:
-                    if func(k, die.attributes[k].value, die.attributes[k].form):
-                        return True
-
-            return eval(cond, {'die' : die, 'has_attribute' : has_attribute})
+            return eval(cond, make_execution_environment(die))
         except Exception as exc:
             print("Error in user condition: %s" % format(exc))
             return False
