@@ -636,10 +636,14 @@ class TheWindow(QMainWindow):
         self.tree_model.clear_highlight()
 
     def on_nexthl(self):
-        pass
+        index = self.tree_model.find(self.the_tree.currentIndex(), self.tree_model.is_highlighted, False)
+        if index:
+            self.the_tree.setCurrentIndex(index)
 
     def on_prevhl(self):
-        pass    
+        index = self.tree_model.find_back(self.the_tree.currentIndex(), self.tree_model.is_highlighted, False)
+        if index:
+            self.the_tree.setCurrentIndex(index)
 
     def on_cuproperties(self):
         die = self.the_tree.currentIndex().internalPointer()
