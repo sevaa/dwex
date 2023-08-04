@@ -8,10 +8,10 @@ The expression has to be written in the Python 3, and **it should evaluate to so
 
 During search or checking for highlighting, the exression is evaluated against every DIE in the tree. During execution, the expression receives a set of current DIE's properties to examine as global scope variables.
 
-The `tag` object contains the DIE tag's full name as a string, as provided in the DWARF spec, with the `DW_TAG_` prefix and with the same capitalization as in the spec, e. g. `DW_TAG_variable` or `DW_TAG_subprogram`.
+The `tag` object contains the DIE tag's name as a string, with the `DW_TAG_` prefix removed (regardless of the "DWARF Prefix" setting), in lowercase, e. g. `variable` or `subprogram`.
 
-Each DIE attribute is provided as a separate object, their names being full attribute names, with the `DW_AT_` prefix, and with the same capitalization as in the spec, e. g. `DW_AT_name` or `DW_AT_type`,
-and their values are attribute values, somewhat translated by pyelftools for usability. DIE attribute values that are logically strings are stored as `bytes` objects, not as proper Python strings. One may use `.decode('utf-8')` to convert them to strings. Enum-type attributes such as `DW_AT_language` are provided as `int`s.
+Each DIE attribute is provided as a separate object, their names being attribute names with the `DW_AT_` prefix removed (regardless of the "DWARF Prefix" setting), in lowercase, e. g. `name` or `type`,
+and their values are attribute values, somewhat translated by pyelftools for usability. DIE attribute values that are logically strings are stored as `bytes` objects, not as proper Python strings. One may use `.decode('utf-8')` to convert them to strings, or compare them to `bytes` literals, e. g. `b'foo'`. Enum-type attributes such as `DW_AT_language` are provided as `int`s.
 
 For deeper examination, DWEX also provides a dictionary of all attributes in an object called `attr`,
 and the DIE itself as the `die` object. You can use `die` to get to the parent/child/sibling DIEs, you can get to the containing CU and to other CUs. This guide is not meant to be a complete reference, especially considering that it's someone else's API; refer to the [pyelftools](https:/github.com/eliben/pyelftools/) docs and/or sources for more.

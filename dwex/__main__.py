@@ -426,8 +426,14 @@ class TheWindow(QMainWindow):
     # Exception means false
     def eval_user_condition(self, cond, die):
         try:
-            return eval(cond, make_execution_environment(die))
-        except Exception as exc:
+            env = make_execution_environment(die)
+        except Exception as exc: # Our error
+            from .crash import report_crash
+            report_crash(exc, exc.__traceback__, version, False)
+            return False
+        try:
+            return eval(cond, env)
+        except Exception as exc: # Error in condition or it assumes a different DIE structure 
             print("Error in user condition: %s" % format(exc))
             return False
 
@@ -706,7 +712,7 @@ class TheWindow(QMainWindow):
 def on_exception(exctype, exc, tb):
     if isinstance(exc, Exception):
         from .crash import report_crash
-        report_crash(exc, tb, version, True)
+        report_crash(exc, exc.__traceback__, version, True)
         sys.excepthook = on_exception.prev_exchook
         sys.exit(1)
     elif on_exception.prev_exchook:

@@ -39,8 +39,15 @@ class ScriptDlg(QDialog):
                 QMessageBox(QMessageBox.Icon.Warning, "Python error",
                     "Python syntax error: " + format(exc), QMessageBox.StandardButton.Ok, self).show()
                 return
+            
             try:
-                eval(self.cond, make_execution_environment(self.sample_die))
+                env = make_execution_environment(self.sample_die)
+            except Exception: #Our error - do not surface
+                QDialog.accept(self)
+                return
+
+            try:
+                eval(self.cond, env)
             except Exception as exc:
                 mb = QMessageBox(QMessageBox.Icon.Question, "Python error",
                     "Python execution error (%s) on a sample DIE. Use anyway?\n\n%s" % (type(exc).__name__, format(exc)),
@@ -58,11 +65,11 @@ def make_execution_environment(die):
                 return True
             
     d = {'die' : die,
-            'tag': die.tag,
+            'tag': 'user_%X' % (die.tag,) if isinstance(die.tag, int) else die.tag[7:],
             'attr': die.attributes,
             'has_attribute' : has_attribute}
     for k, a in die.attributes.items():
-        d[k] = a.value
+        d['user_%X' % (k,) if isinstance(k, int) else k[6:]] = a.value
     return d
             
 

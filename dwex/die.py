@@ -539,7 +539,7 @@ class DIETableModel(QAbstractTableModel):
             from .__main__ import version
             from .crash import report_crash
             tb = exc.__traceback__
-            report_crash(exc, tb, False, version)
+            report_crash(exc, tb, version, False)
             return None
 
 class GenericTableModel(QAbstractTableModel):
