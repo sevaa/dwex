@@ -71,8 +71,8 @@ class LocalsDlg(QDialog):
 
     def on_check(self, bu):
         try:
-            address = int(self.address.text(), 0)
-            load_address = int(self.start_address.text(), 0)
+            address = int(self.address.text(), 16)
+            load_address = int(self.start_address.text(), 16)
         except ValueError:
             return
 
