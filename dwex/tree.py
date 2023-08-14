@@ -2,6 +2,7 @@ from bisect import bisect_left, bisect_right
 from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex
 from PyQt6.QtGui import QFont, QFontInfo, QBrush
 from PyQt6.QtWidgets import QApplication, QMessageBox
+from .dwarfutil import has_code_location
 
 # Supports both / and \ - current system separator might not match the system the file came from
 # so os.path.basename won't do
@@ -307,8 +308,4 @@ class DWARFTreeModel(QAbstractItemModel):
             pass
         i = bisect_right(cu._diemap, offset)
         return self.index_for_die(cu._dielist[i - 1])
-
-# Highlighter function(s)
-def has_code_location(die):
-    return 'DW_AT_low_pc' in die.attributes or 'DW_AT_ranges' in die.attributes
 

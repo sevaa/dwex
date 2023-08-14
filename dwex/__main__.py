@@ -4,7 +4,8 @@ from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 from .die import DIETableModel, ip_in_range
 from .formats import read_dwarf, get_debug_sections
-from .tree import DWARFTreeModel, has_code_location, cu_sort_key
+from .tree import DWARFTreeModel, cu_sort_key
+from .dwarfutil import has_code_location
 from .scriptdlg import ScriptDlg
 from .ui import setup_ui
 from .locals import LocalsDlg

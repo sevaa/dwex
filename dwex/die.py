@@ -7,6 +7,7 @@ from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW
 from elftools.common.exceptions import ELFParseError
 from elftools.dwarf.ranges import BaseAddressEntry as RangeBaseAddressEntry, RangeEntry
 from .dwarfone import DWARFExprParserV1
+from .dwarfutil import *
 
 MAX_INLINE_BYTEARRAY_LEN = 32
 
@@ -68,50 +69,6 @@ _ll_headers = ("Attribute", "Offset", "Form", "Raw", "Value")
 _noll_headers = ("Attribute", "Form", "Value")
 _meta_desc = ('DIE offset', 'DIE size', 'Abbrev code', 'Has children') # Anything else?
 _meta_count = 4 # Extra rows if low level detail showing is set
-
-class NoBaseError(Exception):
-    pass
-
-#May return None!
-def get_cu_base(die):
-    top_die = die.cu.get_top_DIE()
-    if 'DW_AT_low_pc' in top_die.attributes:
-        return top_die.attributes['DW_AT_low_pc'].value
-    elif 'DW_AT_entry_pc' in top_die.attributes:
-        return top_die.attributes['DW_AT_entry_pc'].value
-    # TODO: ranges?
-    elif 'DW_AT_ranges' in top_die.attributes:
-        di = die.dwarfinfo
-        if not di._ranges:
-            di._ranges = di.range_lists()
-        if not di._ranges: # Absent in the DWARF file
-            raise NoBaseError()
-        rl = di._ranges.get_range_list_at_offset(top_die.attributes['DW_AT_ranges'].value, cu=die.cu)
-        base = None
-        for r in rl:
-            if isinstance(r, RangeBaseAddressEntry) and (base is None or r.base_address < base):
-                base = r.base_address
-        if base is None:
-            raise NoBaseError()
-        return base
-    else:
-        raise NoBaseError()
-
-def is_int_list(val):
-    return isinstance(val, list) and len(val) > 0 and isinstance(val[0], int)
-
-def is_long_blob(attr):
-    val = attr.value
-    return ((isinstance(val, bytes) and attr.form not in ('DW_FORM_strp', 'DW_FORM_string')) or is_int_list(val)) and len(val) > MAX_INLINE_BYTEARRAY_LEN
-
-def is_block(form):
-    return form in ('DW_FORM_block', 'DW_FORM_block1', 'DW_FORM_block2', 'DW_FORM_block4')
-
-def DIE_name(die):
-    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
-
-def safe_DIE_name(die, default = ''):
-    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else default
 
 class DIETableModel(QAbstractTableModel):
     def __init__(self, die, prefix, lowlevel, hex, regnames):
@@ -577,30 +534,3 @@ class FixedWidthTableModel(GenericTableModel):
         else:
             return GenericTableModel.data(self, index, role)
 
-
-# Find helper:
-# Returns true if the specified IP is in [low_pc, high_pc)
-# Or in ranges
-def ip_in_range(die, ip):
-    if 'DW_AT_ranges' in die.attributes:
-        di = die.dwarfinfo
-        if not di._ranges:
-            di._ranges = di.range_lists()
-        if not di._ranges: # Absent in the DWARF file
-            return False
-        # TODO: handle base addresses. Never seen those so far...
-        cu_base = get_cu_base(die)
-        rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value, cu = die.cu)
-        for r in rl:
-            if isinstance(r, RangeBaseAddressEntry):
-                cu_base = r.base_address
-            elif r.begin_offset <= ip - cu_base < r.end_offset:
-                return True
-    if 'DW_AT_low_pc' in die.attributes and 'DW_AT_high_pc' in die.attributes:
-        l = die.attributes['DW_AT_low_pc'].value
-        h = die.attributes['DW_AT_high_pc'].value
-        if die.attributes['DW_AT_high_pc'].form != 'DW_FORM_addr':
-            h += l
-        if l <= ip < h:
-            return True
-    return False
