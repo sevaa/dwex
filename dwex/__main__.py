@@ -4,9 +4,9 @@ from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 from .die import DIETableModel, ip_in_range
 from .formats import read_dwarf, get_debug_sections
-from .tree import DWARFTreeModel, cu_sort_key
 from .dwarfutil import has_code_location
-from .scriptdlg import ScriptDlg
+from .tree import DWARFTreeModel, cu_sort_key
+from .scriptdlg import ScriptDlg, make_execution_environment
 from .ui import setup_ui
 from .locals import LocalsDlg
 
@@ -173,7 +173,7 @@ class TheWindow(QMainWindow):
                 QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", s,
                     QMessageBox.StandardButton.Ok, self).show()
         except DWARFParseError as dperr:
-            mb =  QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
+            mb = QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
                 "Error parsing the DWARF information in this file. Would you like to save the debug section contents for manual analysis?",
                 QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No, self)
             mb.setEscapeButton(QMessageBox.StandardButton.No)
@@ -427,13 +427,14 @@ class TheWindow(QMainWindow):
     # Exception means false
     def eval_user_condition(self, cond, die):
         try:
-            def has_attribute(func):
-                for k in die.attributes:
-                    if func(k, die.attributes[k].value, die.attributes[k].form):
-                        return True
-
-            return eval(cond, {'die' : die, 'has_attribute' : has_attribute})
-        except Exception as exc:
+            env = make_execution_environment(die)
+        except Exception as exc: # Our error
+            from .crash import report_crash
+            report_crash(exc, exc.__traceback__, version, False)
+            return False
+        try:
+            return eval(cond, env)
+        except Exception as exc: # Error in condition or it assumes a different DIE structure 
             print("Error in user condition: %s" % format(exc))
             return False
 
@@ -636,10 +637,14 @@ class TheWindow(QMainWindow):
         self.tree_model.clear_highlight()
 
     def on_nexthl(self):
-        pass
+        index = self.tree_model.find(self.the_tree.currentIndex(), self.tree_model.is_highlighted, False)
+        if index:
+            self.the_tree.setCurrentIndex(index)
 
     def on_prevhl(self):
-        pass    
+        index = self.tree_model.find_back(self.the_tree.currentIndex(), self.tree_model.is_highlighted, False)
+        if index:
+            self.the_tree.setCurrentIndex(index)
 
     def on_cuproperties(self):
         die = self.the_tree.currentIndex().internalPointer()
@@ -712,7 +717,7 @@ class TheWindow(QMainWindow):
 def on_exception(exctype, exc, tb):
     if isinstance(exc, Exception):
         from .crash import report_crash
-        report_crash(exc, tb, version, True)
+        report_crash(exc, exc.__traceback__, version, True)
         sys.excepthook = on_exception.prev_exchook
         sys.exit(1)
     elif on_exception.prev_exchook:

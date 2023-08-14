@@ -276,7 +276,7 @@ class DWARFTreeModel(QAbstractItemModel):
                     # Quit condition with search from position - quit once we go past the starting position after the wrap
                     if have_start_pos and cu_offset >= start_cu_offset and die.offset > start_die_offset and wrapped:
                         break
-                    if (not have_start_pos or cu_offset != start_cu_offset or (not wrapped and die.offset > start_die_offset)) and cond(die):
+                    if not die.is_null() and (not have_start_pos or cu_offset != start_cu_offset or (not wrapped and die.offset > start_die_offset)) and cond(die):
                         return self.index_for_die(die)
 
             # We're at the end of the CU. What next?
@@ -289,6 +289,55 @@ class DWARFTreeModel(QAbstractItemModel):
                 break
 
         return False
+
+    # Search back - same idea
+    def find_back(self, start_pos, cond, cu_cond = False):
+        have_start_pos = start_pos.isValid()
+        if have_start_pos: # Searching from a specific position, with wrap-around
+            start_die = start_pos.internalPointer()
+            start_die_offset = start_die.offset # In the current die, before the next one
+            start_cu = start_die.cu
+            start_cu_offset = start_cu.cu_offset
+            cu = start_cu
+            wrapped = False
+        else:
+            cu = self.top_dies[-1].cu
+
+        while True:
+            cu_offset = cu.cu_offset
+            # Parse all DIEs in the current CU
+            if cu_cond(cu) if cu_cond else True:
+                for die in cu.iter_DIEs(): # Fill the DIE cache
+                    pass
+
+                # Abusing the internal cache of pyelftools - fragile!
+
+                if have_start_pos and not wrapped and cu_offset == start_cu_offset:
+                    i = bisect_left(cu._diemap, start_die_offset-1)-1
+                else:
+                    i = len(cu._diemap) - 1
+
+                while i >= 0:
+                    die = cu._dielist[i]
+                    if not die.is_null():
+                        # Quit condition with search from position - quit once we go past the starting position after the wrap
+                        if have_start_pos and die.offset == start_die_offset and wrapped:
+                            return False
+                        if cond(die):
+                            return self.index_for_die(die)
+                    i -= 1
+
+            # We're at the end of the CU. What next?
+            if cu._i > 0: # More CUs to scan
+                cu = self.top_dies[cu._i - 1].cu
+            elif have_start_pos and not wrapped: # Scanned the last CU, wrap around
+                cu = self.top_dies[-1].cu
+                wrapped = True
+            else:
+                break
+
+        return False            
+
     
     def find_offset(self, offset):
         cu = next((td.cu
