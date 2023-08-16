@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
+from PyQt6.QtCore import Qt, QAbstractTableModel, QSize
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QFontInfo, QFont
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
@@ -9,7 +9,7 @@ from .dwarfutil import *
 #0x25af0
 #0xd864
 
-headers = ["Name", "Location"]
+headers = [("Name", 300), ("Location", 180)]
 _bold_font = None
 
 # TODO: move elsewhere
@@ -31,7 +31,9 @@ class LocalsModel(QAbstractTableModel):
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            return headers[section]
+            return headers[section][0]
+        elif role == Qt.ItemDataRole.SizeHintRole:
+            return QSize(headers[section][1], 0)
 
     def rowCount(self, parent):
         return len(self.data)
@@ -53,6 +55,7 @@ class LocalsModel(QAbstractTableModel):
 class LocalsDlg(QDialog):
     def __init__(self, win, di, prefix, regnames):
         QDialog.__init__(self, win, Qt.WindowType.Dialog)
+        self.resize(500, 400)
         self.dwarfinfo = di
         if di._locparser is None:
             di._locparser = LocationParser(di.location_lists())
@@ -61,7 +64,7 @@ class LocalsDlg(QDialog):
         if not di._aranges:
             di._aranges = di.get_aranges()
 
-        self.expr_formatter = ExprFormatter(regnames, prefix, di.config.machine_arch, 2) # Version is unknowable for now
+        self.expr_formatter = ExprFormatter(regnames, prefix, di.config.machine_arch, 2) # DWARF version is unknowable for now
 
         ly = QVBoxLayout()
         l = QLabel(self)
@@ -75,8 +78,10 @@ class LocalsDlg(QDialog):
         self.start_address = QLineEdit(hex(di._start_address), self)
         ly.addWidget(self.start_address)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Apply, self)
-        buttons.clicked.connect(self.on_check)
+        buttons = QDialogButtonBox(self)
+        bu = QPushButton("Check", self)
+        bu.clicked.connect(self.on_check)
+        buttons.addButton(bu, QDialogButtonBox.ButtonRole.ApplyRole)
         ly.addWidget(buttons)
 
         self.locals = QTableView()
@@ -90,7 +95,7 @@ class LocalsDlg(QDialog):
         self.setWindowTitle('Locals at address')
         self.setLayout(ly)
 
-    def on_check(self, bu):
+    def on_check(self):
         try: # Try of just in case
             with WaitCursor():
                 try:

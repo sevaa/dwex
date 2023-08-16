@@ -1,18 +1,26 @@
-from elftools.dwarf.descriptions import _REG_NAMES_x86, _REG_NAMES_x64
+from elftools.dwarf.descriptions import _REG_NAMES_x86, _REG_NAMES_x64, _REG_NAMES_AArch64
 from elftools.dwarf.dwarf_expr import DWARFExprOp
 
+# Source: https://github.com/ARM-software/abi-aa/blob/main/aadwarf32/aadwarf32.rst#dwarf-register-names
 _REG_NAMES_ARM = [
     'r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7',
     'r8', 'r9', 'r10', 'r11', 'r12', 'sp', 'lr', 'pc'
-    # Ever higher values for FP or SIMD registers?
-]
-
-# TODO: check against readelf, not sure
-_REG_NAMES_ARM64 = [
-    'x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7',
-    'x8', 'x9', 'x10', 'x11', 'x12', 'x13', 'x14', 'x15',
-    'x16', 'x17', 'x18', 'x19', 'x20', 'x21', 'x22', 'x23',
-    'x24', 'x25', 'x26', 'x27', 'x28', 'x29', 'x30', 'x31'
+] + ['<none>']*48 + ["s%d" %(n,) for n in range(32)] + [
+    'f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7',
+    'wcgr0', 'wcgr1', 'wcgr2', 'wcgr3', 'wcgr4', 'wcgr5', 'wcgr6', 'wcgr7', 
+    'acc0', 'acc1', 'acc2', 'acc3', 'acc4', 'acc5', 'acc6', 'acc7',
+    'wr0', 'wr1', 'wr2', 'wr3', 'wr4', 'wr5', 'wr6', 'wr7',
+    'wr8', 'wr9', 'wr10', 'wr11', 'wr12', 'wr13', 'wr14', 'wr15',
+    'spsr', 'spsr_fiq', 'spsr_irq', 'spsr_abt', 'spsr_und', 'spsr_svc'] + ['<none>']*14 + [
+    'ra_auth_code', 'r8_usr', 'r9_usr', 'r10_usr', 'r11_usr', 'r12_usr', 'r13_usr', 'r14_usr',
+    'r8_fiq', 'r9_fiq', 'r10_fiq', 'r11_fiq', 'r12_fiq', 'r13_fiq', 'r14_fiq',
+    'r8_irq', 'r9_irq', 'r10_irq', 'r11_irq', 'r12_irq', 'r13_irq', 'r14_irq',
+    'r8_abt', 'r9_abt', 'r10_abt', 'r11_abt', 'r12_abt', 'r13_abt', 'r14_abt',
+    'r8_und', 'r9_und', 'r10_und', 'r11_und', 'r12_und', 'r13_und', 'r14_und',
+    'r8_svc', 'r9_svc', 'r10_svc', 'r11_svc', 'r12_svc', 'r13_svc', 'r14_svc'] + ['<none>']*24 + [
+    'wc0', 'wc1', 'wc2', 'wc3', 'wc4', 'wc5', 'wc6', 'wc7'] + ['<none>']*55 + [
+        "d%d" %(n,) for n in range(31)] + ['<none>']*21 + [
+     'tpidruro', 'tpidrurw', 'tpidpr', 'htpidpr'
 ]
 
 _REG_NAMES_MIPS = [
@@ -28,7 +36,7 @@ _REG_NAMES_MIPS = [
 # Machine arch values are generated differently for ELF, MachO and PE
 # For ELF, see the values in the architecture dict in get_machine_arch() under elftools.elf.elffile
 # For PE, see IMAGE_FILE_MACHINE in filebytes.pe
-# For MachO, see make_macho_arch_name() in formats.py
+# For MachO, see make_macho_arch_name() in formats.py, which derives from CpuType under filebytes.mach_o and subtypes
 
 _REG_NAME_MAP = dict(
     x86 = _REG_NAMES_x86,
@@ -41,13 +49,16 @@ _REG_NAME_MAP = dict(
     ARMV7 = _REG_NAMES_ARM,
     ARMV7A = _REG_NAMES_ARM,
     ARMV7S = _REG_NAMES_ARM,
-    AArch64 = _REG_NAMES_ARM64,
-    ARM64 = _REG_NAMES_ARM64,
-    ARME = _REG_NAMES_ARM64,
+    AArch64 = _REG_NAMES_AArch64,
+    ARM64 = _REG_NAMES_AArch64,
+    ARME = _REG_NAMES_AArch64,
     MIPS = _REG_NAMES_MIPS
 )
 
 class ExprFormatter:
+    # Operator codes differ in DWARFv1, thus the need for version
+    # regnames: False for friendly names, True for DWARF names
+    # prefix: False for friendly, Trus for DW_OP_xxx
     def __init__(self, regnames, prefix, arch, dwarf_version):
         self.regnames = regnames
         self.prefix = prefix
