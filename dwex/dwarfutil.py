@@ -1,4 +1,8 @@
 from elftools.dwarf.ranges import BaseAddressEntry as RangeBaseAddressEntry, RangeEntry
+from elftools.dwarf.locationlists import LocationExpr
+from elftools.dwarf.dwarf_expr import DWARFExprParser
+
+from dwex.dwarfone import DWARFExprParserV1
 
 class NoBaseError(Exception):
     pass
@@ -9,6 +13,39 @@ def has_code_location(die):
 
 def is_inline(func):
     return 'DW_AT_inline' in func.attributes and func.attributes['DW_AT_inline'].value != 0
+
+def DIE_type(die):
+    return die.get_DIE_from_attribute("DW_AT_type")
+
+def is_int_list(val):
+    return isinstance(val, list) and len(val) > 0 and isinstance(val[0], int)
+
+def is_block(form):
+    return form in ('DW_FORM_block', 'DW_FORM_block1', 'DW_FORM_block2', 'DW_FORM_block4')
+
+def DIE_name(die):
+    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
+
+def safe_DIE_name(die, default = ''):
+    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else default
+
+def DIE_is_ptr_to_member_struct(type_die):
+    if type_die.tag == 'DW_TAG_structure_type':
+        members = tuple(die for die in type_die.iter_children() if die.tag == "DW_TAG_member")
+        return len(members) == 2 and safe_DIE_name(members[0]) == "__pfn" and safe_DIE_name(members[1]) == "__delta"
+    return False
+
+class ClassDesc(object):
+    def __init__(self):
+        self.scopes = ()
+        self.const_member = False
+
+class TypeDesc(object):
+    def __init__(self):
+        self.name = None
+        self.modifiers = () # Reads left to right
+        self.scopes = () # Reads left to right
+        self.tag = None   
 
 # address is relative to the preferred loading address
 def find_cu_by_address(di, address):
@@ -144,21 +181,21 @@ def get_source_line(die, address):
 def retrieve_function_names(func_spec, the_func):
     attr = func_spec.attributes
     func_name = DIE_name(func_spec)
+    module = the_func.cu.get_top_DIE()
+    lang = module.attributes['DW_AT_language'].value if 'DW_AT_language' in module.attributes else None
     if 'DW_AT_MIPS_linkage_name' in attr:
         mangled_func_name = func_spec.attributes['DW_AT_MIPS_linkage_name'].value.decode('UTF-8', errors='ignore')
     elif 'DW_AT_linkage_name' in attr:
         mangled_func_name = func_spec.attributes['DW_AT_linkage_name'].value.decode('UTF-8', errors='ignore')
     else: # Could be a plain-C function...
-        module = the_func.cu.get_top_DIE()
-        lang = module.attributes['DW_AT_language'].value if 'DW_AT_language' in module.attributes else None
         mangled_func_name = func_name
         if lang in (0x1, 0x2, 0xc, 0x1d) or (has_code_location(func_spec) and "DW_AT_external" in attr) or "DW_AT_external" in the_func.attributes:
             return (func_name, func_name)
     # Sometimes addr2line spits without even (). Extern "C" maybe? 
 
     # TODO: augment func name with arguments for ones where it's relevant. External? cdecl?
-    if lang in (0x4, 0x19,0x1a, 0x21) # C++
-    func_name = generate_full_function_name(func_spec, the_func)
+    if lang in (0x4, 0x19,0x1a, 0x21): # C++
+        func_name = generate_full_function_name(func_spec, the_func)
     return (func_name, mangled_func_name)
 
 def generate_full_function_name(func_spec, the_func):
@@ -197,11 +234,6 @@ def format_function_param(param_spec, param):
  
     else: #unspecified_parameters AKA variadic
         return "..."
-
-class ClassDesc(object):
-    def __init__(self):
-        self.scopes = ()
-        self.const_member = False
 
 # Follows the modifier chain
 # Returns an object:
@@ -270,11 +302,11 @@ def parse_datatype(var):
     t.name = type_name
 
     # Check the nesting
-    parent = get_parent_cached(type_die)
+    parent = type_die.get_parent()
     scopes = list()
     while parent.tag in ('DW_TAG_class_type', 'DW_TAG_structure_type', 'DW_TAG_namespace'):
         scopes.insert(0, DIE_name(parent))
-        parent = get_parent_cached(parent)
+        parent = parent.get_parent()
     t.scopes = tuple(scopes)
     
     return t
@@ -290,12 +322,12 @@ def get_class_spec_if_member(func_spec, the_func):
         return class_spec
 
     # Check the parent element chain - could be a class
-    parent = get_parent_cached(func_spec)
+    parent = func_spec.get_parent()
 
     scopes = []
     while parent.tag in ("DW_TAG_class_type", "DW_TAG_structure_type", "DW_TAG_namespace"):
         scopes.insert(0, DIE_name(parent))
-        parent = get_parent_cached(parent)
+        parent = parent.get_parent()
     if scopes:
         cs = ClassDesc()
         cs.scopes = tuple(scopes)
@@ -303,19 +335,74 @@ def get_class_spec_if_member(func_spec, the_func):
 
     return None
 
-def is_int_list(val):
-    return isinstance(val, list) and len(val) > 0 and isinstance(val[0], int)
 
-def is_long_blob(attr):
-    val = attr.value
-    return ((isinstance(val, bytes) and attr.form not in ('DW_FORM_strp', 'DW_FORM_string')) or is_int_list(val)) and len(val) > MAX_INLINE_BYTEARRAY_LEN
+# scope is a function DIE with a code address
+# returns (locals, next_scope)
+# where locals is a list of (name, location)
+# and next_scope is a inlined function DIE to examine next
+# For now, local datatype is not returned
+def scan_scope(scope, address):
+    locals = []
+    next_scope = None
+    if 'DW_AT_frame_base' in scope.attributes:
+        locals.append(('__frame_base', parse_location(scope.attributes['DW_AT_frame_base'], scope.cu, address)))
+        #'Type': {'name': 'void', 'modifiers' : ("pointer",), "scopes": (), "tag": None}}
+    
+    for die in scope.iter_children():
+        if die.tag == 'DW_TAG_variable' or die.tag == 'DW_TAG_formal_parameter':
+            (k, v) = resolve_local(die, address)
+            locals.append((k, v))
+        elif die.tag == 'DW_TAG_lexical_block' and ip_in_range(die, address):
+            (block_locals, next_scope) = scan_scope(die, address)
+            locals += block_locals
+        elif die.tag ==  'DW_TAG_inlined_subroutine' and ip_in_range(die, address):
+            next_scope = die
+    return (locals, next_scope)
 
-def is_block(form):
-    return form in ('DW_FORM_block', 'DW_FORM_block1', 'DW_FORM_block2', 'DW_FORM_block4')
+# returns (name, location_expression)
+def resolve_local(p, address):
+    loc = False
+    if 'DW_AT_abstract_origin' in p.attributes: # Inlined sub formal param
+        if 'DW_AT_location' in p.attributes:
+            loc = p.attributes['DW_AT_location']
+            loc_cu = p.cu
+        p = p.get_DIE_from_attribute('DW_AT_abstract_origin')
 
-def DIE_name(die):
-    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
+    #type = parse_datatype(p)
+    if not loc and 'DW_AT_location' in p.attributes:
+        loc = p.attributes['DW_AT_location']
+        loc_cu = p.cu
 
-def safe_DIE_name(die, default = ''):
-    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else default
+    if loc:
+        expr = parse_location(loc, loc_cu, address)
+    else:
+        expr = False
 
+    name = safe_DIE_name(p, "(no name attribute)")
+    return (name, expr)
+
+
+def parse_location(loc, cu, address):
+    # TODO: check v5 loclists
+    ll = cu.dwarfinfo._locparser.parse_from_attribute(loc, cu['version']) # Either a list or a LocationExpr
+
+    # Find the expression blob
+    if isinstance(ll, LocationExpr):
+        loc_expr = ll.loc_expr
+    else: 
+        top_die = cu.get_top_DIE()
+        base = top_die.attributes['DW_AT_low_pc'].value
+        loc_expr = False
+        for l in ll:
+            if 'base_address' in l._fields:
+                base = l.base_address
+            elif l.begin_offset <= address - base < l.end_offset:
+                loc_expr = l.loc_expr
+                break
+            
+    # Translate to usable format
+    if loc_expr:
+        # TODO: cache expr parser. Make sure CUs are cached in the dwarfinfo first.
+        return list((DWARFExprParser(cu.structs) if cu['version'] > 1 else DWARFExprParserV1(cu.structs)).parse_expr(loc_expr))
+    else:
+        return []

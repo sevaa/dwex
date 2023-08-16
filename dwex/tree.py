@@ -2,7 +2,7 @@ from bisect import bisect_left, bisect_right
 from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex
 from PyQt6.QtGui import QFont, QFontInfo, QBrush
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from .dwarfutil import has_code_location
+from .dwarfutil import has_code_location, safe_DIE_name
 
 # Supports both / and \ - current system separator might not match the system the file came from
 # so os.path.basename won't do
@@ -29,10 +29,7 @@ def cu_sort_key(cu):
     return top_die_file_name(cu.get_top_DIE()).lower()
 
 def die_sort_key(die):
-    if 'DW_AT_name' in die.attributes:
-        name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore').lower()
-    else:
-        name = ''
+    name = safe_DIE_name(die)
     tag = '%X' % die.tag if isinstance(die.tag, int) else die.tag
     return (tag, name, die.offset)
 
@@ -134,7 +131,7 @@ class DWARFTreeModel(QAbstractItemModel):
                 return s
         elif role == Qt.ItemDataRole.ToolTipRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
-                return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else None
+                return safe_DIE_name(die, None)
         elif role == Qt.ItemDataRole.ForegroundRole and self.is_highlighted(die):
             return self.blue_brush
         elif role == Qt.ItemDataRole.FontRole and self.is_highlighted(die):

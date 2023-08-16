@@ -688,7 +688,7 @@ class TheWindow(QMainWindow):
         self.on_copy(table_text)
 
     def on_localsat(self):
-        dlg = LocalsDlg(self, self.dwarfinfo)
+        dlg = LocalsDlg(self, self.dwarfinfo, self.prefix, self.dwarfregnames)
         dlg.exec()
 
     # If the details pane has data - reload that

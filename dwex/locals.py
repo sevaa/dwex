@@ -2,6 +2,8 @@ from PyQt6.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelInde
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QFontInfo, QFont
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
+
+from dwex.exprutil import ExprFormatter
 from .dwarfutil import *
 
 #0x25af0
@@ -10,6 +12,7 @@ from .dwarfutil import *
 headers = ["Name", "Location"]
 _bold_font = None
 
+# TODO: move elsewhere
 class WaitCursor():
     def __enter__(self):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -21,7 +24,7 @@ class SeveralFunctionsError(Exception):
     pass
 
 class LocalsModel(QAbstractTableModel):
-    # Data is a list (is_scope, name, location)
+    # Data is a list (is_scope, name, location, die)
     def __init__(self, data):
         QAbstractTableModel.__init__(self)
         self.data = data
@@ -48,7 +51,7 @@ class LocalsModel(QAbstractTableModel):
                 return _bold_font
 
 class LocalsDlg(QDialog):
-    def __init__(self, win, di):
+    def __init__(self, win, di, prefix, regnames):
         QDialog.__init__(self, win, Qt.WindowType.Dialog)
         self.dwarfinfo = di
         if di._locparser is None:
@@ -57,6 +60,8 @@ class LocalsDlg(QDialog):
             di._ranges = di.range_lists()            
         if not di._aranges:
             di._aranges = di.get_aranges()
+
+        self.expr_formatter = ExprFormatter(regnames, prefix, di.config.machine_arch, 2) # Version is unknowable for now
 
         ly = QVBoxLayout()
         l = QLabel(self)
@@ -86,9 +91,8 @@ class LocalsDlg(QDialog):
         self.setLayout(ly)
 
     def on_check(self, bu):
-        # TODO: catch NoBaseError
         try: # Try of just in case
-            with WaitCursor() as wc:
+            with WaitCursor():
                 try:
                     address = int(self.address.text(), 0)
                     load_address = int(self.start_address.text(), 0)
@@ -120,8 +124,19 @@ class LocalsDlg(QDialog):
 
                 (func_name, mangled_func_name) = retrieve_function_names(func_desc, func)
 
+                grid_lines = [(True, func_name, '%s:%d' % file_and_line)]
+                while func: # Loop by function; inside the top level one there might be inlines
+                    ver = func.cu['version'] # The variable should not be in a different CU than the containing function
+                    (locals, func) = scan_scope(func, address)
+                    self.expr_formatter.dwarf_version = ver
+                    grid_lines += [(False, name,  "; ".join(self.expr_formatter.format_op(*op) for op in expr)) for (name, expr) in locals]
+                    if func: # Found a nested inline function, move on to that
+                        (inline_func, inline_func_spec) = follow_function_spec(func)
+                        (inline_func_name, mangled_inline_func_name) = retrieve_function_names(inline_func_spec, inline_func)
+                        grid_lines.append((True, inline_func_name, '?'))
+
                 # Finally display
-                self.locals.setModel(LocalsModel([(True, 'Function', '%s:%d' % file_and_line)]))
+                self.locals.setModel(LocalsModel(grid_lines))
         except SeveralFunctionsError:
             QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", 
                 "Expected one function with that address, found %d." % (len(funcs),), QMessageBox.StandardButton.Ok, self).show()
