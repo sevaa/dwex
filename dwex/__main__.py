@@ -2,9 +2,9 @@ import sys, os
 from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
 from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
-from .die import DIETableModel, ip_in_range
+from .die import DIETableModel
 from .formats import read_dwarf, get_debug_sections
-from .dwarfutil import has_code_location
+from .dwarfutil import has_code_location, ip_in_range
 from .tree import DWARFTreeModel, cu_sort_key
 from .scriptdlg import ScriptDlg, make_execution_environment
 from .ui import setup_ui
@@ -689,7 +689,8 @@ class TheWindow(QMainWindow):
 
     def on_localsat(self):
         dlg = LocalsDlg(self, self.dwarfinfo, self.prefix, self.dwarfregnames)
-        dlg.exec()
+        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_die:
+             self.the_tree.setCurrentIndex(self.tree_model.index_for_die(dlg.selected_die))
 
     # If the details pane has data - reload that
     def refresh_details(self):
@@ -707,7 +708,7 @@ class TheWindow(QMainWindow):
     def on_homepage(self):
         QDesktopServices.openUrl(QUrl('https://github.com/sevaa/dwex'))
 
-    # Doesn't quite work for the delay on tree expansion :(
+    # Doesn't quite work for the delay on tree expansion :( TODO: timer checks before lighting up this
     def start_wait(self):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 

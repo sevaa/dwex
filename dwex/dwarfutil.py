@@ -345,13 +345,13 @@ def scan_scope(scope, address):
     locals = []
     next_scope = None
     if 'DW_AT_frame_base' in scope.attributes:
-        locals.append(('__frame_base', parse_location(scope.attributes['DW_AT_frame_base'], scope.cu, address)))
+        locals.append(('__frame_base', parse_location(scope.attributes['DW_AT_frame_base'], scope.cu, address), scope))
         #'Type': {'name': 'void', 'modifiers' : ("pointer",), "scopes": (), "tag": None}}
     
     for die in scope.iter_children():
         if die.tag == 'DW_TAG_variable' or die.tag == 'DW_TAG_formal_parameter':
             (k, v) = resolve_local(die, address)
-            locals.append((k, v))
+            locals.append((k, v, die))
         elif die.tag == 'DW_TAG_lexical_block' and ip_in_range(die, address):
             (block_locals, next_scope) = scan_scope(die, address)
             locals += block_locals

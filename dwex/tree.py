@@ -234,7 +234,7 @@ class DWARFTreeModel(QAbstractItemModel):
 
     # Takes a die that might not have an _i
     # Restores the _i
-    # Assumes all parent DIEs of the current one are already parsed
+    # Assumes some parent DIEs of the current one are already parsed
     # and cached in the CU, so get_parent will always return a valid parent DIE
     def index_for_die(self, die):
         if hasattr(die, '_i'): # DIE already iterated over
