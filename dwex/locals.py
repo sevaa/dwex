@@ -7,7 +7,10 @@ from dwex.exprutil import ExprFormatter
 from .dwarfutil import *
 
 #0x25af0
-#0xd864
+#0xd864 (black)
+#0xdc6e (lxxx)
+#TODO: refactor away C++, support C explicitly
+#TODO: Objective C, Pascal, more?
 
 headers = ["Name", "Location"]
 _bold_font = None
@@ -48,7 +51,9 @@ class LocalsModel(QAbstractTableModel):
         val = the_row[col+1]
         if role == Qt.ItemDataRole.DisplayRole:
             if col == 1 and not the_row[0]: # Location on a variable
-                if len(val) > 3: # Variable
+                if len(val) == 0:
+                    return '<N/A>'
+                elif len(val) > 3: # Variable
                     return "; ".join(self.expr_formatter.format_op(*op) for op in val[0:3]) + "...+%d" % (len(val)-3)
                 else:
                     return "; ".join(self.expr_formatter.format_op(*op) for op in val)
@@ -61,13 +66,19 @@ class LocalsModel(QAbstractTableModel):
                     _bold_font = QFont(fi.family(), fi.pointSize(), QFont.Weight.Bold)
                 return _bold_font
         elif role == Qt.ItemDataRole.ToolTipRole:
-            if col == 1 and len(val) > 3:
-                return "; ".join(self.expr_formatter.format_op(*op) for op in val)
+            if col == 1:
+                if len(val) == 0:
+                    return 'The variable was optimized away at the provided address'
+                elif len(val) > 3:
+                    return "; ".join(self.expr_formatter.format_op(*op) for op in val)
 
 ############################################################################
 
 class LocalsDlg(QDialog):
-    def __init__(self, win, di, prefix, regnames):
+    _last_address = '' # Stored as string to allow for blank
+    _last_start_address = 0 # Stored as int
+
+    def __init__(self, win, di, prefix, regnames, hexadecimal):
         QDialog.__init__(self, win, Qt.WindowType.Dialog)
         self.selected_die = False
         self.resize(500, 400)
@@ -79,18 +90,18 @@ class LocalsDlg(QDialog):
         if not di._aranges:
             di._aranges = di.get_aranges()
 
-        self.expr_formatter = ExprFormatter(regnames, prefix, di.config.machine_arch, 2) # DWARF version is unknowable for now
+        self.expr_formatter = ExprFormatter(regnames, prefix, di.config.machine_arch, 2, hexadecimal) # DWARF version is unknowable for now
 
         ly = QVBoxLayout()
         l = QLabel(self)
         l.setText("Provide a hex code address:")
         ly.addWidget(l)
-        self.address = QLineEdit(self)
+        self.address = QLineEdit(self._last_address, self)
         ly.addWidget(self.address)
         l = QLabel(self)
         l.setText("Assuming the module is loaded at:")
         ly.addWidget(l)
-        self.start_address = QLineEdit(hex(di._start_address), self)
+        self.start_address = QLineEdit(hex(self._last_start_address), self)
         ly.addWidget(self.start_address)
 
         buttons = QDialogButtonBox(self)
@@ -115,29 +126,35 @@ class LocalsDlg(QDialog):
         self.setWindowTitle('Locals at address')
         self.setLayout(ly)
 
-    def on_check(self):
+    def on_check(self): #TODO: relocate absolute addresses in expressions
         try: # Try of just in case
             with WaitCursor():
                 self.nav_bu.setEnabled(False) # Even if error, stay disabled
 
                 try:
                     address = int(self.address.text(), 0)
-                    load_address = int(self.start_address.text(), 0)
+                    real_start_address = int(self.start_address.text(), 0)
                 except ValueError:
                     return
+                
+                LocalsDlg._last_address = self.address.text()
+                LocalsDlg._last_start_address = real_start_address
 
-                start_address = self.dwarfinfo._start_address
-                address += start_address - load_address # Now relative to the preferred start address
+                preferred_start_address = self.dwarfinfo._start_address
+                address += preferred_start_address - real_start_address # Now relative to the preferred start address
+                self.expr_formatter.set_address_delta(real_start_address - preferred_start_address) # Relocate addr on the way out
 
                 # Find the CU for the address
                 di = self.dwarfinfo
+                funcs = False
                 cu = find_cu_by_address(di, address)
-                if cu is None:
-                    return
+                if cu is not None:
+                    # Find the function(s) at the address - could be some inlines
+                    funcs = find_funcs_at_address(cu, address)
                 
-                # Find the function(s) at the address - could be some inlines
-                funcs = find_funcs_at_address(cu, address, start_address)
-                if not funcs:
+                if not funcs: # No CUs or no functions at that IP
+                    QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", 
+                        "No functions were found at that code address.", QMessageBox.StandardButton.Ok, self).show()
                     return
 
                 if len(funcs) != 1:
@@ -160,7 +177,9 @@ class LocalsDlg(QDialog):
                     if func: # Found a nested inline function, move on to that
                         (inline_func, inline_func_spec) = follow_function_spec(func)
                         (inline_func_name, mangled_inline_func_name) = retrieve_function_names(inline_func_spec, inline_func)
-                        grid_lines.append((True, inline_func_name, '?', func))
+                        inline_decl_file = get_source_file_name_from_attr(inline_func_spec, 'DW_AT_decl_file') or '?'
+                        inline_decl_line = inline_func_spec.attributes['DW_AT_decl_line'].value if 'DW_AT_decl_line' in inline_func_spec.attributes else '?'
+                        grid_lines.append((True, inline_func_name, '%s:%d' % (inline_decl_file, inline_decl_line), func))
 
                 # Finally display
                 self.locals.setModel(LocalsModel(grid_lines, self.expr_formatter))
@@ -192,5 +211,8 @@ class LocalsDlg(QDialog):
     def on_sel(self, index, prev = None):
         self.nav_bu.setEnabled(index.isValid())
 
-
+    @classmethod
+    def reset(cl, di):
+        cl._last_start_address = di._start_address
+        cl._last_address = ''
 

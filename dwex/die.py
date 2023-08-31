@@ -42,7 +42,7 @@ class DIETableModel(QAbstractTableModel):
         self.keys = list(die.attributes.keys())
         self.headers = _ll_headers if self.lowlevel else _noll_headers
         self.meta_count = _meta_count if lowlevel else 0
-        self.expr_formatter = ExprFormatter(regnames, prefix, die.dwarfinfo.config.machine_arch, die.cu['version'])
+        self.expr_formatter = ExprFormatter(regnames, prefix, die.dwarfinfo.config.machine_arch, die.cu['version'], hex)
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:

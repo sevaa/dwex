@@ -145,6 +145,7 @@ class TheWindow(QMainWindow):
                 self.navhistory = []
                 self.navpos = -1
                 self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
+                LocalsDlg.reset(di)
                 return True
             except AssertionError as ass: # Covers exeptions during parsing
                 raise DWARFParseError(ass, di)
@@ -688,7 +689,7 @@ class TheWindow(QMainWindow):
         self.on_copy(table_text)
 
     def on_localsat(self):
-        dlg = LocalsDlg(self, self.dwarfinfo, self.prefix, self.dwarfregnames)
+        dlg = LocalsDlg(self, self.dwarfinfo, self.prefix, self.dwarfregnames, self.hex)
         if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_die:
              self.the_tree.setCurrentIndex(self.tree_model.index_for_die(dlg.selected_die))
 

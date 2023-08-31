@@ -84,29 +84,24 @@ _REG_NAME_MAP = {
 class ExprFormatter:
     # Operator codes differ in DWARFv1, thus the need for version
     # regnames: False for friendly names, True for DWARF names
-    # prefix: False for friendly, Trus for DW_OP_xxx
-    def __init__(self, regnames, prefix, arch, dwarf_version):
+    # prefix: False for friendly, True for DW_OP_xxx
+    # address_delta is the addend that will account for a custom loading address
+    def __init__(self, regnames, prefix, arch, dwarf_version, hex):
         self.regnames = regnames
         self.prefix = prefix
         self.arch = arch
         self.regnamelist = _REG_NAME_MAP.get(self.arch)
         self.dwarf_version = dwarf_version # Likely to change
+        self.hex = hex
+        self.address_delta = 0
 
     def set_arch(self, arch):
         if arch != self.arch:
             self.arch = arch
-            self.regnamelist = _REG_NAME_MAP.get(self.arch)        
+            self.regnamelist = _REG_NAME_MAP.get(self.arch)
 
-    def format_arg(self, s):
-        if isinstance(s, str):
-            return s
-        elif isinstance(s, int):
-            return hex(s) if self.hex else str(s)
-        elif isinstance(s, list): # Could be a blob (list of ints), could be a subexpression
-            if len(s) > 0 and isinstance(s[0], DWARFExprOp): # Subexpression
-                return '{' + '; '.join(self.format_op(*op) for op in s) + '}'
-            else:
-                return bytes(s).hex() # Python 3.5+
+    def set_address_delta(self, ad):
+        self.address_delta = ad
 
     def decode_breg(self, regno, offset):
         if offset == 0:
@@ -117,6 +112,18 @@ class ExprFormatter:
             return '[%s+0x%x]' % (self.regnamelist[regno], offset)
 
     def format_op(self, op, op_name, args, offset):
+        def format_arg(s):
+            if isinstance(s, str):
+                return s
+            elif isinstance(s, int):
+                # TODO: more discerning here, hex elsewhere?
+                return hex(s) if self.hex or op == 0x03 else str(s) 
+            elif isinstance(s, list): # Could be a blob (list of ints), could be a subexpression
+                if len(s) > 0 and isinstance(s[0], DWARFExprOp): # Subexpression
+                    return '{' + '; '.join(self.format_op(*op) for op in s) + '}'
+                else:
+                    return bytes(s).hex() # Python 3.5+
+
         if not self.regnames and self.regnamelist: # Friendly register names
             if 0x50 <= op <= 0x6f and op - 0x50 < len(self.regnamelist): # reg0...reg31
                 op_name = self.regnamelist[op-0x50]
@@ -134,7 +141,9 @@ class ExprFormatter:
             op_name = op_name[6:]
 
         if args:
-            return op_name + ' ' + ', '.join(self.format_arg(s) for s in args)
+            if op == 0x03: # DW_OP_addr: relocate
+                args = [args[0] + self.address_delta]
+            return op_name + ' ' + ', '.join(format_arg(s) for s in args)
         else:
             return op_name
 

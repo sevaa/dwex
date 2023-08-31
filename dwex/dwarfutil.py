@@ -1,3 +1,4 @@
+from bisect import bisect_left
 from elftools.dwarf.ranges import BaseAddressEntry as RangeBaseAddressEntry, RangeEntry
 from elftools.dwarf.locationlists import LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser
@@ -47,13 +48,15 @@ class TypeDesc(object):
         self.scopes = () # Reads left to right
         self.tag = None   
 
-# address is relative to the preferred loading address
+# Address is relative to the preferred loading address
+# Not generally applicable for pyelftools clients - relies on CU caching by dwex
 def find_cu_by_address(di, address):
     if di._aranges:
         cuoffset = di._aranges.cu_offset_at_addr(address)
         if cuoffset is None:
             return None
-        return di._parse_CU_at_offset(cuoffset)
+        i = bisect_left(di._CU_offsets, cuoffset)
+        return di._unsorted_CUs[i]
     else:
         for cu in di._unsorted_CUs:
             if ip_in_range(cu.get_top_DIE(), address):
@@ -87,8 +90,7 @@ def get_cu_base(die):
 
 # Returns a list of DIEs objects for top level functions that contain the address
 # Inlines analyzed later
-def find_funcs_at_address(cu, address, start_address):
-    #TODO: get rid of start_address
+def find_funcs_at_address(cu, address):
     funcs = []
     top_die = cu.get_top_DIE()
     di = cu.dwarfinfo
@@ -105,18 +107,16 @@ def find_funcs_at_address(cu, address, start_address):
     for die in die_list:
         if die.tag == 'DW_TAG_subprogram' and has_code_location(die):
             if 'DW_AT_range' in die.attributes:
-                cu_base = top_die.attributes['DW_AT_low_pc'].value - start_address
+                cu_base = top_die.attributes['DW_AT_low_pc'].value
                 rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value)
                 for r in rl:
                     if r.begin_offset <= address - cu_base < r.end_offset:
                         funcs.append(die)
             else:
-                l = die.attributes['DW_AT_low_pc'].value - start_address
+                l = die.attributes['DW_AT_low_pc'].value
                 h = die.attributes['DW_AT_high_pc'].value
                 if not die.attributes['DW_AT_high_pc'].form == 'DW_FORM_addr':
                     h += l
-                else:
-                    h -= start_address
                 if address >= l and address < h:
                     funcs.append(die)
     return funcs
@@ -155,9 +155,13 @@ def follow_function_spec(func_die):
     return (origin, spec)
 
 # Line program navigation - A2L core
+# DWEX aware caching
 def get_source_line(die, address):
-    lp = die.dwarfinfo.line_program_for_CU(die.cu)
-    v5 = die.cu.header.version >= 5
+    cu = die.cu
+    if cu._lineprogram is None:
+        cu._lineprogram = die.dwarfinfo.line_program_for_CU(cu)
+    lp = cu._lineprogram
+    v5 = cu.header.version >= 5
     file_and_line = None
     prevstate = None
     for entry in lp.get_entries():
@@ -177,6 +181,22 @@ def get_source_line(die, address):
         prevstate = entry.state
     return file_and_line
 
+# Resolves source file number in an attribute to a file name
+# None if no such attribute or no such file
+# DWEX caching aware
+def get_source_file_name_from_attr(die, attr_name):
+    cu = die.cu
+    if cu._lineprogram is None:
+        cu._lineprogram = die.dwarfinfo.line_program_for_CU(cu)
+    lp = cu._lineprogram
+    if attr_name in die.attributes:
+        file_no = die.attributes[attr_name].value
+        if cu.header.version < 5:
+            file_no -= 1
+        file_entries = lp['file_entry']
+        if file_no >= 0 and file_no < len(file_entries):
+            return file_entries[file_no].name.decode('UTF-8')
+
 # Returns (name, mangled_name)
 def retrieve_function_names(func_spec, the_func):
     attr = func_spec.attributes
@@ -195,7 +215,8 @@ def retrieve_function_names(func_spec, the_func):
 
     # TODO: augment func name with arguments for ones where it's relevant. External? cdecl?
     if lang in (0x4, 0x19,0x1a, 0x21): # C++
-        func_name = generate_full_function_name(func_spec, the_func)
+        func_name = generate_full_function_name(func_spec, the_func) 
+    # TODO: Pascal, ObjC
     return (func_name, mangled_func_name)
 
 def generate_full_function_name(func_spec, the_func):
@@ -341,6 +362,8 @@ def get_class_spec_if_member(func_spec, the_func):
 # where locals is a list of (name, location)
 # and next_scope is a inlined function DIE to examine next
 # For now, local datatype is not returned
+# location is a list of parsed DWARF operations or an empty list
+# if the var has no matching location record for the given address
 def scan_scope(scope, address):
     locals = []
     next_scope = None
