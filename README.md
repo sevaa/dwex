@@ -20,7 +20,7 @@ Requirements and Dependencies
  - Python 3.6.1+
  - PyQt6
  - filebytes 0.10.1+
- - pyelftools 0.29+
+ - pyelftools 0.30+
 
 Installation
 -------------

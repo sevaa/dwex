@@ -58,7 +58,7 @@ def test_dwarfinfo(di):
                         assert details is not None
 
 def test_file_for(filename, on_di):    
-    print(filename)
+    print("=================== " + filename)
     arches = False
     def save_arches(a):
         nonlocal arches
@@ -67,7 +67,7 @@ def test_file_for(filename, on_di):
     di = read_dwarf(filename, save_arches)
     if arches: # Fat binary - go through all through architectures
         for arch_no in range(0, len(arches)):
-            print(arches[arch_no])
+            print("----------- " + arches[arch_no])
             di = read_dwarf(filename, lambda arches:arch_no)
             if di:
                 on_di(di)

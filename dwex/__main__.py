@@ -499,7 +499,7 @@ class TheWindow(QMainWindow):
     ##########################################################################
 
     def on_about(self):
-        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(str(v) for v in version) + "\n\nSeva Alekseyev, 2020-2022\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
+        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(str(v) for v in version) + "\n\nSeva Alekseyev, 2020-2023\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
             QMessageBox.StandardButton.Ok, self).show()
 
     def on_updatecheck(self):

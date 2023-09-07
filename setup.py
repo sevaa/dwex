@@ -83,7 +83,7 @@ setup(
     long_description_content_type="text/markdown",
     python_requires=">=3.6.1",
     setup_requires=[],
-    install_requires=['PyQt6', 'filebytes>=0.10.1', 'pyelftools>=0.29'],
+    install_requires=['PyQt6', 'filebytes>=0.10.1', 'pyelftools>=0.30'],
     platforms='any',
     classifiers=[
         "Development Status :: 5 - Production/Stable",
