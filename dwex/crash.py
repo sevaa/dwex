@@ -1,5 +1,6 @@
 import hashlib, urllib, random, string, traceback, sys, os, platform
 from urllib.request import urlopen
+# No dependencies on the rest of the app, and keep it that way
 
 def submit_report(subj, body):
     try:
@@ -44,7 +45,7 @@ def get_crash_die_context(locals, ctxt = None):
         pass
     return s
 
-def make_exc_report(exc, tb, version, ctxt=None):
+def make_exc_report(exc, tb, version, catchpoint, ctxt=None):
     while tb.tb_next:
         tb = tb.tb_next
     ss = traceback.extract_tb(tb)
@@ -53,6 +54,10 @@ def make_exc_report(exc, tb, version, ctxt=None):
     locals = tb.tb_frame.f_locals
 
     report = type(exc).__name__ + ' at ' + os.path.basename(crashpoint.filename) + ':' + str(crashpoint.lineno) + "\n"
+    if catchpoint:
+        from inspect import getframeinfo
+        fi = getframeinfo(catchpoint)
+        report += "Caught %s@%s:%d\n" % (fi.function, os.path.basename(fi.filename), fi.lineno)
     report += "DWEX " + '.'.join(str(v) for v in version) + "\n"
     report += "Python " + sys.version + "\n"
     report +=  platform.platform() + "\n"
@@ -73,9 +78,9 @@ def make_exc_report(exc, tb, version, ctxt=None):
 
     return report
 
-def report_crash(exc, tb, version, is_crash, ctxt=None):
+def report_crash(exc, tb, version, catchpoint = None, ctxt=None):
     try:
-        submit_report('[python][dwex][pyexception]%s' % ('[crash]' if is_crash else '',), make_exc_report(exc, tb, version, ctxt=ctxt))
+        submit_report('[python][dwex][pyexception]%s' % ('' if catchpoint else '[crash]',), make_exc_report(exc, tb, version, catchpoint, ctxt=ctxt))
     except Exception:
         pass
 
@@ -91,4 +96,5 @@ if __name__ == "__main__":
 
         foo()
     except Exception as exc:
-        submit_report(exc, (0, 50))
+        from inspect import currentframe
+        report_crash(exc, exc.__traceback__, (0, 50), currentframe())

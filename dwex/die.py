@@ -209,8 +209,9 @@ class DIETableModel(QAbstractTableModel):
         except ELFParseError as exc:
             from .__main__ import version
             from .crash import report_crash
+            from inspect import currentframe
             tb = exc.__traceback__
-            report_crash(exc, tb, version, False, ctxt = {'attr': attr, 'die':die, 'cu_header':header, 'dwarf_version':dwarf_version})
+            report_crash(exc, tb, version, currentframe(), ctxt = {'attr': attr, 'die':die, 'cu_header':header, 'dwarf_version':dwarf_version})
             return "(parse error - please report at github.com/sevaa/dwex)"
 
     def format_form(self, form):
@@ -417,8 +418,9 @@ class DIETableModel(QAbstractTableModel):
         except IndexError as exc:
             from .__main__ import version
             from .crash import report_crash
+            from inspect import currentframe
             tb = exc.__traceback__
-            report_crash(exc, tb, version, False)
+            report_crash(exc, tb, version, currentframe())
             return None
 
 class GenericTableModel(QAbstractTableModel):

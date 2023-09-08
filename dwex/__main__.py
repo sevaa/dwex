@@ -431,7 +431,8 @@ class TheWindow(QMainWindow):
             env = make_execution_environment(die)
         except Exception as exc: # Our error
             from .crash import report_crash
-            report_crash(exc, exc.__traceback__, version, False)
+            from inspect import currentframe
+            report_crash(exc, exc.__traceback__, version, currentframe())
             return False
         try:
             return eval(cond, env)
@@ -719,7 +720,7 @@ class TheWindow(QMainWindow):
 def on_exception(exctype, exc, tb):
     if isinstance(exc, Exception):
         from .crash import report_crash
-        report_crash(exc, exc.__traceback__, version, True)
+        report_crash(exc, exc.__traceback__, version)
         sys.excepthook = on_exception.prev_exchook
         sys.exit(1)
     elif on_exception.prev_exchook:
