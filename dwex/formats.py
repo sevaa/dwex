@@ -218,4 +218,4 @@ def get_debug_sections(di):
     # Display name to section object
     return {display_name: di.__dict__[field_name]
         for (display_name, field_name) in section_names.items()
-        if di.__dict__[field_name]}    
+        if hasattr(di, field_name)}    
