@@ -225,7 +225,7 @@ class DWARFTreeModel(QAbstractItemModel):
 
         # Abusing the structure of the per-CU DIE cache of pyelftools, it's the same in DWWARFv1
         i = bisect_left(target_cu._diemap, target_offset)
-        if target_cu._diemap[i] != target_offset:
+        if i >= len(target_cu._diemap) or target_cu._diemap[i] != target_offset:
             return None
         target_die = target_cu._dielist[i]
         if target_die.is_null():
