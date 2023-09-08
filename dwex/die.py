@@ -65,6 +65,8 @@ class DIETableModel(QAbstractTableModel):
         return self.attr_data(index, role) if row >= self.meta_count else self.meta_data(index, role)
 
     def attr_data(self, index, role):
+        if role == Qt.ItemDataRole.DisplayRole: # Shorting out 1530
+            return None
         irow = index.row()
         meta_count = self.meta_count
         self_keys_len = len(self.keys)
