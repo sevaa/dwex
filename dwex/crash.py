@@ -46,10 +46,12 @@ def get_crash_die_context(locals, ctxt = None):
     return s
 
 def make_exc_report(exc, tb, version, catchpoint, ctxt=None):
+    tracebacks = []
     while tb.tb_next:
+        tracebacks.insert(0, tb) # Innermost in the beginning of the list
         tb = tb.tb_next
     ss = traceback.extract_tb(tb)
-    stack = traceback.extract_stack(tb.tb_frame)
+    innermost_stack = traceback.extract_stack(tb.tb_frame)
     crashpoint = ss[0]
     locals = tb.tb_frame.f_locals
 
@@ -61,15 +63,34 @@ def make_exc_report(exc, tb, version, catchpoint, ctxt=None):
     report += "DWEX " + '.'.join(str(v) for v in version) + "\n"
     report += "Python " + sys.version + "\n"
     report +=  platform.platform() + "\n"
-    from .cookie import cookie
+    try:
+        from .cookie import cookie
+    except ImportError:
+        cookie = False
     if cookie:
         report += "Cookie: " + cookie + "\n"
     report += get_crash_die_context(locals, ctxt=ctxt)
     report += "".join(traceback.format_exception_only(type(exc), exc)) + "\n"
 
-    report += "PyStack:\n"
-    stacklines = [se.name + ' (' + os.path.basename(se.filename) + ':' + str(se.lineno) + ")\n" for se in stack]
-    report += "".join(stacklines[::-1]) + "\n"
+    report += "PyStack_v2:\n"
+    def module_prefix(se):
+        p = os.path.dirname(se.filename).split(os.path.sep)
+        if 'elftools' in p:
+            return 'pyelftools/'
+        elif 'dwex' in p:
+            return 'dwex/'
+        return ''
+    def make_stackline(se):
+        return se.name + '@' + module_prefix(se) + os.path.basename(se.filename) + ':' + str(se.lineno) + "\n"
+    def make_stack_dump(stack):
+        return [make_stackline(se) for se in stack]
+    def make_traceback_dump(tb):
+        return "-\n"+"".join(make_stack_dump(traceback.extract_stack(tb.tb_frame)))
+
+    report += "".join(make_stack_dump(innermost_stack[::-1]))
+    # More tracebacks
+    report += "".join(make_traceback_dump(tb) for tb in tracebacks[1:])
+    report += "\n"
 
     report += "PyLocals:\n" + ''.join(k + ": " + str(locals[k]) + "\n" for k in locals).replace("\n\n","\n")
 
@@ -80,7 +101,10 @@ def make_exc_report(exc, tb, version, catchpoint, ctxt=None):
 
 def report_crash(exc, tb, version, catchpoint = None, ctxt=None):
     try:
-        submit_report('[python][dwex][pyexception]%s' % ('' if catchpoint else '[crash]',), make_exc_report(exc, tb, version, catchpoint, ctxt=ctxt))
+        subj = '[python][dwex][pyexception]'
+        if not catchpoint:
+            subj += '[crash]'
+        submit_report(subj, make_exc_report(exc, tb, version, catchpoint, ctxt=ctxt))
     except Exception:
         pass
 

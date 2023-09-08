@@ -743,8 +743,9 @@ class TheApp(QApplication):
         self.win = TheWindow()
         self.exec()
 
-def main():     
-    if not sys.gettrace(): # Lame way to detect a debugger
+def main():
+    under_debugger = sys.gettrace() # Lame way to detect a debugger
+    if not under_debugger: 
         on_exception.prev_exchook = sys.excepthook
         sys.excepthook = on_exception
 
