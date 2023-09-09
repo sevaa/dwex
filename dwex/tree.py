@@ -47,9 +47,9 @@ def load_children(parent_die, sort):
     # Load and cache child DIEs in the parent DIE, if necessary
     # Assumes the check if the DIE has children has been already performed
     if not hasattr(parent_die, "_children") or parent_die._children is None:
-        # TODO: wait cursor here. It may cause disk I/O
+        # TODO: wait cursor here.
         try:
-            parent_die._children = [decorate_die(die, i) for (i, die) in enumerate(parent_die.iter_children())]    
+            parent_die._children = [decorate_die(die, i) for (i, die) in enumerate(parent_die.iter_children())]
             if sort:
                 parent_die._children.sort(key = die_sort_key)
                 for (i, die) in enumerate(parent_die._children):
@@ -245,6 +245,9 @@ class DWARFTreeModel(QAbstractItemModel):
                 parent_die = die.get_parent()
                 load_children(parent_die, self.sortdies) # This will populate the _i in all children of parent_die, including die
                 if not index: # After the first iteration, the one in the direct parent of target_die, target_die will have _i
+                    if die.is_null():
+                        die = parent_die._children[-1] # Null is a terminator in a sequence - move to the sibling
+                        # TODO: move to the closest in terms of offset, which would require going down the nearest sibling's tree
                     index = self.createIndex(die._i, 0, die)
                 die = parent_die
             return index

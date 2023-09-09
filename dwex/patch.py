@@ -11,12 +11,13 @@ def monkeypatch():
 
     # Wasmloc: monkeypatch for #1589
     elftools.dwarf.dwarf_expr.DW_OP_name2opcode["DW_OP_WASM_location"] = 0xed
+    elftools.dwarf.dwarf_expr.DW_OP_opcode2name[0xed] = "DW_OP_WASM_location"
     old_init_dispatch_table = elftools.dwarf.dwarf_expr._init_dispatch_table
     def _init_dispatch_table_patch(structs):
         def parse_wasmloc():
             def parse(stream):
                 op = struct_parse(structs.Dwarf_uint8(''), stream)
-                if op in (0, 1, 2):
+                if 0 <= op <= 2:
                     return [op, struct_parse(structs.Dwarf_uleb128(''), stream)]
                 elif op == 3:
                     return [op, struct_parse(structs.Dwarf_uint32(''), stream)]
