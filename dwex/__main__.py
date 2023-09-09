@@ -718,7 +718,14 @@ class TheWindow(QMainWindow):
         QApplication.restoreOverrideCursor()
 
 def on_exception(exctype, exc, tb):
-    if isinstance(exc, Exception):
+    if isinstance(exc, MemoryError):
+        app = QApplication.instance()
+        app.win.destroy()
+        app.win = None
+        QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer", "Out of memory. DWARF Explorer will now close. Sorry.",
+            QMessageBox.StandardButton.Ok, None).show()
+        sys.exit(1)
+    elif isinstance(exc, Exception):
         from .crash import report_crash
         report_crash(exc, exc.__traceback__, version)
         sys.excepthook = on_exception.prev_exchook
