@@ -80,7 +80,9 @@ def get_cu_base(die):
         rl = di._ranges.get_range_list_at_offset(top_die.attributes['DW_AT_ranges'].value, cu=die.cu)
         base = None
         for r in rl:
-            if isinstance(r, RangeBaseAddressEntry) and (base is None or r.base_address < base):
+            if isinstance(r, RangeEntry) and r.is_absolute and (base is None or r.begin_offset < base):
+                base = r.begin_offset
+            elif isinstance(r, RangeBaseAddressEntry) and (base is None or r.base_address < base):
                 base = r.base_address
         if base is None:
             raise NoBaseError()
@@ -132,13 +134,16 @@ def ip_in_range(die, ip):
         if not di._ranges: # Absent in the DWARF file
             return False
         # TODO: handle base addresses. Never seen those so far...
-        cu_base = get_cu_base(die)
+        cu_base = None
         rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value, cu = die.cu)
         for r in rl:
             if isinstance(r, RangeBaseAddressEntry):
                 cu_base = r.base_address
-            elif r.begin_offset <= ip - cu_base < r.end_offset:
-                return True
+            else: # r is RangeEntry, which in DWARF5 can be absolute
+                if not r.is_absolute and cu_base is None:
+                    cu_base = get_cu_base(die)
+                if r.begin_offset <= ip - (0 if r.is_absolute else cu_base) < r.end_offset:
+                    return True
     if 'DW_AT_low_pc' in die.attributes and 'DW_AT_high_pc' in die.attributes:
         l = die.attributes['DW_AT_low_pc'].value
         h = die.attributes['DW_AT_high_pc'].value
