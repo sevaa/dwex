@@ -58,9 +58,8 @@ class DIEV1(object):
             self.has_children = False
         else:
             tag_code = struct_parse(structs.Dwarf_uint16(''), stm)
-            if tag_code not in TAG_reverse:
-                raise ValueError("%d not a known tag" % (tag_code))
-            self.tag = TAG_reverse[tag_code]
+            # Do what pyelftools does, leave tag as int if unknown
+            self.tag = TAG_reverse[tag_code] if tag_code in TAG_reverse else tag_code 
             if self.tag == 'DW_TAG_null': # TAG_padding in DWARF1 spec
                 self.tag == 'DW_TAG_padding' #Doesn't count for is_null
                 # No attributes, just advance the stream
@@ -76,8 +75,8 @@ class DIEV1(object):
                         name = ATTR_reverse[attr]
                     elif 0x200 <= attr <= 0x3ff: #DW_AT_MIPS represented as 0x204???
                         name = 'DW_AT_user_0x%x' % attr
-                    else:
-                        raise ValueError("%d not a known attribute" % (attr))
+                    else: # Do what pyelftools does, leave tag as int if unknown
+                        name = attr
 
                     raw_value = struct_parse(structs.Dwarf_dw_form[form], stm)
                     value = raw_value
