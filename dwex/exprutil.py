@@ -106,8 +106,12 @@ class ExprFormatter:
     def decode_breg(self, regno, offset):
         if offset == 0:
             return '[%s]' % (self.regnamelist[regno],)
-        elif offset < 0:
+        elif -10 < offset < 0:
+            return '[%s-%x]' % (self.regnamelist[regno], -offset)
+        elif offset <= 0xa:
             return '[%s-0x%x]' % (self.regnamelist[regno], -offset)
+        elif 0 < offset < 10:
+            return '[%s+%x]' % (self.regnamelist[regno], offset)
         else:
             return '[%s+0x%x]' % (self.regnamelist[regno], offset)
 
@@ -117,7 +121,7 @@ class ExprFormatter:
                 return s
             elif isinstance(s, int):
                 # TODO: more discerning here, hex elsewhere?
-                return hex(s) if self.hex or op == 0x03 else str(s) 
+                return hex(s) if (self.hex or op == 0x03) and not(-10 < s < 10) else str(s) 
             elif isinstance(s, list): # Could be a blob (list of ints), could be a subexpression
                 if len(s) > 0 and isinstance(s[0], DWARFExprOp): # Subexpression
                     return '{' + '; '.join(self.format_op(*op) for op in s) + '}'
