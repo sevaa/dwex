@@ -51,8 +51,10 @@ class DIEV1(object):
 
         structs = self.dwarfinfo.structs
         self.size = struct_parse(structs.Dwarf_uint32(''), stm)
+        # Size 8+  can be padding if the tag is 0. No attributes in those.
+        # DW_TAG_null and DW_TAG_padding are both code zero
         if self.size < 8:
-            self.tag = 'DW_TAG_padding'
+            self.tag = 'DW_TAG_null' # Null terminates the sibling chain
             self.has_children = False
         else:
             tag_code = struct_parse(structs.Dwarf_uint16(''), stm)
@@ -60,6 +62,7 @@ class DIEV1(object):
                 raise ValueError("%d not a known tag" % (tag_code))
             self.tag = TAG_reverse[tag_code]
             if self.tag == 'DW_TAG_null': # TAG_padding in DWARF1 spec
+                self.tag == 'DW_TAG_padding' #Doesn't count for is_null
                 # No attributes, just advance the stream
                 stm.seek(self.size-6, 1)
                 self.has_children = False
@@ -84,14 +87,15 @@ class DIEV1(object):
                         form=form,
                         value=value,
                         raw_value=raw_value,
-                        offset=attr_offset)
+                        offset=attr_offset,
+                        indirection_length = 0)
                 self.has_children = self.attributes['DW_AT_sibling'].value >= self.offset + self.size + 8
 
     def get_parent(self):
         return self._parent
 
     def is_null(self):
-        return self.tag == 'DW_TAG_padding'
+        return self.tag == 'DW_TAG_null'
 
     def iter_children(self):
         return self.cu.iter_children(self)
@@ -130,6 +134,12 @@ class CompileUnitV1(object):
         parent = None
         parent_stack = list()
         end_offset = self.get_top_DIE().attributes['DW_AT_sibling'].value
+        # Dump the whole section into locals to catch 1610
+        if end_offset - offset <= 4096:
+            stm = self.dwarfinfo.stm
+            stm.seek(offset, 0)
+            import base64
+            section_dump = base64.encodebytes(stm.read(end_offset - offset)).decode('ASCII')
         while offset < end_offset:
             die = self.DIE_at_offset(offset)
 
@@ -142,9 +152,13 @@ class CompileUnitV1(object):
                 if offset != die.sibling(): # Start of a subtree
                     parent_stack.append(parent)
                     parent = die
-            else: # padding - end of a sibling chain
-                parent = parent_stack.pop()
+            else: # null - end of a sibling chain
+                # Catching 1610
+                size = die.size
+                tag = die.tag
+                parent = parent_stack.pop() # Throws IndexError
                 offset += die.size
+            prev_die_tag = die.tag
 
     def iter_children(self, parent_die):
         offset = parent_die.offset + parent_die.size
@@ -158,12 +172,14 @@ class CompileUnitV1(object):
             if not die.is_null():
                 yield die
                 # Troubleshooting #1497
+                
                 tag = die.tag
                 attr = die.attributes
                 off = die.offset
                 size = die.size
                 has_children = die.has_children
-                offset = self.attributes['DW_AT_sibling'].value # will throw KeyError if none
+                offset = die.attributes['DW_AT_sibling'].value # will throw KeyError if none
+                prev_die = die
                 #offset = die.sibling()
             else:
                 break        
@@ -259,7 +275,7 @@ class DWARFInfoV1(object):
         offset = 0
         while offset < self.section_size:
             die = self.DIE_at_offset(offset, None)
-            if die.tag != 'DW_TAG_padding':
+            if not die.is_null():
                 if die.cu is None:
                     die.cu = cu = CompileUnitV1(self, die)
                     cu.cu_offset = offset
