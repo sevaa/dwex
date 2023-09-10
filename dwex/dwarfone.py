@@ -148,7 +148,9 @@ class CompileUnitV1(object):
 
     def iter_children(self, parent_die):
         offset = parent_die.offset + parent_die.size
-        while offset < self.dwarfinfo.section_size:
+        parent_sibling_offset = parent_die.attributes['DW_AT_sibling'].value if 'DW_AT_sibling' in parent_die.attributes else None
+        section_size = self.dwarfinfo.section_size
+        while offset < section_size:
             die = self.DIE_at_offset(offset)
 
             if die._parent is None:
@@ -161,7 +163,8 @@ class CompileUnitV1(object):
                 off = die.offset
                 size = die.size
                 has_children = die.has_children
-                offset = die.sibling()
+                offset = self.attributes['DW_AT_sibling'].value # will throw KeyError if none
+                #offset = die.sibling()
             else:
                 break        
 
