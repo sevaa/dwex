@@ -8,6 +8,7 @@ from .dwarfutil import *
 
 #0x25af0
 #0xd864 (black)
+# test: d989, n with False for expression
 #0xdc6e (lxxx)
 #TODO: refactor away C++, support C explicitly
 #TODO: Objective C, Pascal, more?
@@ -51,7 +52,9 @@ class LocalsModel(QAbstractTableModel):
         val = the_row[col+1]
         if role == Qt.ItemDataRole.DisplayRole:
             if col == 1 and not the_row[0]: # Location on a variable
-                if len(val) == 0:
+                if val is False: # No location
+                    return '<N/A>'
+                elif len(val) == 0: # Loclist, but not for the given address
                     return '<N/A>'
                 elif len(val) > 3: # Variable
                     return "; ".join(self.expr_formatter.format_op(*op) for op in val[0:3]) + "...+%d" % (len(val)-3)
@@ -66,8 +69,10 @@ class LocalsModel(QAbstractTableModel):
                     _bold_font = QFont(fi.family(), fi.pointSize(), QFont.Weight.Bold)
                 return _bold_font
         elif role == Qt.ItemDataRole.ToolTipRole:
-            if col == 1:
-                if len(val) == 0:
+            if col == 1 and not the_row[0]: # On the location column of a variable
+                if val is False:
+                    return 'No location provided'
+                elif len(val) == 0:
                     return 'The variable was optimized away at the provided address'
                 elif len(val) > 3:
                     return "; ".join(self.expr_formatter.format_op(*op) for op in val)
@@ -132,8 +137,9 @@ class LocalsDlg(QDialog):
                 self.nav_bu.setEnabled(False) # Even if error, stay disabled
 
                 try:
-                    address = int(self.address.text(), 0)
-                    real_start_address = int(self.start_address.text(), 0)
+                    # Hex, with or without the 0x prefix
+                    address = int(self.address.text(), 16)
+                    real_start_address = int(self.start_address.text(), 16)
                 except ValueError:
                     return
                 
@@ -162,24 +168,32 @@ class LocalsDlg(QDialog):
 
                 func = funcs[0]
                 (origin, func_desc) = follow_function_spec(func)
+                # This the file:line of the IP. It points at the innermost inline
                 file_and_line = get_source_line(func, address)
-                if file_and_line is None:
-                    file_and_line = ("?","?")
-
+                (address_file, address_line) = ("?","?") if file_and_line is None else file_and_line
                 (func_name, mangled_func_name) = retrieve_function_names(func_desc, func)
 
-                grid_lines = [(True, func_name, '%s:%d' % file_and_line, func)]
-                while func: # Loop by function; inside the top level one there might be inlines
-                    ver = func.cu['version'] # The variable should not be in a different CU than the containing function
-                    (locals, func) = scan_scope(func, address)
-                    self.expr_formatter.dwarf_version = ver
-                    grid_lines += [(False, name,  expr, die) for (name, expr, die) in locals]
-                    if func: # Found a nested inline function, move on to that
+                frames = [] # a collection of (func_name, file, line, die, locals), innermost at the top
+                while True: # Loop by function from outermost to innermost; inside the top level one there might be inlines
+                    (locals, next_func) = scan_scope(func, address)
+                    if next_func: # Found a nested inline function, move on to that
+                        call_file = get_source_file_name_from_attr(next_func, 'DW_AT_call_file') or '?'
+                        call_line = next_func.attributes['DW_AT_call_line'].value if 'DW_AT_call_line' in next_func.attributes else '?'
+                        frames.insert(0, (func_name, call_file, call_line, func, locals))
+                        func = next_func
                         (inline_func, inline_func_spec) = follow_function_spec(func)
-                        (inline_func_name, mangled_inline_func_name) = retrieve_function_names(inline_func_spec, inline_func)
-                        inline_decl_file = get_source_file_name_from_attr(inline_func_spec, 'DW_AT_decl_file') or '?'
-                        inline_decl_line = inline_func_spec.attributes['DW_AT_decl_line'].value if 'DW_AT_decl_line' in inline_func_spec.attributes else '?'
-                        grid_lines.append((True, inline_func_name, '%s:%d' % (inline_decl_file, inline_decl_line), func))
+                        (func_name, mangled_func_name) = retrieve_function_names(inline_func_spec, inline_func)
+                    else:
+                        frames.insert(0, (func_name, address_file, address_line, func, locals))
+                        break
+
+                # Now render to lines:
+                grid_lines = []
+                for (name, file, line, func_die, locals) in frames:
+                    grid_lines.append((True, name, '%s:%d' % (file, line), func_die))
+                    self.expr_formatter.dwarf_version = func_die.cu['version'] # The variable should not be in a different CU than the containing function
+                    for (name, expr, die) in locals:
+                        grid_lines.append((False, name,  expr, die))
 
                 # Finally display
                 self.locals.setModel(LocalsModel(grid_lines, self.expr_formatter))
