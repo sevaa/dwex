@@ -10,7 +10,8 @@ from .scriptdlg import ScriptDlg, make_execution_environment
 from .ui import setup_ui
 from .locals import LocalsDlg
 
-version = (2, 32)
+# Sync with version in setup.py
+version = (2, 40)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog

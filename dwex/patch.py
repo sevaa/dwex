@@ -44,4 +44,21 @@ def monkeypatch():
                  not attr.name == 'DW_AT_const_value') or
                 attr.form in ('DW_FORM_sec_offset', 'DW_FORM_loclistx')) and
                 not attribute_is_member_offset(attr, dwarf_version))
+    
+    def _attribute_is_loclistptr_class(cls, attr):
+        return (attr.name in ( 'DW_AT_location', 'DW_AT_string_length',
+                               'DW_AT_const_value', 'DW_AT_return_addr',
+                               'DW_AT_data_member_location',
+                               'DW_AT_frame_base', 'DW_AT_segment',
+                               'DW_AT_static_link', 'DW_AT_use_location',
+                               'DW_AT_vtable_elem_location',
+                               'DW_AT_call_value',
+                               'DW_AT_GNU_call_site_value',
+                               'DW_AT_GNU_call_site_target',
+                               'DW_AT_GNU_call_site_data_value',
+                               'DW_AT_call_target',
+                               'DW_AT_call_target_clobbered',
+                               'DW_AT_call_data_location',
+                               'DW_AT_call_data_value'))
     elftools.dwarf.locationlists.LocationParser._attribute_has_loc_list = MethodType(_attribute_has_loc_list, elftools.dwarf.locationlists.LocationParser)
+    elftools.dwarf.locationlists.LocationParser._attribute_is_loclistptr_class = MethodType(_attribute_is_loclistptr_class, elftools.dwarf.locationlists.LocationParser)
