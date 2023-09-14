@@ -143,6 +143,26 @@ def read_macho(filename, resolve_arch, friendly_filename):
     di._start_address = text_cmd.header.vmaddr if text_cmd else 0
     return di
 
+def read_elf(file, filename):
+    from elftools.elf.elffile import ELFFile
+    file.seek(0)
+    # TODO: interactive supplemental DWARF resolver here...
+    elffile = ELFFile(file, lambda s: open(path.join(path.dirname(filename), s), 'rb'))
+    # Retrieve the preferred loading address
+    load_segment = next((seg for seg in elffile.iter_segments() if seg.header.p_type == 'PT_LOAD'), None)
+    start_address = load_segment.header.p_vaddr if load_segment else 0
+    di = None
+    if elffile.has_dwarf_info():
+        di = elffile.get_dwarf_info()
+    elif elffile.get_section_by_name(".debug"):
+        from .dwarfone import parse_dwarf1
+        di = parse_dwarf1(elffile)
+
+    if di:
+        di._format = 0
+        di._start_address = start_address
+    return di    
+
 # UI agnostic - resolve_arch might be interactive
 # Returns slightly augmented DWARFInfo
 # Or None if not a DWARF containing file (or unrecognized)
@@ -159,23 +179,8 @@ def read_dwarf(filename, resolve_arch):
             if signature[0:2] == b'MZ': # DOS header - this might be a PE. Don't verify the PE header, just feed it to the parser
                 return read_pe(filename)
             elif signature == b'\x7FELF': #It's an ELF
-                from elftools.elf.elffile import ELFFile
-                file.seek(0)
-                elffile = ELFFile(file)
+                di = read_elf(file, filename)
                 file = None # Keep the file open
-                # Retrieve the preferred loading address
-                load_segment = next((seg for seg in elffile.iter_segments() if seg.header.p_type == 'PT_LOAD'), None)
-                start_address = load_segment.header.p_vaddr if load_segment else 0
-                di = None
-                if elffile.has_dwarf_info():
-                    di = elffile.get_dwarf_info()
-                elif elffile.get_section_by_name(".debug"):
-                    from .dwarfone import parse_dwarf1
-                    di = parse_dwarf1(elffile)
-
-                if di:
-                    di._format = 0
-                    di._start_address = start_address
                 return di
             elif signature in (b'\xCA\xFE\xBA\xBE', b'\xFE\xED\xFA\xCE', b'\xFE\xED\xFA\xCF', b'\xCE\xFA\xED\xFE', b'\xCF\xFA\xED\xFE'):
                 if signature == b'\xCA\xFE\xBA\xBE' and int.from_bytes(file.read(4), 'big') >= 0x20:
