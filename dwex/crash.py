@@ -2,6 +2,12 @@ import hashlib, urllib, random, string, traceback, sys, os, platform
 from urllib.request import urlopen
 # No dependencies on the rest of the app, and keep it that way
 
+_binary_desc = None
+
+def set_binary_desc(s):
+    global _binary_desc
+    _binary_desc = s
+
 def submit_report(subj, body):
     try:
         secret = "jkaweliop3jka;lswmn12"
@@ -46,6 +52,7 @@ def get_crash_die_context(locals, ctxt = None):
     return s
 
 def make_exc_report(exc, tb, version, catchpoint, ctxt=None):
+    global _binary_desc
     tracebacks = []
     while tb.tb_next:
         tracebacks.insert(0, tb) # Innermost in the beginning of the list
@@ -62,7 +69,9 @@ def make_exc_report(exc, tb, version, catchpoint, ctxt=None):
         report += "Caught %s@%s:%d\n" % (fi.function, os.path.basename(fi.filename), fi.lineno)
     report += "DWEX " + '.'.join(str(v) for v in version) + "\n"
     report += "Python " + sys.version + "\n"
-    report +=  platform.platform() + "\n"
+    report += "System: " + platform.platform() + "\n"
+    if _binary_desc:
+        report += "Binary: " + _binary_desc + "\n"
     try:
         from .cookie import cookie
     except ImportError:
@@ -72,7 +81,7 @@ def make_exc_report(exc, tb, version, catchpoint, ctxt=None):
     report += get_crash_die_context(locals, ctxt=ctxt)
     report += "".join(traceback.format_exception_only(type(exc), exc)) + "\n"
 
-    report += "PyStack_v2:\n"
+    report += "PyStack_v3:\n"
     def module_prefix(se):
         p = os.path.dirname(se.filename).split(os.path.sep)
         if 'elftools' in p:
@@ -83,11 +92,11 @@ def make_exc_report(exc, tb, version, catchpoint, ctxt=None):
     def make_stackline(se):
         return se.name + '@' + module_prefix(se) + os.path.basename(se.filename) + ':' + str(se.lineno) + "\n"
     def make_stack_dump(stack):
-        return [make_stackline(se) for se in stack]
+        return [make_stackline(se) for se in stack[::-1]]
     def make_traceback_dump(tb):
         return "-\n"+"".join(make_stack_dump(traceback.extract_stack(tb.tb_frame)))
 
-    report += "".join(make_stack_dump(innermost_stack[::-1]))
+    report += "".join(make_stack_dump(innermost_stack))
     # More tracebacks
     report += "".join(make_traceback_dump(tb) for tb in tracebacks[1:])
     report += "\n"

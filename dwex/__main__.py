@@ -11,7 +11,7 @@ from .ui import setup_ui
 from .locals import LocalsDlg
 
 # Sync with version in setup.py
-version = (2, 40)
+version = (2, 41)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -147,6 +147,8 @@ class TheWindow(QMainWindow):
                 self.navpos = -1
                 self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
                 LocalsDlg.reset(di)
+                from .crash import set_binary_desc
+                set_binary_desc(("ELF", "MachO", "PE")[di._format] + " " + di.config.machine_arch)
                 return True
             except AssertionError as ass: # Covers exeptions during parsing
                 raise DWARFParseError(ass, di)
