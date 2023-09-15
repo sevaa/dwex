@@ -106,9 +106,13 @@ class CompileUnitV1(object):
     def __init__(self, di, top_die):
         self.dwarfinfo = di
         self.structs = di.structs
-        self.header = CUv1Header(version = 1, unit_length = None, debug_abbrev_offset = None, address_size = 4)
+        end_offset = top_die.attributes['DW_AT_sibling'].value
+        self.header = CUv1Header(version = 1, unit_length = end_offset - top_die.offset, debug_abbrev_offset = None, address_size = 4)
         self._dielist = [top_die]
         self._diemap = [top_die.offset]
+        # For compatibility with v2+ CU
+        self.cu_offset = top_die.offset
+        self.cu_die_offset = top_die.offset
 
     def get_top_DIE(self):
         return self._dielist[0]
@@ -181,7 +185,10 @@ class CompileUnitV1(object):
                 prev_die = die
                 #offset = die.sibling()
             else:
-                break        
+                break
+            
+    def iter_DIE_children(self, die):
+        raise NotImplementedError("Sorry, not supported on DWARFv1 yet")
 
 class LineTableV1(object):
     def __init__(self, stm, structs, len, pc):
@@ -302,6 +309,12 @@ class DWARFInfoV1(object):
             return LineTableV1(stm, structs, len, pc)
         else:
             return None
+        
+    def range_lists(self):
+        return None
+    
+    def get_aranges(self):
+        return None
 
 def parse_dwarf1(elffile):
     return DWARFInfoV1(elffile)

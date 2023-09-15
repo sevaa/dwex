@@ -208,6 +208,9 @@ class LocalsDlg(QDialog):
             # Any user followup maybe?
             QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", 
                 "Unexpected error while analysing the debug information." % (len(funcs),), QMessageBox.StandardButton.Ok, self).show()
+        except NotImplementedError as exc:
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", 
+                "This feature is not supported on DWARF v1 yet.", QMessageBox.StandardButton.Ok, self).show()
         except Exception as exc:
             QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer", 
                 "Unexpected error while analysing the debug information.", QMessageBox.StandardButton.Ok, self).show()
