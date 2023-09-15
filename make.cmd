@@ -16,5 +16,5 @@ del /q dist\*.*
 echo cookie='%HASH%' >dwex\cookie.py
 python setup.py sdist
 echo cookie=False >dwex\cookie.py
-twine upload -u sevaa dist/*
+twine upload dist/*
 if errorlevel 1 pause 
