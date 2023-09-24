@@ -1,3 +1,4 @@
+import os
 import elftools.dwarf.enums
 import elftools.dwarf.dwarf_expr
 import elftools.dwarf.locationlists
@@ -62,3 +63,17 @@ def monkeypatch():
                                'DW_AT_call_data_value'))
     elftools.dwarf.locationlists.LocationParser._attribute_has_loc_list = MethodType(_attribute_has_loc_list, elftools.dwarf.locationlists.LocationParser)
     elftools.dwarf.locationlists.LocationParser._attribute_is_loclistptr_class = MethodType(_attribute_is_loclistptr_class, elftools.dwarf.locationlists.LocationParser)
+
+    # Raw location lists
+    def get_location_list_at_offset_ex(self, offset):
+        self.stream.seek(offset, os.SEEK_SET)
+        return [entry
+            for entry
+            in struct_parse(self.structs.Dwarf_loclists_entries, self.stream)]
+    
+    elftools.dwarf.locationlists.LocationLists.get_location_lists_at_offset_ex = get_location_list_at_offset_ex
+
+    # Rangelist entry translate with mixed V4/V5
+    def translate_v5_entry(self, entry, cu):
+        return self._rnglists.translate_v5_entry(entry, cu)
+    elftools.dwarf.ranges.RangeListsPair.translate_v5_entry = translate_v5_entry

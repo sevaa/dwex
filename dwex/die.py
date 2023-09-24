@@ -1,15 +1,15 @@
 from bisect import bisect_right
-from PyQt6.QtCore import Qt, QAbstractItemModel, QAbstractTableModel, QModelIndex
-from PyQt6.QtGui import QBrush, QFont
+from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex
+from PyQt6.QtGui import QBrush
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser
 from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL
 from elftools.common.exceptions import ELFParseError
-from elftools.dwarf.ranges import BaseAddressEntry as RangeBaseAddressEntry, RangeEntry
 
 from dwex.exprutil import ExprFormatter
 from .dwarfone import DWARFExprParserV1
 from .dwarfutil import *
+from .details import GenericTableModel, FixedWidthTableModel
 
 MAX_INLINE_BYTEARRAY_LEN = 32
 
@@ -23,7 +23,6 @@ def is_long_blob(attr):
 
 _blue_brush = QBrush(Qt.GlobalColor.blue)
 _ltgrey_brush = QBrush(Qt.GlobalColor.lightGray)
-_fixed_font = None
 
 _ll_headers = ("Attribute", "Offset", "Form", "Raw", "Value")
 _noll_headers = ("Attribute", "Form", "Value")
@@ -43,6 +42,9 @@ class DIETableModel(QAbstractTableModel):
         self.headers = _ll_headers if self.lowlevel else _noll_headers
         self.meta_count = _meta_count if lowlevel else 0
         self.expr_formatter = ExprFormatter(regnames, prefix, die.dwarfinfo.config.machine_arch, die.cu['version'], hex)
+
+    from .ranges import show_ranges
+    from .locs import show_location 
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
@@ -136,7 +138,7 @@ class DIETableModel(QAbstractTableModel):
         # Can't just check for iterable, str is iterable too
         return [self.expr_formatter.format_op(*op) for op in self.die.cu._exprparser.parse_expr(expr)]
 
-    # Big DIE attribute value interpreter
+    # Big DIE attribute value interpreter for the top right table
     def format_value(self, attr):
         try:
             die = self.die
@@ -305,81 +307,9 @@ class DIETableModel(QAbstractTableModel):
             attr = self.attributes[key]
             form = attr.form
             if key == "DW_AT_ranges":
-                di = self.die.dwarfinfo
-                if not di._ranges:
-                    di._ranges = di.range_lists()
-                if not di._ranges: # Absent in the DWARF file
-                    return None
-                ranges = di._ranges.get_range_list_at_offset(attr.value, cu = self.die.cu)
-                top_die = self.die.cu.get_top_DIE() 
-                warn = None
-                lines = []                
-                if len(ranges):
-                    cu_base = 0
-                    # Do we need the base address? We might not.
-                    has_relative_entries = next((r for r in ranges if isinstance(r, RangeEntry) and not r.is_absolute), False)
-                    if has_relative_entries and not isinstance(ranges[0], RangeBaseAddressEntry):
-                        try:
-                            cu_base = get_cu_base(self.die)
-                        except NoBaseError:
-                            warn = "Base address not found, assuming 0"
-
-                    # TODO: low level view?
-                    for r in ranges:
-                        if isinstance(r, RangeEntry):
-                            base = 0 if r.is_absolute else cu_base
-                            lines.append((hex(base + r.begin_offset), hex(base + r.end_offset)))
-                        else:
-                            cu_base = r.base_address
-                else:
-                    warn = "Empty range list"
-                return GenericTableModel(("Start offset", "End offset"), lines, warn)
+                return self.show_ranges(attr)
             elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
-                # Expression is a list of ints
-                ll = self.parse_location(attr)
-                if isinstance(ll, LocationExpr):
-                    return GenericTableModel(("Command",), ((cmd,) for cmd in self.dump_expr(ll.loc_expr)))
-                else:
-                    cu_base = get_cu_base(self.die)
-                    values = list()
-                    if self.lowlevel:
-                        headers = ("Start offset", "End offset", "Expr bytes", "Expression")
-                        for l in ll:
-                            if 'base_address' in l._fields:
-                                cu_base = l.base_address
-                                values.append(("(base)", hex(cu_base), '', ''))
-                            else:
-                                try: # Catching #1609
-                                    expr_dump = '; '.join(self.dump_expr(l.loc_expr))
-                                except KeyError as exc:
-                                    expr_dump = "<unrecognized expression>"
-                                    from .__main__ import version
-                                    from .crash import report_crash
-                                    from inspect import currentframe
-                                    report_crash(exc, exc.__traceback__, version, currentframe())
-                                values.append((hex(cu_base + l.begin_offset),
-                                    hex(cu_base + l.end_offset),
-                                    ' '.join("%02x" % b for b in l.loc_expr),
-                                    expr_dump))
-                    else: # Not low level
-                        headers = ("Start offset", "End offset", "Expression")
-                        for l in ll:
-                            if 'base_address' in l._fields:
-                                cu_base = l.base_address
-                            else:
-                                try: # Catching #1609
-                                    expr_dump = '; '.join(self.dump_expr(l.loc_expr))
-                                except KeyError as exc:
-                                    expr_dump = "<unrecognized expression>"
-                                    from .__main__ import version
-                                    from .crash import report_crash
-                                    from inspect import currentframe
-                                    report_crash(exc, exc.__traceback__, version, currentframe())
-                                values.append((hex(cu_base + l.begin_offset),
-                                    hex(cu_base + l.end_offset),
-                                    expr_dump))
-
-                    return GenericTableModel(headers, values)
+                return self.show_location(attr)
             elif key == 'DW_AT_stmt_list':
                 if self.die.cu._lineprogram is None:
                     self.die.cu._lineprogram = self.die.dwarfinfo.line_program_for_CU(self.die.cu)
@@ -444,38 +374,4 @@ class DIETableModel(QAbstractTableModel):
             report_crash(exc, tb, version, currentframe())
             return None
 
-class GenericTableModel(QAbstractTableModel):
-    def __init__(self, headers, values, warning = None):
-        QAbstractTableModel.__init__(self)
-        self.headers = headers
-        self.values = tuple(values)
-        self.warning = warning
-
-    def headerData(self, section, ori, role):
-        if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            return self.headers[section]
-
-    def rowCount(self, parent):
-        return len(self.values)
-
-    def columnCount(self, parent):
-        return len(self.headers)
-
-    def data(self, index, role):
-        if role == Qt.ItemDataRole.DisplayRole:
-            return self.values[index.row()][index.column()]
-
-class FixedWidthTableModel(GenericTableModel):
-    def __init__(self, headers, values):
-        GenericTableModel.__init__(self, headers, values)
-
-    def data(self, index, role):
-        if role == Qt.ItemDataRole.FontRole:
-            global _fixed_font
-            if not _fixed_font:
-                _fixed_font = QFont("Monospace")
-                _fixed_font.setStyleHint(QFont.StyleHint.TypeWriter)
-            return _fixed_font
-        else:
-            return GenericTableModel.data(self, index, role)
 

@@ -53,9 +53,14 @@ def test_dwarfinfo(di):
                     # Now check the spell out logic
                     for c in range(0, cc):
                         m.data(m.index(r, c, dummy_index), Qt.ItemDataRole.DisplayRole)
+                    # Low level details, if any
                     details = m.get_attribute_details(m.index(r, 0, dummy_index))
                     if form == 'DW_FORM_section_offset':
                         assert details is not None
+                    # Check the high level spell out logic too
+                    m.set_lowlevel(False, dummy_index)
+                    details = m.get_attribute_details(m.index(r, 0, dummy_index))
+                    m.set_lowlevel(True, dummy_index)
 
 def test_file_for(filename, on_di):    
     print("=================== " + filename)
