@@ -44,7 +44,7 @@ class DIETableModel(QAbstractTableModel):
         self.expr_formatter = ExprFormatter(regnames, prefix, die.dwarfinfo.config.machine_arch, die.cu['version'], hex)
 
     from .ranges import show_ranges
-    from .locs import show_location 
+    from .locs import parse_location, show_location 
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
@@ -56,15 +56,13 @@ class DIETableModel(QAbstractTableModel):
     def columnCount(self, parent):
         return len(self.headers)
 
-    def parse_location(self, attr):
-        di = self.die.dwarfinfo
-        if di._locparser is None:
-            di._locparser = LocationParser(di.location_lists())
-        return di._locparser.parse_from_attribute(attr, self.die.cu['version'], die = self.die)
-
     def data(self, index, role):
         row = index.row()
         return self.attr_data(index, role) if row >= self.meta_count else self.meta_data(index, role)
+    
+    # End of Qt callbacks
+
+    # Flavors of data() - attribute and metadata
 
     def attr_data(self, index, role):
         irow = index.row()
@@ -123,8 +121,6 @@ class DIETableModel(QAbstractTableModel):
                     return str(self.die.has_children)
         elif role == Qt.ItemDataRole.BackgroundRole:
             return _ltgrey_brush
-
-    # End of Qt callbacks
 
     # Expr is an expression blob
     # Returns a list of strings for ops

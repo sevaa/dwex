@@ -4,11 +4,12 @@ from PyQt6.QtGui import QFont
 _fixed_font = None
 
 class GenericTableModel(QAbstractTableModel):
-    def __init__(self, headers, values, warning = None):
+    def __init__(self, headers, values, warning = None, get_tooltip = None):
         QAbstractTableModel.__init__(self)
         self.headers = headers
         self.values = tuple(values)
         self.warning = warning
+        self.get_tooltip = get_tooltip
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
@@ -24,11 +25,8 @@ class GenericTableModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             return self.values[index.row()][index.column()]
         elif role == Qt.ItemDataRole.ToolTipRole:
-            return self.tooltip(index.row(), index.column())
-        
-    # To be overridden
-    def tooltip(self, row, col):
-        pass
+            if self.get_tooltip:
+                return self.get_tooltip(index.row(), index.column())
 
 class FixedWidthTableModel(GenericTableModel):
     def __init__(self, headers, values):

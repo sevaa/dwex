@@ -6,6 +6,29 @@ from .details import GenericTableModel
 def one_of(o, attrs):
     return next((o[attr] for attr in attrs if attr in o), None)
 
+def lowlevel_v5_tooltips(entry, col):
+    type = entry.entry_type[7:]
+    if col == 0: # Start
+        if type == 'base_address':
+            return 'Base address for entries below'
+        elif type == 'offset_pair':
+            return 'Starting offset relative to the current base'
+        elif type == 'start_end' or type == 'start_length':
+            return 'Starting address, absolute'
+        elif type == 'base_addressx':
+            return 'Index into the address table, resolving to absolute address'
+        elif type == 'startx_endx' or type == 'startx_length':
+            return 'Index into the address table, resolving to absolute address'
+    elif col == 1: # End
+        if type == 'offset_pair':
+            return 'Ending offset relative to the current base'
+        elif type == 'start_end':
+            return 'Ending address, absolute'
+        elif type == 'start_length' or type == 'startx_length':
+            return 'Length of the range'
+        elif type == 'tartx_endx':
+            return 'Index into the address table, resolving to absolute address'
+
 # This is a method of DIETableModel
 def show_ranges(self, attr):
     di = self.die.dwarfinfo
@@ -78,37 +101,5 @@ def show_ranges(self, attr):
     else: 
         headers = ("Start address", "End address")
         
-    return RangelistModel(headers, lines, warn, ranges, self.die) if v5 and ll else GenericTableModel(headers, lines, warn)
-
-# Only for V5 low level view
-class RangelistModel(GenericTableModel):
-    def __init__(self, h, l, w, r, d):
-        GenericTableModel.__init__(self, h, l, w)
-        self.ranges = r
-        self.die = d
-
-    def tooltip(self, row, col):
-        entry = self.ranges[row]
-        type = entry.entry_type
-        cu = self.die.cu
-        di = cu.dwarfinfo
-        if col == 2: # Start
-            if type == 'DW_RLE_base_address':
-                return 'Base address for entries below'
-            elif type == 'DW_RLE_offset_pair':
-                return 'Starting offset relative to the current base'
-            elif type == 'DW_RLE_start_end' or type == 'DW_RLE_start_length':
-                return 'Starting address, absolute'
-            elif type == 'DW_RLE_base_addressx':
-                return 'Index into the address table, resolving to absolute address'
-            elif type == 'DW_RLE_startx_endx' or type == 'DW_RLE_startx_length':
-                return 'Index into the address table, resolving to absolute address'
-        elif col == 3: # End
-            if type == 'DW_RLE_offset_pair':
-                return 'Ending offset relative to the current base'
-            elif type == 'DW_RLE_start_end':
-                return 'Ending address, absolute'
-            elif type == 'DW_RLE_start_length' or type == 'DW_RLE_startx_length':
-                return 'Length of the range'
-            elif type == 'DW_RLE_startx_endx':
-                return 'Index into the address table, resolving to absolute address'
+    return GenericTableModel(headers, lines, warn,
+        get_tooltip=lambda row, col: lowlevel_v5_tooltips(ranges[row], col-2) if v5 and ll else None)
