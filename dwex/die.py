@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex
 from PyQt6.QtGui import QBrush
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser
-from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL
+from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _DESCR_DW_CC
 from elftools.common.exceptions import ELFParseError
 
 from dwex.exprutil import ExprFormatter
@@ -167,6 +167,8 @@ class DIETableModel(QAbstractTableModel):
                 return "%d %s" % (val, _DESCR_DW_ACCESS[val]) if val in _DESCR_DW_ACCESS else val
             elif key == 'DW_AT_inline':
                 return "%d %s" % (val, _DESCR_DW_INL[val]) if val in _DESCR_DW_INL else val
+            elif key == 'DW_AT_calling_convention':
+                return "%d %s" % (val, _DESCR_DW_CC[val]) if val in _DESCR_DW_CC else val
             elif key in ('DW_AT_decl_file', 'DW_AT_call_file'):
                 cu = self.die.cu
                 if cu._lineprogram is None:

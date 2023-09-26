@@ -4,6 +4,7 @@ import elftools.dwarf.dwarf_expr
 import elftools.dwarf.locationlists
 from elftools.common.utils import struct_parse
 from elftools.common.exceptions import DWARFError
+from elftools.dwarf.descriptions import _DESCR_DW_CC
 from types import MethodType
 
 def monkeypatch():
@@ -77,3 +78,7 @@ def monkeypatch():
     def translate_v5_entry(self, entry, cu):
         return self._rnglists.translate_v5_entry(entry, cu)
     elftools.dwarf.ranges.RangeListsPair.translate_v5_entry = translate_v5_entry
+
+    # DWARF5 calling convention codes
+    _DESCR_DW_CC[4] = '(pass by ref)'
+    _DESCR_DW_CC[5] = '(pass by value)'
