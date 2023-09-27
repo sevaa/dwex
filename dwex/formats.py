@@ -1,9 +1,15 @@
-import io
+import io, os
 from os import path, listdir
 from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
+from elftools.common.construct_utils import ULEB128, StreamOffset
+from elftools.construct import ULInt8, ULInt32, Struct, If, PascalString, Value
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
-# Format codes: 0 = ELF, 1 = MACHO, 2 = PE
+# Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM
+
+class FormatError(Exception):
+    def __init__(self, s):
+        Exception.__init__(self, s)
 
 def read_pe(filename):
     from filebytes.pe import PE, IMAGE_FILE_MACHINE
@@ -143,6 +149,72 @@ def read_macho(filename, resolve_arch, friendly_filename):
     di._start_address = text_cmd.header.vmaddr if text_cmd else 0
     return di
 
+_WASM_section_header = Struct('WASMSectionHeader',
+    ULInt8('id'),
+    ULEB128('section_length'),
+    StreamOffset('off1'),
+    # Subheader on custom (id 0) sections - ULEB128 length prefixed name
+    If(lambda ctx: ctx.id == 0, PascalString('name', length_field = ULEB128('length'), encoding='UTF-8')),
+    StreamOffset('off2'),
+    # This is effective content length - for custom sections, section size minus the name subheader
+    Value('length', lambda ctxt: ctxt.section_length - ctxt.off2 + ctxt.off1)
+)
+
+def read_wasm(file):
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    # Signature already checked, move on to file version
+    file.seek(4, os.SEEK_SET)
+    ver = ULInt32('').parse_stream(file)
+    if ver != 1:
+        raise FormatError("WASM binary format version %d is not supported." % ver)
+    
+    data = dict()
+    dwarf_url = None
+    while file.tell() < file_size:
+        sh = _WASM_section_header.parse_stream(file)
+        if sh.id == 0 and sh.name.startswith(".debug"):
+            content = file.read(sh.length)
+            data[sh.name] = DebugSectionDescriptor(io.BytesIO(content), sh.name, None, sh.length, 0)
+        elif sh.id == 0 and sh.name == 'external_debug_info':
+            dwarf_url = file.read(sh.length).decode('UTF-8')
+        else: # Skip this section
+            file.seek(sh.length, os.SEEK_CUR)
+
+    if dwarf_url:
+        raise FormatError("The debug information for this WASM file is at %s." % dwarf_url)
+
+    # TODO: relocations, start address
+
+    di = DWARFInfo(
+        config = DwarfConfig(
+            little_endian=True,
+            default_address_size = 4, # Is it variable???
+            machine_arch = 'WASM'
+        ),
+        debug_info_sec = data['.debug_info'],
+        debug_aranges_sec = data.get('.debug_aranges'),
+        debug_abbrev_sec = data['.debug_abbrev'],
+        debug_frame_sec = data.get('.debug_frame'),
+        eh_frame_sec = None, # In WASM??
+        debug_str_sec = data['.debug_str'],
+        debug_loc_sec = data.get('.debug_loc'),
+        debug_ranges_sec = data.get('.debug_ranges'),
+        debug_line_sec = data.get('.debug_line'),
+        debug_pubtypes_sec = data.get('.debug_pubtypes'),
+        debug_pubnames_sec = data.get('.debug_pubtypes'),
+        debug_addr_sec = data.get('.debug_addr'),
+        debug_str_offsets_sec = data.get('.debug_str_offsets'),
+        debug_line_str_sec = data.get('.debug_line_str'),
+        debug_loclists_sec = data.get('.debug_loclists_sec'),
+        debug_rnglists_sec = data.get('.debug_rnglists_sec'),
+        debug_sup_sec = None,
+        gnu_debugaltlink_sec = None
+    )
+    di._format = 3
+    di._start_address = 0
+    return di
+
 def read_elf(file, filename):
     from elftools.elf.elffile import ELFFile
     file.seek(0)
@@ -188,6 +260,8 @@ def read_dwarf(filename, resolve_arch):
                     return None
                 # Mach-O fat binary, or 32/64-bit Mach-O in big/little-endian format
                 return read_macho(filename, resolve_arch, filename)
+            elif signature == b'\0asm':
+                return read_wasm(file)
         finally:
             if file:
                 file.close()                

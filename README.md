@@ -6,6 +6,7 @@ debugging information in executable files, built on top of [pyelftools](https://
  - ELF (Linux, Android)
  - Mach-O (MacOS X, iOS)
  - PE (Windows, Cygwin)
+ - WASM (aka WebAssembly)
 
 This project came from my desire to see and navigate the DWARF tree of compiled Android and iOS binaries. Seeing the DIEs is easy enough with utilities like `readelf` or `dwarfdump`. However, chasing inter-DIE references back and forth is not straightforward with those.
 

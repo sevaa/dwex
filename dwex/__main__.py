@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
 from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 from .die import DIETableModel
-from .formats import read_dwarf, get_debug_sections
+from .formats import read_dwarf, get_debug_sections, FormatError
 from .dwarfutil import has_code_location, ip_in_range
 from .tree import DWARFTreeModel, cu_sort_key
 from .scriptdlg import ScriptDlg, make_execution_environment
@@ -11,7 +11,7 @@ from .ui import setup_ui
 from .locals import LocalsDlg
 
 # Sync with version in setup.py
-version = (2, 42)
+version = (3, 0)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -148,7 +148,7 @@ class TheWindow(QMainWindow):
                 self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
                 LocalsDlg.reset(di)
                 from .crash import set_binary_desc
-                set_binary_desc(("ELF", "MachO", "PE")[di._format] + " " + di.config.machine_arch)
+                set_binary_desc(("ELF", "MachO", "PE", "WASM")[di._format] + " " + di.config.machine_arch)
                 return True
             except AssertionError as ass: # Covers exeptions during parsing
                 raise DWARFParseError(ass, di)
@@ -176,6 +176,9 @@ class TheWindow(QMainWindow):
                     s = "The file contains no DWARF information, or it is in an unsupported format."
                 QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", s,
                     QMessageBox.StandardButton.Ok, self).show()
+        except FormatError as ferr:
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer",
+                str(ferr), QMessageBox.StandardButton.Ok, self).show()
         except DWARFParseError as dperr:
             mb = QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
                 "Error parsing the DWARF information in this file. Would you like to save the debug section contents for manual analysis?",
