@@ -3,8 +3,8 @@ sys.path.insert(1, os.getcwd()) # To make sure dwex resolves to local path
 import dwex.__main__
 
 # Hook exceptions all the same
-dwex.__main__.on_exception.prev_exchook = sys.excepthook
-sys.excepthook = dwex.__main__.on_exception
+#dwex.__main__.on_exception.prev_exchook = sys.excepthook
+#sys.excepthook = dwex.__main__.on_exception
 
 # TODO: stable test file
 if len(sys.argv) == 1:
@@ -18,9 +18,17 @@ def open_file(self, filename, arch = None):
     #buf[0x9e900] = 0xff # Bogus abbrev code
     #9e81e - subprogram die
     #buf[0x9e8ed+3] = 0xff # Bogus offset in AT_type, so that it leads nowhere
+
     # Frame_base, bogus opcode in attr block
-    buf[0x9e8f9] = 0x7f
-    return r
+    #buf[0x9e8f9] = 0x7f
+    #return r
+
+    # Artificial repro for #1572
+    # DIE on 4790, loclist attr at 479a (data4), originally at 0
+    buf = self.dwarfinfo.debug_info_sec.stream.getbuffer()
+    buf[0x479d] = 0xff
+
+
 dwex.__main__.TheWindow.open_file = open_file
 
 dwex.__main__.main()

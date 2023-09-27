@@ -140,7 +140,7 @@ class DIETableModel(QAbstractTableModel):
             die = self.die
             cu = self.die.cu
             header = self.die.cu.header
-            dwarf_version = self.die.cu.header.version                               
+            dwarf_version = self.die.cu.header.version
 
             key = attr.name
             val = attr.value
@@ -215,7 +215,15 @@ class DIETableModel(QAbstractTableModel):
             from .crash import report_crash
             from inspect import currentframe
             tb = exc.__traceback__
-            report_crash(exc, tb, version, currentframe(), ctxt = {'attr': attr, 'die':die, 'cu_header':header, 'dwarf_version':dwarf_version})
+            di = die.cu.dwarfinfo
+            loc_section = di.debug_loclists_sec if dwarf_version >= 5 else di.debug_loc_sec
+            loc_sec_len = len(loc_section.stream.getbuffer()) if loc_section else None
+            ctxt = {'attr': attr,
+                       'die': die,
+                       'cu_header': header,
+                       'dwarf_version': dwarf_version,
+                       'sec_size': loc_sec_len}
+            report_crash(exc, tb, version, currentframe(), ctxt)
             return "(parse error - please report at github.com/sevaa/dwex)"
 
     def format_form(self, form):
