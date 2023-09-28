@@ -66,7 +66,9 @@ def monkeypatch():
                                'DW_AT_call_target',
                                'DW_AT_call_target_clobbered',
                                'DW_AT_call_data_location',
-                               'DW_AT_call_data_value'))
+                               'DW_AT_call_data_value',
+                               'DW_AT_upper_bound',
+                               'DW_AT_count'))
     elftools.dwarf.locationlists.LocationParser._attribute_has_loc_list = MethodType(_attribute_has_loc_list, elftools.dwarf.locationlists.LocationParser)
     elftools.dwarf.locationlists.LocationParser._attribute_is_loclistptr_class = MethodType(_attribute_is_loclistptr_class, elftools.dwarf.locationlists.LocationParser)
 
