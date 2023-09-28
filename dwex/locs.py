@@ -1,7 +1,7 @@
 from elftools.dwarf.locationlists import LocationParser, LocationExpr, BaseAddressEntry
 from .details import GenericTableModel
 from .dwarfutil import *
-from .ranges import one_of, lowlevel_v5_tooltips
+from .ranges import lowlevel_v5_tooltips, one_of
 
 def parse_location(self, attr):
     di = self.die.dwarfinfo
@@ -37,11 +37,12 @@ def show_location(self, attr):
                 if isinstance(l, BaseAddressEntry):
                     cu_base = l.base_address
                     if ver5:
+                        (raw_base_type, raw_base) = one_of(raw, ('index','address'))
                         values.append((hex(l.entry_offset),
                             raw.entry_type if self.prefix else raw.entry_type[7:],
-                            one_of(raw, ('address', 'index')),
+                            hex(raw_base) if raw_base_type == 1 else str(raw_base),
                             '',
-                            l.base_address,
+                            hex(l.base_address),
                             '', '', ''))
                     else:
                         values.append((hex(l.entry_offset), 'Base', hex(l.base_address), '', '', ''))
@@ -57,10 +58,12 @@ def show_location(self, attr):
                     base = 0 if l.is_absolute else cu_base
                     if ver5:
                         is_def_loc = raw.entry_type == 'DW_LLE_default_location'
+                        (raw_start_type, raw_start) = one_of(raw, ('index', 'start_index', 'start_offset', 'start_address'))
+                        (raw_end_type, raw_end) = one_of(raw, ('end_index', 'end_offset', 'end_address', 'length'))
                         values.append((hex(l.entry_offset),
                             raw.entry_type if self.prefix else raw.entry_type[7:],
-                            '' if is_def_loc else one_of(raw, ('start_offset', 'start_address', 'index', 'start_index')),
-                            '' if is_def_loc else one_of(raw, ('end_offset', 'end_address', 'length', 'end_index')),
+                            '' if is_def_loc else (hex(raw_start) if raw_start_type >= 2 else str(raw_start)),
+                            '' if is_def_loc else (hex(raw_end) if raw_end_type >= 1 else str(raw_end)),
                             hex(base + l.begin_offset),
                             hex(base + l.end_offset),
                             ' '.join("%02x" % b for b in l.loc_expr),
@@ -86,8 +89,9 @@ def show_location(self, attr):
                         from .crash import report_crash
                         from inspect import currentframe
                         report_crash(exc, exc.__traceback__, version, currentframe())
-                    values.append((hex(cu_base + l.begin_offset),
-                        hex(cu_base + l.end_offset),
+                    base = 0 if l.is_absolute else cu_base
+                    values.append((hex(base + l.begin_offset),
+                        hex(base + l.end_offset),
                         expr_dump))
                     
         return GenericTableModel(headers, values,
