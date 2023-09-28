@@ -16,6 +16,8 @@ def monkeypatch():
     # Wasmloc: monkeypatch for #1589
     elftools.dwarf.dwarf_expr.DW_OP_name2opcode["DW_OP_WASM_location"] = 0xed
     elftools.dwarf.dwarf_expr.DW_OP_opcode2name[0xed] = "DW_OP_WASM_location"
+    elftools.dwarf.dwarf_expr.DW_OP_name2opcode['DW_OP_GNU_uninit'] = 0xf0
+    elftools.dwarf.dwarf_expr.DW_OP_opcode2name[0xf0] = 'DW_OP_GNU_uninit'
     old_init_dispatch_table = elftools.dwarf.dwarf_expr._init_dispatch_table
     def _init_dispatch_table_patch(structs):
         def parse_wasmloc():
@@ -28,8 +30,11 @@ def monkeypatch():
                 else:
                     raise DWARFError("Unknown operation code in DW_OP_WASM_location: %d" % (op,))
             return parse
+        #wasmloc patch
         table = old_init_dispatch_table(structs)
         table[0xed] = parse_wasmloc()
+        # GNU_uninit
+        table[0xf0] = lambda s: []
         return table
     
     elftools.dwarf.dwarf_expr._init_dispatch_table = _init_dispatch_table_patch
@@ -82,3 +87,8 @@ def monkeypatch():
     # DWARF5 calling convention codes
     _DESCR_DW_CC[4] = '(pass by ref)'
     _DESCR_DW_CC[5] = '(pass by value)'
+
+
+
+
+
