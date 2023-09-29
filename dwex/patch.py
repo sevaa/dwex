@@ -40,9 +40,9 @@ def monkeypatch():
     elftools.dwarf.dwarf_expr._init_dispatch_table = _init_dispatch_table_patch
 
     # Fix for 1613 and other bogus loclist/bogus expr bugs
-    def attribute_is_member_offset(attr, dwarf_version):
-        return (dwarf_version >= 3 and
-            attr.name == 'DW_AT_data_member_location' and
+    def _attribute_is_constant(attr, dwarf_version):
+        return (((dwarf_version >= 3 and attr.name == 'DW_AT_data_member_location') or
+                (attr.name in ('DW_AT_upper_bound', 'DW_AT_count'))) and
             attr.form in ('DW_FORM_data1', 'DW_FORM_data2', 'DW_FORM_data4', 'DW_FORM_data8', 'DW_FORM_sdata', 'DW_FORM_udata'))
     
     def _attribute_has_loc_list(cls, attr, dwarf_version):
@@ -50,7 +50,7 @@ def monkeypatch():
                  attr.form in ('DW_FORM_data1', 'DW_FORM_data2', 'DW_FORM_data4', 'DW_FORM_data8') and
                  not attr.name == 'DW_AT_const_value') or
                 attr.form in ('DW_FORM_sec_offset', 'DW_FORM_loclistx')) and
-                not attribute_is_member_offset(attr, dwarf_version))
+                not _attribute_is_constant(attr, dwarf_version))
     
     def _attribute_is_loclistptr_class(cls, attr):
         return (attr.name in ( 'DW_AT_location', 'DW_AT_string_length',
@@ -70,6 +70,7 @@ def monkeypatch():
                                'DW_AT_upper_bound',
                                'DW_AT_count'))
     elftools.dwarf.locationlists.LocationParser._attribute_has_loc_list = MethodType(_attribute_has_loc_list, elftools.dwarf.locationlists.LocationParser)
+    elftools.dwarf.locationlists.LocationParser._attribute_is_loclistptr_class = MethodType(_attribute_is_loclistptr_class, elftools.dwarf.locationlists.LocationParser)
     elftools.dwarf.locationlists.LocationParser._attribute_is_loclistptr_class = MethodType(_attribute_is_loclistptr_class, elftools.dwarf.locationlists.LocationParser)
 
     # Raw location lists
