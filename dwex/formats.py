@@ -138,8 +138,8 @@ def read_macho(filename, resolve_arch, friendly_filename):
         debug_addr_sec = data.get('__debug_addr'),
         debug_str_offsets_sec = data.get('__debug_str_offsets'),
         debug_line_str_sec = data.get('__debug_line_str'),
-        debug_loclists_sec = data.get('__debug_loclists_sec'),
-        debug_rnglists_sec = data.get('__debug_rnglists_sec'),
+        debug_loclists_sec = data.get('__debug_loclists'),
+        debug_rnglists_sec = data.get('__debug_rnglists'),
         debug_sup_sec = data.get('__debug_sup'),
         gnu_debugaltlink_sec = data.get('__gnu_debugaltlink')
     )
