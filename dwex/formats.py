@@ -1,8 +1,6 @@
 import io, os
 from os import path, listdir
 from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
-from elftools.common.construct_utils import ULEB128, StreamOffset
-from elftools.construct import ULInt8, ULInt32, Struct, If, PascalString, Value
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
 # Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM
@@ -149,18 +147,24 @@ def read_macho(filename, resolve_arch, friendly_filename):
     di._start_address = text_cmd.header.vmaddr if text_cmd else 0
     return di
 
-_WASM_section_header = Struct('WASMSectionHeader',
-    ULInt8('id'),
-    ULEB128('section_length'),
-    StreamOffset('off1'),
-    # Subheader on custom (id 0) sections - ULEB128 length prefixed name
-    If(lambda ctx: ctx.id == 0, PascalString('name', length_field = ULEB128('length'), encoding='UTF-8')),
-    StreamOffset('off2'),
-    # This is effective content length - for custom sections, section size minus the name subheader
-    Value('length', lambda ctxt: ctxt.section_length - ctxt.off2 + ctxt.off1)
-)
+_WASM_section_header = False
 
 def read_wasm(file):
+    global _WASM_section_header
+    from elftools.common.construct_utils import ULEB128, StreamOffset
+    from elftools.construct import ULInt8, ULInt32, Struct, If, PascalString, Value
+    if not _WASM_section_header:
+        _WASM_section_header = Struct('WASMSectionHeader',
+            ULInt8('id'),
+            ULEB128('section_length'),
+            StreamOffset('off1'),
+            # Subheader on custom (id 0) sections - ULEB128 length prefixed name
+            If(lambda ctx: ctx.id == 0, PascalString('name', length_field = ULEB128('length'), encoding='UTF-8')),
+            StreamOffset('off2'),
+            # This is effective content length - for custom sections, section size minus the name subheader
+            Value('length', lambda ctxt: ctxt.section_length - ctxt.off2 + ctxt.off1)
+        )
+    
     file.seek(0, os.SEEK_END)
     file_size = file.tell()
     # Signature already checked, move on to file version
@@ -206,8 +210,8 @@ def read_wasm(file):
         debug_addr_sec = data.get('.debug_addr'),
         debug_str_offsets_sec = data.get('.debug_str_offsets'),
         debug_line_str_sec = data.get('.debug_line_str'),
-        debug_loclists_sec = data.get('.debug_loclists_sec'),
-        debug_rnglists_sec = data.get('.debug_rnglists_sec'),
+        debug_loclists_sec = data.get('.debug_loclists'),
+        debug_rnglists_sec = data.get('.debug_rnglists'),
         debug_sup_sec = None,
         gnu_debugaltlink_sec = None
     )
