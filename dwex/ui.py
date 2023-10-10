@@ -134,6 +134,7 @@ def setup_menu(win):
 
 def setup_toolbar(win):
     #https://realpython.com/python-menus-toolbars/#creating-toolbars
+    #https://stackoverflow.com/questions/43125339/creating-qicon-from-svg-contents-in-memory
     #tb = win.addToolBar("Main")
     #tb.setFloatable(False)
     #tb.setMovable(False)
