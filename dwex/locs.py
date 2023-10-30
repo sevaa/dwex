@@ -59,11 +59,11 @@ def show_location(self, attr):
                     if ver5:
                         is_def_loc = raw.entry_type == 'DW_LLE_default_location'
                         (raw_start_type, raw_start) = one_of(raw, ('index', 'start_index', 'start_offset', 'start_address'))
-                        (raw_end_type, raw_end) = one_of(raw, ('end_index', 'end_offset', 'end_address', 'length'))
+                        (raw_end_type, raw_end) = one_of(raw, ('end_index', 'length', 'end_offset', 'end_address'))
                         values.append((hex(l.entry_offset),
                             raw.entry_type if self.prefix else raw.entry_type[7:],
                             '' if is_def_loc else (hex(raw_start) if raw_start_type >= 2 else str(raw_start)),
-                            '' if is_def_loc else (hex(raw_end) if raw_end_type >= 1 else str(raw_end)),
+                            '' if is_def_loc else (hex(raw_end) if raw_end_type >= 2 or (raw_end_type == 1 and self.hex) else str(raw_end)),
                             hex(base + l.begin_offset),
                             hex(base + l.end_offset),
                             ' '.join("%02x" % b for b in l.loc_expr),

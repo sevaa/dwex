@@ -26,7 +26,7 @@ def lowlevel_v5_tooltips(entry, col):
             return 'Ending address, absolute'
         elif type == 'start_length' or type == 'startx_length':
             return 'Length of the range'
-        elif type == 'tartx_endx':
+        elif type == 'startx_endx':
             return 'Index into the address table, resolving to absolute address'
 
 # This is a method of DIETableModel
@@ -61,13 +61,13 @@ def show_ranges(self, attr):
             if v5 and ll: # Dump untranslated v5 entries
                 # see _create_rnglists_parsers in elftools/dwarf/structs to see what can be in there
                 (start_type, start) = one_of(r, ('index', 'start_index', 'start_offset', 'address', 'start_address'))
-                (end_type, end) = one_of(r, ('end_index', 'length', 'end_offset', 'end_address', 'length'))
+                (end_type, end) = one_of(r, ('end_index', 'length', 'end_offset', 'end_address'))
                 translated = di._ranges.translate_v5_entry(r, self.die.cu)
                 base = 0 if isinstance(translated, RangeEntry) and translated.is_absolute else cu_base
                 lines.append((hex(r.entry_offset),
                     r.entry_type if self.prefix else r.entry_type[7:],
                     str(start) if start_type <= 1 else hex(start),
-                    (str(end) if end_type == 0 else hex(end)) if end is not None else '',
+                    (str(end) if end_type == 0 or (end_type == 1 and not self.hex) else hex(end)) if end is not None else '',
                     hex(base + translated.begin_offset if isinstance(translated, RangeEntry) else translated.base_address), 
                     hex(base + translated.end_offset) if isinstance(translated, RangeEntry) else ''
                     ))

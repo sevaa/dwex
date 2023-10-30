@@ -43,7 +43,7 @@ def monkeypatch():
     def _attribute_is_constant(attr, dwarf_version):
         return (((dwarf_version >= 3 and attr.name == 'DW_AT_data_member_location') or
                 (attr.name in ('DW_AT_upper_bound', 'DW_AT_count'))) and
-            attr.form in ('DW_FORM_data1', 'DW_FORM_data2', 'DW_FORM_data4', 'DW_FORM_data8', 'DW_FORM_sdata', 'DW_FORM_udata'))
+            attr.form in ('DW_FORM_data1', 'DW_FORM_data2', 'DW_FORM_data4', 'DW_FORM_data8', 'DW_FORM_sdata', 'DW_FORM_udata', 'DW_FORM_implicit_const'))
     
     def _attribute_has_loc_list(cls, attr, dwarf_version):
         return (((dwarf_version < 4 and

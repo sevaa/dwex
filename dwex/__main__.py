@@ -127,19 +127,25 @@ class TheWindow(QMainWindow):
                 self.setWindowTitle("DWARF Explorer - " + s)
                 self.savesection_menuitem.setEnabled(True)
                 self.back_menuitem.setEnabled(False)
+                self.back_tbitem.setEnabled(False)
                 self.forward_menuitem.setEnabled(False)
+                self.forward_tbitem.setEnabled(False)
                 self.followref_menuitem.setEnabled(False)
+                self.followref_tbitem.setEnabled(False)
                 self.highlightcode_menuitem.setEnabled(True)
                 self.highlightsubstring_menuitem.setEnabled(True)
                 self.highlightcondition_menuitem.setEnabled(True)
                 self.highlightnothing_menuitem.setEnabled(True)
                 self.copy_menuitem.setEnabled(False)
+                self.copy_tbitem.setEnabled(False)
                 self.copyline_menuitem.setEnabled(False)
                 self.copytable_menuitem.setEnabled(False)
                 self.findbycondition_menuitem.setEnabled(True)
                 self.find_menuitem.setEnabled(True)
+                self.find_tbitem.setEnabled(True)
                 self.findip_menuitem.setEnabled(True)
                 self.byoffset_menuitem.setEnabled(True)
+                self.byoffset_tbitem.setEnabled(True)
                 self.localsat_menuitem.setEnabled(True)
                 self.on_highlight_nothing()
                 # Navigation stack - empty
@@ -326,6 +332,7 @@ class TheWindow(QMainWindow):
         self.die_table.resizeColumnsToContents()
         self.details_table.setModel(None)
         self.followref_menuitem.setEnabled(False)
+        self.followref_tbitem.setEnabled(False)
         self.cuproperties_menuitem.setEnabled(True)
         self.die_table.setCurrentIndex(QModelIndex()) # Will cause on_attribute_selection
 
@@ -345,7 +352,9 @@ class TheWindow(QMainWindow):
                 self.navhistory[0:self.navpos] = [navitem]
                 self.navpos = 0
                 self.back_menuitem.setEnabled(len(self.navhistory) > 1)
+                self.back_tbitem.setEnabled(len(self.navhistory) > 1)
                 self.forward_menuitem.setEnabled(False)
+                self.forward_tbitem.setEnabled(False)
         self.display_die(index) # Will clear the selection in the attribute table
 
     # Selection changed in the DIE table - either user or program
@@ -361,15 +370,19 @@ class TheWindow(QMainWindow):
             else:
                 self.details_warning.setVisible(False)
             self.followref_menuitem.setEnabled(self.die_model.ref_target(index) is not None)
+            self.followref_tbitem.setEnabled(self.die_model.ref_target(index) is not None)
             self.copy_menuitem.setEnabled(True)
+            self.copy_tbitem.setEnabled(True)
             self.copyline_menuitem.setEnabled(True)
             self.copytable_menuitem.setEnabled(True)
         else: # Selected nothing
             self.details_table.setModel(None)
             self.copy_menuitem.setEnabled(False)
+            self.copy_tbitem.setEnabled(False)
             self.copyline_menuitem.setEnabled(False)
             self.copytable_menuitem.setEnabled(False)            
             self.followref_menuitem.setEnabled(False)
+            self.followref_tbitem.setEnabled(False)
 
 
     def on_attribute_dclick(self, index):
@@ -389,7 +402,9 @@ class TheWindow(QMainWindow):
             self.the_tree.setCurrentIndex(tree_index) # Causes on_tree_selection internally
             self.in_tree_nav = False
             self.back_menuitem.setEnabled(np < len(self.navhistory) - 1)
+            self.back_tbitem.setEnabled(np < len(self.navhistory) - 1)
             self.forward_menuitem.setEnabled(np > 0)
+            self.forward_tbitem.setEnabled(np > 0)
 
     def followref(self, index = None):
         self.start_wait() # TODO: only show the wait cursor if it's indeed time consuming
@@ -585,8 +600,11 @@ class TheWindow(QMainWindow):
             sel = self.tree_model.set_sortdies(checked)
             #This invalidates the navigation
             self.back_menuitem.setEnabled(False)
+            self.back_tbitem.setEnabled(False)
             self.forward_menuitem.setEnabled(False)
+            self.forward_tbitem.setEnabled(False)
             self.followref_menuitem.setEnabled(False)
+            self.followref_tbitem.setEnabled(False)
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
@@ -599,7 +617,9 @@ class TheWindow(QMainWindow):
         if b is None:
             b = self.tree_model.has_any_highlights()
         self.prevhl_menuitem.setEnabled(b)
-        self.nexthl_menuitem.setEnabled(b)            
+        self.nexthl_menuitem.setEnabled(b)
+        self.prevhl_tbitem.setEnabled(b)
+        self.nexthl_tbitem.setEnabled(b)
 
     def highlight_off(self, key):
         self.tree_model.remove_highlight(key)
