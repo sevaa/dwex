@@ -1,4 +1,5 @@
 import os
+
 import elftools.dwarf.enums
 import elftools.dwarf.dwarf_expr
 import elftools.dwarf.locationlists
@@ -6,7 +7,10 @@ import elftools.elf.elffile
 from elftools.common.utils import struct_parse
 from elftools.common.exceptions import DWARFError
 from elftools.dwarf.descriptions import _DESCR_DW_CC
+from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
+from elftools.elf.relocation import RelocationHandler
 from types import MethodType
+from io import BytesIO
 
 def monkeypatch():
     #https://docs.hdoc.io/hdoc/llvm-project/e051F173385B23DEF.html
@@ -94,11 +98,6 @@ def monkeypatch():
 
     # Monkeypatch for bogus XC16 binaries (see pyelftools' #518)
     def _read_dwarf_section(self, section, relocate_dwarf_sections):
-        from io import BytesIO
-        from elftools.elf.relocation import RelocationHandler
-        from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
-        from elftools.common.exceptions import DWARFError
-
         # Patch for the XC16 compiler; see pyelftools' #518
         # Vendor flag EF_PIC30_NO_PHANTOM_BYTE: clear means drop every odd byte
         has_phantom_bytes = self['e_machine'] == 'EM_DSPIC30F' and (self['e_flags'] & 0x80000000) == 0
