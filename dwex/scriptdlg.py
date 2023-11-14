@@ -1,5 +1,6 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import *
+from elftools.dwarf.locationlists import LocationParser
 
 class ScriptDlg(QDialog):
     def __init__(self, win, sample_die):
@@ -64,10 +65,19 @@ def make_execution_environment(die):
             if func(k, die.attributes[k].value, die.attributes[k].form):
                 return True
             
+    def has_loclist():
+        ver = die.cu.header.version
+        def attr_is_loclist(attr):
+            return (LocationParser._attribute_is_loclistptr_class(attr) and
+                LocationParser._attribute_has_loc_list(attr, ver))
+        g = (a for a in die.attributes if attr_is_loclist(die.attributes[a]))
+        return bool(next(g, False))
+            
     d = {'die' : die,
             'tag': 'user_%X' % (die.tag,) if isinstance(die.tag, int) else die.tag[7:],
             'attr': die.attributes,
-            'has_attribute' : has_attribute}
+            'has_attribute' : has_attribute,
+            'has_loclist' : has_loclist}
     for k, a in die.attributes.items():
         d['user_%X' % (k,) if isinstance(k, int) else k[6:]] = a.value
     return d
