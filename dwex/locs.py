@@ -1,4 +1,5 @@
 from elftools.dwarf.locationlists import LocationParser, LocationExpr, BaseAddressEntry
+from elftools.common.exceptions import ELFParseError
 from .details import GenericTableModel
 from .dwarfutil import *
 from .ranges import lowlevel_v5_tooltips, one_of
@@ -7,14 +8,53 @@ def parse_location(self, attr):
     di = self.die.dwarfinfo
     if di._locparser is None:
         di._locparser = LocationParser(di.location_lists())
-    return di._locparser.parse_from_attribute(attr, self.die.cu['version'], die = self.die)
+    try:
+        return di._locparser.parse_from_attribute(attr, self.die.cu['version'], die = self.die)
+    except ELFParseError as exc:
+        from .__main__ import version
+        from .crash import report_crash
+        from inspect import currentframe
+
+        die = self.die
+        header = die.cu.header
+        dwarf_version = die.cu.header.version
+        di = die.cu.dwarfinfo
+        ctxt = {'attr': attr,
+                'die': die,
+                'cu_header': header,
+                'LE': di.config.little_endian,
+                'dwarf_version': dwarf_version}
+        try:
+            if LocationParser._attribute_has_loc_list(attr, self.die.cu['version']):
+                tb = exc.__traceback__
+                tracebacks = []
+                while tb.tb_next:
+                    tracebacks.insert(0, tb) # Innermost in the beginning of the list
+                    tb = tb.tb_next
+                loc_section = di.debug_loclists_sec if dwarf_version >= 5 else di.debug_loc_sec
+                if loc_section:
+                    buf = loc_section.stream.getbuffer()
+                    ctxt['loc_section_len'] = len(buf)
+                    if len(tracebacks) > 1 and 'entry_offset' in tracebacks[1].tb_frame.f_locals:
+                        fail_entry_offset = tracebacks[1].tb_frame.f_locals['entry_offset']
+                        ctxt['fail_entry_offset'] = fail_entry_offset
+                        llend = fail_entry_offset + 8*2+2 if fail_entry_offset - attr.value <= 1024 else attr.value + 1024
+                        llbytes = buf[attr.value:llend]
+                        ctxt['llbytes'] = ' '.join("%02x" % b for b in llbytes)
+        except:
+            pass
+
+        report_crash(exc, tb, version, currentframe(), ctxt)
+        return None
 
 def show_location(self, attr):
 # Expression is a list of ints
 # TODO: clickable expression maybe?
 # TODO: truncate long expressions?
     ll = self.parse_location(attr)
-    if isinstance(ll, LocationExpr):
+    if ll is None:
+        return None
+    elif isinstance(ll, LocationExpr):
         # TODO: low level maybe
         # Spell out args?
         # Opcode tooltips?

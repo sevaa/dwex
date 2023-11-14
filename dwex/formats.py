@@ -300,6 +300,6 @@ def get_debug_sections(di):
     section_names['gnu_debugaltlink'] = 'gnu_debugaltlink'
 
     # Display name to section object
-    return {display_name: di.__dict__[field_name]
+    return {display_name: getattr(di, field_name)
         for (display_name, field_name) in section_names.items()
         if getattr(di, field_name, False)}    

@@ -155,7 +155,9 @@ class DIETableModel(QAbstractTableModel):
                 return str(bool(val))
             elif LocationParser.attribute_has_location(attr, self.die.cu['version']):
                 ll = self.parse_location(attr)
-                if isinstance(ll, LocationExpr):
+                if ll is None:
+                    return "(parse error - please report at github.com/sevaa/dwex)"
+                elif isinstance(ll, LocationExpr):
                     return '; '.join(self.dump_expr(ll.loc_expr))
                 else:
                     return "Loc list: 0x%x" % attr.value

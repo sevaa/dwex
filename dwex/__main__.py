@@ -11,7 +11,7 @@ from .ui import setup_ui
 from .locals import LocalsDlg
 
 # Sync with version in setup.py
-version = (3, 21)
+version = (3, 22)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
