@@ -2,6 +2,7 @@ import os
 import elftools.dwarf.enums
 import elftools.dwarf.dwarf_expr
 import elftools.dwarf.locationlists
+import elftools.elf.elffile
 from elftools.common.utils import struct_parse
 from elftools.common.exceptions import DWARFError
 from elftools.dwarf.descriptions import _DESCR_DW_CC
@@ -91,7 +92,39 @@ def monkeypatch():
     _DESCR_DW_CC[4] = '(pass by ref)'
     _DESCR_DW_CC[5] = '(pass by value)'
 
+    # Monkeypatch for bogus XC16 binaries (see pyelftools' #518)
+    def _read_dwarf_section(self, section, relocate_dwarf_sections):
+        from io import BytesIO
+        from elftools.elf.relocation import RelocationHandler
+        from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
+        from elftools.common.exceptions import DWARFError
 
+        # Patch for the XC16 compiler; see pyelftools' #518
+        # Vendor flag EF_PIC30_NO_PHANTOM_BYTE: clear means drop every odd byte
+        has_phantom_bytes = self['e_machine'] == 'EM_DSPIC30F' and (self['e_flags'] & 0x80000000) == 0
 
+        # The section data is read into a new stream, for processing
+        section_stream = BytesIO()
+        section_data = section.data()
+        section_stream.write(section_data[::2] if has_phantom_bytes else section_data)
 
+        if relocate_dwarf_sections:
+            reloc_handler = RelocationHandler(self)
+            reloc_section = reloc_handler.find_relocations_for_section(section)
+            if reloc_section is not None:
+                if has_phantom_bytes:
+                    # No guidance how should the relocation work - before or after the odd byte skip
+                    raise DWARFError("This binary has relocations in the DWARF sections, currently not supported. Let the author of DWARF Explorer know.")
+                else:
+                    reloc_handler.apply_section_relocations(
+                        section_stream, reloc_section)
+
+        return DebugSectionDescriptor(
+                stream=section_stream,
+                name=section.name,
+                global_offset=section['sh_offset'],
+                size=section.data_size//2 if has_phantom_bytes else section.data_size,
+                address=section['sh_addr'])
+    
+    elftools.elf.elffile.ELFFile._read_dwarf_section = _read_dwarf_section
 

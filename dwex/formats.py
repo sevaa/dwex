@@ -219,40 +219,11 @@ def read_wasm(file):
     di._start_address = 0
     return di
 
-def _read_dwarf_section_even(self, section, relocate_dwarf_sections):
-    from io import BytesIO
-    from elftools.elf.relocation import RelocationHandler
-    from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
-    from elftools.common.exceptions import DWARFError
-
-    # The section data is read into a new stream, for processing
-    section_stream = BytesIO()
-    section_stream.write(section.data()[::2])
-
-    if relocate_dwarf_sections:
-        reloc_handler = RelocationHandler(self)
-        reloc_section = reloc_handler.find_relocations_for_section(section)
-        if reloc_section is not None:
-            raise DWARFError("This binary has relocations in the DWARF sections, currently not supported. Let the author of DWARF Explorer know.")
-            #reloc_handler.apply_section_relocations(
-            #        section_stream, reloc_section)
-
-    return DebugSectionDescriptor(
-            stream=section_stream,
-            name=section.name,
-            global_offset=section['sh_offset'],
-            size=section.data_size//2,
-            address=section['sh_addr'])
-
 def read_elf(file, filename):
     from elftools.elf.elffile import ELFFile
     file.seek(0)
     # TODO: interactive supplemental DWARF resolver here...
     elffile = ELFFile(file, lambda s: open(path.join(path.dirname(filename), s), 'rb'))
-
-    # Monkeypatch for bogus XC16 binaries (see pyelftools' #518)
-    if elffile['e_machine'] == 'EM_DSPIC30F':
-        elffile._read_dwarf_section = _read_dwarf_section_even.__get__(elffile, ELFFile)
 
     # Retrieve the preferred loading address
     load_segment = next((seg for seg in elffile.iter_segments() if seg.header.p_type == 'PT_LOAD'), None)
