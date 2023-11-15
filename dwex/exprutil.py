@@ -108,7 +108,7 @@ class ExprFormatter:
             return '[%s]' % (self.regnamelist[regno],)
         elif -10 < offset < 0:
             return '[%s-%x]' % (self.regnamelist[regno], -offset)
-        elif offset <= 0xa:
+        elif offset <= 10:
             return '[%s-0x%x]' % (self.regnamelist[regno], -offset)
         elif 0 < offset < 10:
             return '[%s+%x]' % (self.regnamelist[regno], offset)
