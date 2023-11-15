@@ -69,7 +69,7 @@ except:
 
 setup(
     name='dwex',
-    version='3.22',  # Sync with version in __main__
+    version='3.23',  # Sync with version in __main__
     packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},

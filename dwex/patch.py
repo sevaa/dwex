@@ -4,11 +4,13 @@ import elftools.dwarf.enums
 import elftools.dwarf.dwarf_expr
 import elftools.dwarf.locationlists
 import elftools.elf.elffile
+import elftools.dwarf.dwarfinfo
 from elftools.common.utils import struct_parse
 from elftools.common.exceptions import DWARFError
 from elftools.dwarf.descriptions import _DESCR_DW_CC
 from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
 from elftools.elf.relocation import RelocationHandler
+from elftools.dwarf.locationlists import LocationLists, LocationListsPair
 from types import MethodType
 from io import BytesIO
 
@@ -86,6 +88,8 @@ def monkeypatch():
             in struct_parse(self.structs.Dwarf_loclists_entries, self.stream)]
     
     elftools.dwarf.locationlists.LocationLists.get_location_lists_at_offset_ex = get_location_list_at_offset_ex
+    # Same for the pair object
+    elftools.dwarf.locationlists.LocationListsPair.get_location_lists_at_offset_ex = lambda self, offset: self._loclists.get_location_lists_at_offset_ex(offset)
 
     # Rangelist entry translate with mixed V4/V5
     def translate_v5_entry(self, entry, cu):
@@ -126,4 +130,21 @@ def monkeypatch():
                 address=section['sh_addr'])
     
     elftools.elf.elffile.ELFFile._read_dwarf_section = _read_dwarf_section
+
+    # Fix for #1572, also for eliben/pyelftools#519
+    def location_lists(self):
+        """ Get a LocationLists object representing the .debug_loc/debug_loclists section of
+            the DWARF data, or None if this section doesn't exist.
+            If both sections exist, it returns a LocationListsPair.
+        """
+        if self.debug_loclists_sec and self.debug_loc_sec is None:
+            return LocationLists(self.debug_loclists_sec.stream, self.structs, 5, self)
+        elif self.debug_loc_sec and self.debug_loclists_sec is None:
+            return LocationLists(self.debug_loc_sec.stream, self.structs, 4, self)
+        elif self.debug_loc_sec and self.debug_loclists_sec:
+            return LocationListsPair(self.debug_loc_sec.stream, self.debug_loclists_sec.stream, self.structs, self)
+        else:
+            return None
+        
+    elftools.dwarf.dwarfinfo.DWARFInfo.location_lists = location_lists
 
