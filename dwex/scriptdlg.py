@@ -11,7 +11,7 @@ class ScriptDlg(QDialog):
         ly.addWidget(QLabel("Provide a Python %d.%d expression for the \"die\" object:" % (version_info.major, version_info.minor), self))
         self.text = QPlainTextEdit(self)
         ly.addWidget(self.text)
-        l = QLabel("<a href=\"https://github.com/sevaa/dwex/blob/master/docs/expressions.md\">See the guide</a>", self)
+        l = QLabel("<a href=\"https://github.com/sevaa/dwex/wiki/About-expressions\">See the guide</a>", self)
         l.linkActivated.connect(self.on_see_guide)
         ly.addWidget(l)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel, Qt.Orientation.Horizontal, self)
