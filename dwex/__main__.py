@@ -11,7 +11,7 @@ from .ui import setup_ui
 from .locals import LocalsDlg
 
 # Sync with version in setup.py
-version = (3, 23)
+version = (3, 24)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -92,74 +92,78 @@ class TheWindow(QMainWindow):
             if not di: # Covers both False and None
                 return di
             
-            # Some degree of graceful handling of wrong format
-            try:
-                # Some cached top level stuff
-                # Notably, iter_CUs doesn't cache
-                di._ranges = None # Loaded on first use
-                di._aranges = None
-                def decorate_cu(cu, i):
-                    cu._i = i
-                    cu._lineprogram = None
-                    cu._exprparser = None
-                    return cu
-                di._unsorted_CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
-                if not len(di._unsorted_CUs):
-                    return None # Weird, but saw it once - debug sections present, but no CUs
-                # For quick CU search by offset within the info section, regardless of sorting
-                di._CU_offsets = [cu.cu_offset for cu in di._unsorted_CUs]
-                di._CUs = list(di._unsorted_CUs)
-
-                if self.sortcus:
-                    di._CUs.sort(key = cu_sort_key)
-                    for (i, cu) in enumerate(di._CUs):
-                        cu._i = i
-                di._locparser = None # Created on first use
-
-                self.dwarfinfo = di
-                self.filename = filename
-                self.tree_model = DWARFTreeModel(di, self.prefix, self.sortcus, self.sortdies)
-                self.the_tree.setModel(self.tree_model)
-                self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
-                s = os.path.basename(filename)
-                if arch is not None:
-                    s += ' (' + arch + ')'
-                self.setWindowTitle("DWARF Explorer - " + s)
-                self.savesection_menuitem.setEnabled(True)
-                self.back_menuitem.setEnabled(False)
-                self.back_tbitem.setEnabled(False)
-                self.forward_menuitem.setEnabled(False)
-                self.forward_tbitem.setEnabled(False)
-                self.followref_menuitem.setEnabled(False)
-                self.followref_tbitem.setEnabled(False)
-                self.highlightcode_menuitem.setEnabled(True)
-                self.highlightsubstring_menuitem.setEnabled(True)
-                self.highlightcondition_menuitem.setEnabled(True)
-                self.highlightnothing_menuitem.setEnabled(True)
-                self.copy_menuitem.setEnabled(False)
-                self.copy_tbitem.setEnabled(False)
-                self.copyline_menuitem.setEnabled(False)
-                self.copytable_menuitem.setEnabled(False)
-                self.findbycondition_menuitem.setEnabled(True)
-                self.find_menuitem.setEnabled(True)
-                self.find_tbitem.setEnabled(True)
-                self.findip_menuitem.setEnabled(True)
-                self.byoffset_menuitem.setEnabled(True)
-                self.byoffset_tbitem.setEnabled(True)
-                self.localsat_menuitem.setEnabled(True)
-                self.on_highlight_nothing()
-                # Navigation stack - empty
-                self.navhistory = []
-                self.navpos = -1
-                self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
-                LocalsDlg.reset(di)
-                from .crash import set_binary_desc
-                set_binary_desc(("ELF", "MachO", "PE", "WASM")[di._format] + " " + di.config.machine_arch)
-                return True
-            except AssertionError as ass: # Covers exeptions during parsing
-                raise DWARFParseError(ass, di)
+            return self.load_dwarfinfo(di, filename, arch)
         finally:
             self.end_wait()
+    
+    # May throw if parsing fails
+    def load_dwarfinfo(self, di, filename, arch):
+        # Some degree of graceful handling of wrong format
+        try:
+            # Some cached top level stuff
+            # Notably, iter_CUs doesn't cache (TODO, check that in the next version)
+            di._ranges = None # Loaded on first use
+            di._aranges = None
+            def decorate_cu(cu, i):
+                cu._i = i
+                cu._lineprogram = None
+                cu._exprparser = None
+                return cu
+            di._unsorted_CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
+            if not len(di._unsorted_CUs):
+                return None # Weird, but saw it once - debug sections present, but no CUs
+            # For quick CU search by offset within the info section, regardless of sorting
+            di._CU_offsets = [cu.cu_offset for cu in di._unsorted_CUs]
+            di._CUs = list(di._unsorted_CUs)
+
+            if self.sortcus:
+                di._CUs.sort(key = cu_sort_key)
+                for (i, cu) in enumerate(di._CUs):
+                    cu._i = i
+            di._locparser = None # Created on first use - but see #1683
+
+            self.dwarfinfo = di
+            self.filename = filename
+            self.tree_model = DWARFTreeModel(di, self.prefix, self.sortcus, self.sortdies)
+            self.the_tree.setModel(self.tree_model)
+            self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
+            s = os.path.basename(filename)
+            if arch is not None:
+                s += ' (' + arch + ')'
+            self.setWindowTitle("DWARF Explorer - " + s)
+            self.savesection_menuitem.setEnabled(True)
+            self.back_menuitem.setEnabled(False)
+            self.back_tbitem.setEnabled(False)
+            self.forward_menuitem.setEnabled(False)
+            self.forward_tbitem.setEnabled(False)
+            self.followref_menuitem.setEnabled(False)
+            self.followref_tbitem.setEnabled(False)
+            self.highlightcode_menuitem.setEnabled(True)
+            self.highlightsubstring_menuitem.setEnabled(True)
+            self.highlightcondition_menuitem.setEnabled(True)
+            self.highlightnothing_menuitem.setEnabled(True)
+            self.copy_menuitem.setEnabled(False)
+            self.copy_tbitem.setEnabled(False)
+            self.copyline_menuitem.setEnabled(False)
+            self.copytable_menuitem.setEnabled(False)
+            self.findbycondition_menuitem.setEnabled(True)
+            self.find_menuitem.setEnabled(True)
+            self.find_tbitem.setEnabled(True)
+            self.findip_menuitem.setEnabled(True)
+            self.byoffset_menuitem.setEnabled(True)
+            self.byoffset_tbitem.setEnabled(True)
+            self.localsat_menuitem.setEnabled(True)
+            self.on_highlight_nothing()
+            # Navigation stack - empty
+            self.navhistory = []
+            self.navpos = -1
+            self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
+            LocalsDlg.reset(di)
+            from .crash import set_binary_desc
+            set_binary_desc(("ELF", "MachO", "PE", "WASM")[di._format] + " " + di.config.machine_arch)
+            return True
+        except AssertionError as ass: # Covers exeptions during parsing
+            raise DWARFParseError(ass, di)        
 
     def save_mru(self):
         for i, fa in enumerate(self.mru):
@@ -735,6 +739,46 @@ class TheWindow(QMainWindow):
 
     def on_homepage(self):
         QDesktopServices.openUrl(QUrl('https://github.com/sevaa/dwex'))
+
+    # All purpose debug hook
+    def on_debug(self):
+        import io
+        from elftools.dwarf.dwarfinfo import DWARFInfo, DwarfConfig, DebugSectionDescriptor
+        # Read the three saved sections as bytestreams
+        base = os.environ.get("DWEX_ARG")
+        with open(base + '.info.dat', 'rb') as f:
+            info = f.read()
+        with open(base + '.abbrev.dat', 'rb') as f:
+            abbrev = f.read()
+        with open(base + '.str.dat', 'rb') as f:
+            str = f.read()
+
+        # Parse the DWARF info
+        di = DWARFInfo(
+            config = DwarfConfig(little_endian = True, default_address_size = 8, machine_arch = "ARM64"),
+            debug_info_sec = DebugSectionDescriptor(io.BytesIO(info), '__debug_info', None, len(info), 0),
+            debug_aranges_sec = None,
+            debug_abbrev_sec = DebugSectionDescriptor(io.BytesIO(abbrev), '__debug_abbrev', None, len(abbrev), 0),
+            debug_frame_sec = None,
+            eh_frame_sec = None,
+            debug_str_sec = DebugSectionDescriptor(io.BytesIO(str), '__debug_str', None, len(str), 0),
+            debug_loc_sec = None,
+            debug_ranges_sec = None,
+            debug_line_sec = None,
+            debug_pubtypes_sec = None,
+            debug_pubnames_sec = None,
+            debug_addr_sec=None,
+            debug_str_offsets_sec=None,
+            debug_line_str_sec=None,
+            debug_loclists_sec = None,
+            debug_rnglists_sec = None,
+            debug_sup_sec = None,
+            gnu_debugaltlink_sec = None
+        )
+        di._start_address = 0
+        di._format = 1
+
+        self.load_dwarfinfo(di, "", "ARM64")
 
     # Doesn't quite work for the delay on tree expansion :( TODO: timer checks before lighting up this
     def start_wait(self):

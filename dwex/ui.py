@@ -1,3 +1,4 @@
+import os
 from PyQt6.QtCore import Qt, QRectF, QSizeF, QPointF, QByteArray
 from PyQt6.QtGui import QKeySequence, QAction, QImage, QPixmap, QPainter, QIcon
 from PyQt6.QtWidgets import *
@@ -21,6 +22,8 @@ def setup_menu(win):
     exit_menuitem.setMenuRole(QAction.MenuRole.QuitRole)
     exit_menuitem.setShortcut(QKeySequence.StandardKey.Quit)
     exit_menuitem.triggered.connect(win.on_exit)
+    if os.environ.get("DWEX_DEBUG") is not None:
+        file_menu.addAction("Debug").triggered.connect(win.on_debug)
     #########
     view_menu = menu.addMenu("View")
     win.prefix_menuitem = view_menu.addAction("DWARF prefix")

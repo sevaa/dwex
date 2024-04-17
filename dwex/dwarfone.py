@@ -255,16 +255,15 @@ class DWARFInfoV1(object):
     def __init__(self, elffile):
         section = elffile.get_section_by_name(".debug")
         section_data = section.data()
+        # TODO: relocation? Compression?
         self.section_size = len(section_data)
-        self.stm = BytesIO()
-        self.stm.write(section_data)
-        self.stm.seek(0, 0)
+        self.stm = BytesIO(section_data)
 
         lsection = elffile.get_section_by_name(".line")
         if lsection:
-            self.linestream = BytesIO()
-            self.linestream.write(lsection.data())
-            self.linestream.seek(0, 0)
+            self.linestream = BytesIO(lsection.data())
+        # Sections .debug_pubnames, .debug_aranges also in the spec -
+        # those are indices into info, we ignore them
 
         self.config = DwarfConfig(
             little_endian = elffile.little_endian,

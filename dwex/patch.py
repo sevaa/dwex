@@ -14,6 +14,12 @@ from elftools.dwarf.locationlists import LocationLists, LocationListsPair
 from types import MethodType
 from io import BytesIO
 
+# Good reference on DWARF extensions here:
+# https://sourceware.org/elfutils/DwarfExtensions
+
+# ELF reference:
+# https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.sheader.html
+
 def monkeypatch():
     #https://docs.hdoc.io/hdoc/llvm-project/e051F173385B23DEF.html
     elftools.dwarf.enums.ENUM_DW_AT["DW_AT_LLVM_apinotes"] = 0x3e07
