@@ -764,7 +764,7 @@ class TheWindow(QMainWindow):
             debug_str_sec = DebugSectionDescriptor(io.BytesIO(str), '__debug_str', None, len(str), 0),
             debug_loc_sec = None,
             debug_ranges_sec = None,
-            debug_line_sec = None,
+            debug_line_sec = DebugSectionDescriptor(io.BytesIO(b''), '__debug_line', None, 0, 0),
             debug_pubtypes_sec = None,
             debug_pubnames_sec = None,
             debug_addr_sec=None,

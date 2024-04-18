@@ -8,6 +8,11 @@ def parse_location(self, attr):
     di = self.die.dwarfinfo
     if di._locparser is None:
         di._locparser = LocationParser(di.location_lists())
+
+    # Patch for #1620: attribute is loclist pointer, but no loclists section
+    if LocationParser._attribute_is_loclistptr_class(attr) and LocationParser._attribute_has_loc_list(attr, self.die.cu['version']) and not di._locparser.location_lists:
+        return None
+    
     try:
         return di._locparser.parse_from_attribute(attr, self.die.cu['version'], die = self.die)
     except ELFParseError as exc:

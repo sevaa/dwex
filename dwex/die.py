@@ -214,21 +214,23 @@ class DIETableModel(QAbstractTableModel):
                 return hex(val) if self.hex and isinstance(val, int) else str(val)
         # except BaseException as exc:
         except ELFParseError as exc:
-            from .__main__ import version
-            from .crash import report_crash
-            from inspect import currentframe
-            tb = exc.__traceback__
-            di = die.cu.dwarfinfo
-            file_addr_size = di.config.default_address_size
-            loc_section = di.debug_loclists_sec if dwarf_version >= 5 else di.debug_loc_sec
-            loc_sec_len = len(loc_section.stream.getbuffer()) if loc_section else None
-            ctxt = {'attr': attr,
-                       'die': die,
-                       'cu_header': header,
-                       'file_addr_size': file_addr_size,
-                       'dwarf_version': dwarf_version,
-                       'sec_size': loc_sec_len}
-            report_crash(exc, tb, version, currentframe(), ctxt)
+            import sys
+            if not sys.gettrace():
+                from .__main__ import version
+                from .crash import report_crash
+                from inspect import currentframe
+                tb = exc.__traceback__
+                di = die.cu.dwarfinfo
+                file_addr_size = di.config.default_address_size
+                loc_section = di.debug_loclists_sec if dwarf_version >= 5 else di.debug_loc_sec
+                loc_sec_len = len(loc_section.stream.getbuffer()) if loc_section else None
+                ctxt = {'attr': attr,
+                        'die': die,
+                        'cu_header': header,
+                        'file_addr_size': file_addr_size,
+                        'dwarf_version': dwarf_version,
+                        'sec_size': loc_sec_len}
+                report_crash(exc, tb, version, currentframe(), ctxt)
             return "(parse error - please report at github.com/sevaa/dwex)"
 
     def format_form(self, form):
