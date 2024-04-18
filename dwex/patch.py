@@ -1,4 +1,5 @@
 import os
+from struct import Struct
 
 import elftools.dwarf.enums
 import elftools.dwarf.dwarf_expr
@@ -11,6 +12,7 @@ from elftools.dwarf.descriptions import _DESCR_DW_CC
 from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
 from elftools.elf.relocation import RelocationHandler
 from elftools.dwarf.locationlists import LocationLists, LocationListsPair
+from elftools.construct.core import StaticField
 from types import MethodType
 from io import BytesIO
 
@@ -19,6 +21,38 @@ from io import BytesIO
 
 # ELF reference:
 # https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.sheader.html
+
+_UBInt24_packer = Struct(">BH")
+_ULInt24_packer = Struct("<HB")
+
+class UBInt24(StaticField):
+    """unsigned, big endian 24-bit integer"""
+    def __init__(self, name):
+        StaticField.__init__(self, name, 3)
+
+    def _parse(self, stream, context):
+        global _UBInt24_packer
+        (h, l) = _UBInt24_packer.unpack(StaticField._parse(self, stream, context))
+        return l | (h << 16)
+    
+    def _build(self, obj, stream, context):
+        global _UBInt24_packer
+        StaticField._build(self, _UBInt24_packer.pack(obj >> 16, obj & 0xFFFF), stream, context)
+
+class ULInt24(StaticField):
+    """unsigned, little endian 24-bit integer"""
+    def __init__(self, name):
+        StaticField.__init__(self, name, 3)
+
+    def _parse(self, stream, context):
+        global _ULInt24_packer
+        (l, h) = _ULInt24_packer.unpack(StaticField._parse(self, stream, context))
+        return l | (h << 16)
+    
+    def _build(self, obj, stream, context):
+        global _ULInt24_packer
+        StaticField._build(self, _ULInt24_packer.pack(obj & 0xFFFF, obj >> 16), stream, context)
+
 
 def monkeypatch():
     #https://docs.hdoc.io/hdoc/llvm-project/e051F173385B23DEF.html
@@ -153,4 +187,19 @@ def monkeypatch():
             return None
         
     elftools.dwarf.dwarfinfo.DWARFInfo.location_lists = location_lists
+
+    # Fix for struct building for adding Int24, #1614
+    old_create_structs = elftools.dwarf.dwarfinfo.DWARFStructs._create_structs
+    def _create_structs(self):
+        old_create_structs(self)
+        if self.little_endian:
+            self.Dwarf_uint24 = ULInt24
+        else:
+            self.Dwarf_uint24 = UBInt24
+        self.Dwarf_dw_form['DW_FORM_strx3'] = self.Dwarf_uint24('')
+        self.Dwarf_dw_form['DW_FORM_addrx3'] = self.Dwarf_uint24('')
+    elftools.dwarf.dwarfinfo.DWARFStructs._create_structs = _create_structs
+
+    
+
 
