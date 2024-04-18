@@ -247,18 +247,14 @@ def read_elf(file, filename):
 # Or throws an exception
 # resolve_arch is for Mach-O fat binaries - see read_macho()
 def read_dwarf(filename, resolve_arch):
-    if path.isfile(filename): # On MacOS, opening dSYM bundles as is would be right
-        file = None
-        try: # For ELF, the file is to remain open
-            file = open(filename, 'rb')
+    if path.isfile(filename): # On MacOS, opening dSYM bundles as is would be right, and they are technically folders
+        with open(filename, 'rb') as file:
             signature = file.read(4)
 
             if signature[0:2] == b'MZ': # DOS header - this might be a PE. Don't verify the PE header, just feed it to the parser
                 return read_pe(filename)
             elif signature == b'\x7FELF': #It's an ELF
-                di = read_elf(file, filename)
-                file = None # Keep the file open
-                return di
+                return read_elf(file, filename)
             elif signature in (b'\xCA\xFE\xBA\xBE', b'\xFE\xED\xFA\xCE', b'\xFE\xED\xFA\xCF', b'\xCE\xFA\xED\xFE', b'\xCF\xFA\xED\xFE'):
                 if signature == b'\xCA\xFE\xBA\xBE' and int.from_bytes(file.read(4), 'big') >= 0x20:
                     # Java .class files also have CAFEBABE, check the fat binary arch count
@@ -267,9 +263,6 @@ def read_dwarf(filename, resolve_arch):
                 return read_macho(filename, resolve_arch, filename)
             elif signature == b'\0asm':
                 return read_wasm(file)
-        finally:
-            if file:
-                file.close()                
     elif path.isdir(filename):
         # Is it a dSYM bundle?
         nameparts = path.basename(filename).split('.') 
