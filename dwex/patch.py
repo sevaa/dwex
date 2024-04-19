@@ -199,6 +199,6 @@ def monkeypatch():
         self.Dwarf_dw_form['DW_FORM_addrx3'] = self.Dwarf_uint24('')
     elftools.dwarf.dwarfinfo.DWARFStructs._create_structs = _create_structs
 
-    
-
-
+    # Fix for #1588
+    elftools.dwarf.enums.ENUM_DW_LNCT['DW_LNCT_LLVM_source'] = 0x2001
+    elftools.dwarf.enums.ENUM_DW_LNCT['DW_LNCT_LLVM_is_MD5'] = 0x2002
