@@ -107,7 +107,7 @@ def find_funcs_at_address(cu, address):
         die_list = (die for die in cu.iter_DIEs())
 
     for die in die_list:
-        if die.tag == 'DW_TAG_subprogram' and has_code_location(die):
+        if die.tag in ('DW_TAG_subprogram', 'DW_TAG_global_subroutine') and has_code_location(die):
             if 'DW_AT_range' in die.attributes:
                 cu_base = top_die.attributes['DW_AT_low_pc'].value
                 rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value)
@@ -180,7 +180,7 @@ def get_source_line(die, address):
         # Looking for a range of addresses in two consecutive states that
         # contain the required address.
         if prevstate and prevstate.address <= address < entry.state.address and not file_and_line:
-            file = lp['file_entry'][prevstate.file + (0 if v5 else -1)].name.decode('UTF-8')
+            file = (die.cu.get_top_DIE().attributes['DW_AT_name'].value if not v5 and prevstate.file == 0 else lp['file_entry'][prevstate.file + (0 if v5 else -1)].name).decode('UTF-8')
             line = prevstate.line
             file_and_line = (file, line)
         prevstate = entry.state

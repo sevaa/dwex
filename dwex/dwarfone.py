@@ -188,7 +188,48 @@ class CompileUnitV1(object):
                 break
             
     def iter_DIE_children(self, die):
-        raise NotImplementedError("Sorry, not supported on DWARFv1 yet")
+        if not die.has_children:
+            return
+        
+        # `cur_offset` tracks the stream offset of the next DIE to yield
+        # as we iterate over our children,
+        cur_offset = die.offset + die.size
+
+        while True:
+            child = self.DIE_at_offset(cur_offset)
+
+            if child._parent is None:
+                child._parent = die
+
+            if child.is_null():
+                die._terminator = child
+                return
+
+            yield child
+
+            if not child.has_children:
+                cur_offset += child.size
+            elif "DW_AT_sibling" in child.attributes:
+                sibling = child.attributes["DW_AT_sibling"]
+                if sibling.form == 'DW_FORM_ref':
+                    cur_offset = sibling.value
+                else:
+                    raise NotImplementedError('sibling in form %s' % sibling.form)
+            else:
+                # If no DW_AT_sibling attribute is provided by the producer
+                # then the whole child subtree must be parsed to find its next
+                # sibling. There is one zero byte representing null DIE
+                # terminating children list. It is used to locate child subtree
+                # bounds.
+
+                # If children are not parsed yet, this instruction will manage
+                # to recursive call of this function which will result in
+                # setting of `_terminator` attribute of the `child`.
+                if child._terminator is None:
+                    for _ in self.iter_DIE_children(child):
+                        pass
+
+                cur_offset = child._terminator.offset + child._terminator.size
 
 class LineTableV1(object):
     def __init__(self, stm, structs, len, pc):
@@ -222,6 +263,9 @@ class LineTableV1(object):
                 pc += pc_delta
             self._decoded_entries = entries
         return self._decoded_entries
+    
+    def __getitem__(self, name):
+        return self.header[name]
 
 class DWARFExprParserV1(object):
     def __init__(self, structs):
