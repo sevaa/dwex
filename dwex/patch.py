@@ -22,6 +22,9 @@ from io import BytesIO
 # ELF reference:
 # https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.sheader.html
 
+# LLVM extensions for heterogeneous debugging
+# https://llvm.org/docs/AMDGPUDwarfExtensionsForHeterogeneousDebugging.html
+
 _UBInt24_packer = Struct(">BH")
 _ULInt24_packer = Struct("<HB")
 
