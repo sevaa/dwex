@@ -232,7 +232,7 @@ def read_elf(file, filename):
     start_address = load_segment.header.p_vaddr if load_segment else 0
     di = None
     if elffile.has_dwarf_info():
-        di = elffile.get_dwarf_info()
+        di = elffile.get_dwarf_info(elffile.header.e_type != 'ET_REL')
     elif elffile.get_section_by_name(".debug"):
         from .dwarfone import parse_dwarf1
         di = parse_dwarf1(elffile)
@@ -242,7 +242,11 @@ def read_elf(file, filename):
         di._start_address = start_address
     return di
 
-_ar_file_header = namedtuple('ARHeader', ('data_offset', 'name', 'mod', 'uid', 'gid', 'mode', 'size'))
+_ar_file_header = namedtuple('ARHeader', ('data_offset',
+                                          'name',
+                                          # Don't care for the metadata
+                                          #'mod', 'uid', 'gid', 'mode',
+                                          'size'))
 
 # resolve_slice takes a list of files in the archive, and returns
 # the desired index, or None if the user has cancelled
@@ -261,8 +265,8 @@ def read_staticlib(file, resolve_slice):
             end_pos = long_names.find(b'\n', str_offset)
             name = long_names[str_offset:end_pos] if end_pos >= 0 else long_names[str_offset:]
         return _ar_file_header(data_offset, name,
-                               int(b[16:28]), int(b[28:34]),
-                               int(b[34:40]), int(b[40:48], 8),
+                               #int(b[16:28]), int(b[28:34]),
+                               #int(b[34:40]), int(b[40:48], 8),
                                int(b[48:58]))
 
     file.seek(0, os.SEEK_END)

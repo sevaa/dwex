@@ -161,7 +161,7 @@ class TheWindow(QMainWindow):
             self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
             LocalsDlg.reset(di)
             from .crash import set_binary_desc
-            set_binary_desc(("ELF", "MachO", "PE", "WASM")[di._format] + " " + di.config.machine_arch)
+            set_binary_desc(("ELF", "MachO", "PE", "WASM", "ELFinA")[di._format] + " " + di.config.machine_arch)
             return True
         except AssertionError as ass: # Covers exeptions during parsing
             raise DWARFParseError(ass, di)        
