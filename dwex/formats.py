@@ -1,9 +1,10 @@
+from collections import namedtuple
 import io, os
 from os import path, listdir
 from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
-# Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM
+# Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM, 4 - ELF inside A
 
 class FormatError(Exception):
     def __init__(self, s):
@@ -95,7 +96,7 @@ def read_macho(filename, resolve_arch, friendly_filename):
     macho = MachO(filename)
     if macho.isFat:
         slices = [make_macho_arch_name(slice) for slice in macho.fatArches]
-        arch_no = resolve_arch(slices)
+        arch_no = resolve_arch(slices, 'Mach-O Fat Binary', 'Choose an architecture:')
         if arch_no is None: # User cancellation
             return False
         fat_arch = slices[arch_no]
@@ -219,6 +220,7 @@ def read_wasm(file):
     di._start_address = 0
     return di
 
+# Filename is only needed for supplemental DWARF resolution
 def read_elf(file, filename):
     from elftools.elf.elffile import ELFFile
     file.seek(0)
@@ -238,7 +240,72 @@ def read_elf(file, filename):
     if di:
         di._format = 0
         di._start_address = start_address
-    return di    
+    return di
+
+_ar_file_header = namedtuple('ARHeader', ('data_offset', 'name', 'mod', 'uid', 'gid', 'mode', 'size'))
+
+# resolve_slice takes a list of files in the archive, and returns
+# the desired index, or None if the user has cancelled
+def read_staticlib(file, resolve_slice):
+    from io import BytesIO
+    long_names = False
+    def read_header():
+        b = file.read(60)
+        data_offset = file.tell()
+        name = b[0:16].rstrip()
+        # Resolve GNU style long file names
+        if name.startswith(b'/') and len(name) > 1 and ord(b'0') <= name[1] <= ord(b'9'):
+            if not long_names:
+                FormatError("Long file name in a static library, but no long name section was found.")
+            str_offset = int(name[1:])
+            end_pos = long_names.find(b'\n', str_offset)
+            name = long_names[str_offset:end_pos] if end_pos >= 0 else long_names[str_offset:]
+        return _ar_file_header(data_offset, name,
+                               int(b[16:28]), int(b[28:34]),
+                               int(b[34:40]), int(b[40:48], 8),
+                               int(b[48:58]))
+
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(8, os.SEEK_SET)
+
+    # First section most likely a symtab - skip
+    header = read_header() 
+    if header.name == b'/' or header.name == b'/SYM64/':
+        file.seek(((header.size + 1) // 2) * 2, os.SEEK_CUR)
+    else: # Skip back
+        file.seek(-60, os.SEEK_CUR)
+
+    # Probably a long file name directory - read and keep
+    header = read_header() 
+    if header.name == b'//':
+        long_names = file.read(header.size)
+        if header.size % 2 == 1:
+            file.seek(1, os.SEEK_CUR)
+    else: # It's a file, skip back
+        file.seek(-60, os.SEEK_CUR)
+        
+    # Read all file headers, build a list
+    headers = list()
+    while file.tell() < size:
+        header = read_header()
+        headers.append(header)
+        file.seek(((header.size + 1) // 2) * 2, os.SEEK_CUR)
+
+    # Present the user with slice choice
+    # TODO: encoding?
+    names = list(h.name[:-1].decode('ASCII') for h in headers)
+    slice = resolve_slice(names, 'Static Library', 'Choose an object file:')
+    if slice is None:
+        return False # Cancellation
+    
+    header = headers[slice]
+    file.seek(header.data_offset)
+    di = read_elf(BytesIO(file.read(header.size)), None)
+    if di:
+        di._format = 4
+        di._fat_arch = names[slice]
+    return di
 
 # UI agnostic - resolve_arch might be interactive
 # Returns slightly augmented DWARFInfo
@@ -246,12 +313,14 @@ def read_elf(file, filename):
 # Or False if user has cancelled
 # Or throws an exception
 # resolve_arch is for Mach-O fat binaries - see read_macho()
+# and repurposed for .a static libraries
 def read_dwarf(filename, resolve_arch):
     if path.isfile(filename): # On MacOS, opening dSYM bundles as is would be right, and they are technically folders
         with open(filename, 'rb') as file:
-            signature = file.read(4)
+            xsignature = file.read(8)
+            signature = xsignature[:4]
 
-            if signature[0:2] == b'MZ': # DOS header - this might be a PE. Don't verify the PE header, just feed it to the parser
+            if xsignature[:2] == b'MZ': # DOS header - this might be a PE. Don't verify the PE header, just feed it to the parser
                 return read_pe(filename)
             elif signature == b'\x7FELF': #It's an ELF
                 return read_elf(file, filename)
@@ -263,6 +332,8 @@ def read_dwarf(filename, resolve_arch):
                 return read_macho(filename, resolve_arch, filename)
             elif signature == b'\0asm':
                 return read_wasm(file)
+            elif xsignature == b'!<arch>\n':
+                return read_staticlib(file, resolve_arch)
     elif path.isdir(filename):
         # Is it a dSYM bundle?
         nameparts = path.basename(filename).split('.') 

@@ -77,8 +77,9 @@ class TheWindow(QMainWindow):
 
     # Callback for the Mach-O fat binary opening logic
     # Taking a cue from Hopper or IDA, we parse only one slice at a time
-    def resolve_arch(self, arches):
-        r = QInputDialog.getItem(self, 'Mach-O Fat Binary', 'Choose an architecture:', arches, 0, False, Qt.WindowType.Dialog)
+    # Also reused for 
+    def resolve_arch(self, arches, title, message):
+        r = QInputDialog.getItem(self, title, message, arches, 0, False, Qt.WindowType.Dialog)
         return arches.index(r[0]) if r[1] else None
     
     # Can throw an exception
@@ -88,7 +89,7 @@ class TheWindow(QMainWindow):
     def open_file(self, filename, arch = None):
         self.start_wait()
         try:
-            di = read_dwarf(filename, self.resolve_arch if arch is None else lambda arches: arches.index(arch))
+            di = read_dwarf(filename, self.resolve_arch if arch is None else lambda arches, title, text: arches.index(arch))
             if not di: # Covers both False and None
                 return di
             
