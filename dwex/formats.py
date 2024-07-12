@@ -4,7 +4,7 @@ from os import path, listdir
 from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
-# Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM, 4 - ELF inside A
+# Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM, 4 - ELF inside A, 1 - MachO inside A
 
 class FormatError(Exception):
     def __init__(self, s):
@@ -91,7 +91,7 @@ def macho_save_sections(filename, macho):
 # resolve_arch takes a list of architecture descriptions, and returns
 # the desired index, or None if the user has cancelled
 def read_macho(filename, resolve_arch, friendly_filename):
-    from filebytes.mach_o import MachO, CpuType, TypeFlags, LC
+    from filebytes.mach_o import MachO
     fat_arch = None
     macho = MachO(filename)
     if macho.isFat:
@@ -102,6 +102,10 @@ def read_macho(filename, resolve_arch, friendly_filename):
         fat_arch = slices[arch_no]
         macho = macho.fatArches[arch_no]
 
+    return get_macho_dwarf(macho, fat_arch)
+
+def get_macho_dwarf(macho, fat_arch):
+    from filebytes.mach_o import CpuType, TypeFlags, LC
     # We proceed with macho being a arch-specific file, or a slice within a fat binary
     data = {
         section.name: DebugSectionDescriptor(io.BytesIO(section.bytes), section.name, None, len(section.bytes), 0)
@@ -242,7 +246,7 @@ def read_elf(file, filename):
         di._start_address = start_address
     return di
 
-_ar_file_header = namedtuple('ARHeader', ('data_offset',
+_ar_file_header = namedtuple('ARHeader', ('header_offset', 'data_offset',
                                           'name',
                                           # Don't care for the metadata
                                           #'mod', 'uid', 'gid', 'mode',
@@ -254,9 +258,15 @@ def read_staticlib(file, resolve_slice):
     from io import BytesIO
     long_names = False
     def read_header():
+        header_offset = file.tell()
         b = file.read(60)
-        data_offset = file.tell()
+        data_size = int(b[48:58])
         name = b[0:16].rstrip()
+        # Resolve BSD style long names
+        if name.startswith(b'#1/') and len(name) > 3:
+            name_len = int(name[3:])
+            name = file.read(name_len).rstrip(b'\0')
+            data_size -= name_len
         # Resolve GNU style long file names
         if name.startswith(b'/') and len(name) > 1 and ord(b'0') <= name[1] <= ord(b'9'):
             if not long_names:
@@ -264,21 +274,35 @@ def read_staticlib(file, resolve_slice):
             str_offset = int(name[1:])
             end_pos = long_names.find(b'\n', str_offset)
             name = long_names[str_offset:end_pos] if end_pos >= 0 else long_names[str_offset:]
-        return _ar_file_header(data_offset, name,
+        data_offset = file.tell()
+        return _ar_file_header(header_offset, data_offset, name,
                                #int(b[16:28]), int(b[28:34]),
                                #int(b[34:40]), int(b[40:48], 8),
-                               int(b[48:58]))
+                               data_size)
+    
+    # Not used. Just in case.
+    def read_symtab(size, is64):
+        ilen = 8 if is64 else 4
+        length = int.from_bytes(file.read(ilen), 'big')
+        d = file.read(length * ilen)
+        offsets = [int.from_bytes(d[i*ilen:(i+1)*ilen], 'big') for i in range(length)]
+        d = file.read(size - (length+1)*ilen)
+        symbols = d.split(b'\0')[:-1]
+        return zip(offsets, symbols)
 
     file.seek(0, os.SEEK_END)
     size = file.tell()
-    file.seek(8, os.SEEK_SET)
+    file.seek(8) # Past the magic signature
 
     # First section most likely a symtab - skip
     header = read_header() 
-    if header.name == b'/' or header.name == b'/SYM64/':
+    if header.name == b'/' or header.name == b'/SYM64/' or header.name == b'__.SYMDEF':
         file.seek(((header.size + 1) // 2) * 2, os.SEEK_CUR)
+        # read_symtab(header.size, header.name == b'/SYM64/')
+        # if header.size % 2 == 1:
+        #    file.seek(1, os.SEEK_CUR)
     else: # Skip back
-        file.seek(-60, os.SEEK_CUR)
+        file.seek(header.header_offset)
 
     # Probably a long file name directory - read and keep
     header = read_header() 
@@ -287,7 +311,7 @@ def read_staticlib(file, resolve_slice):
         if header.size % 2 == 1:
             file.seek(1, os.SEEK_CUR)
     else: # It's a file, skip back
-        file.seek(-60, os.SEEK_CUR)
+        file.seek(header.header_offset)
         
     # Read all file headers, build a list
     headers = list()
@@ -298,16 +322,28 @@ def read_staticlib(file, resolve_slice):
 
     # Present the user with slice choice
     # TODO: encoding?
-    names = list(h.name[:-1].decode('ASCII') for h in headers)
+    names = list(h.name.rstrip(b'/').decode('ASCII') for h in headers)
     slice = resolve_slice(names, 'Static Library', 'Choose an object file:')
     if slice is None:
         return False # Cancellation
     
     header = headers[slice]
     file.seek(header.data_offset)
-    di = read_elf(BytesIO(file.read(header.size)), None)
+    b = file.read(header.size)
+    # We support ELF and MachO static libraries so far
+    if b[:4] == b'\x7FELF':
+        di = read_elf(BytesIO(b), None)
+    elif b[:4] in (b'\xFE\xED\xFA\xCE', b'\xFE\xED\xFA\xCF', b'\xCE\xFA\xED\xFE', b'\xCF\xFA\xED\xFE'):
+        from filebytes.mach_o import MachO
+        macho = MachO(None, b)
+        di = get_macho_dwarf(macho, None)
+    elif b[:4] == b'\xCA\xFE\xBA\xBE':
+        raise FormatError("The selected slice of the static library is a MachO fat binary. Those are not supported. Let the author know.")
+    else:
+        raise FormatError("The selected slice of the static library is not a supported object file. Let the author know.")
+    
     if di:
-        di._format = 4
+        di._format += 4
         di._fat_arch = names[slice]
     return di
 
