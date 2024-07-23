@@ -96,11 +96,13 @@ class TheWindow(QMainWindow):
             return self.load_dwarfinfo(di, filename, arch)
         finally:
             self.end_wait()
-    
+
     # May throw if parsing fails
     def load_dwarfinfo(self, di, filename, arch):
+        # Arch comes from opening with arch (via MRU), not from the interactive selection
         # Some degree of graceful handling of wrong format
         try:
+            slice = di._fat_arch if hasattr(di, '_fat_arch') else None
             # Some cached top level stuff
             # Notably, iter_CUs doesn't cache (TODO, check that in the next version)
             di._ranges = None # Loaded on first use
@@ -129,10 +131,11 @@ class TheWindow(QMainWindow):
             self.the_tree.setModel(self.tree_model)
             self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
             s = os.path.basename(filename)
-            if arch is not None:
-                s += ' (' + arch + ')'
+            if slice is not None:
+                s += ' (' + slice + ')'
             self.setWindowTitle("DWARF Explorer - " + s)
             self.savesection_menuitem.setEnabled(True)
+            self.switchslice_menuitem.setEnabled(slice is not None)
             self.back_menuitem.setEnabled(False)
             self.back_tbitem.setEnabled(False)
             self.forward_menuitem.setEnabled(False)
@@ -158,7 +161,7 @@ class TheWindow(QMainWindow):
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
-            self.save_filename_in_mru(filename, di._fat_arch if '_fat_arch' in dir(di) and di._fat_arch else None)
+            self.save_filename_in_mru(filename, slice)
             LocalsDlg.reset(di)
             from .crash import set_binary_desc
             set_binary_desc(("ELF", "MachO", "PE", "WASM", "ELFinA", "MachOinA")[di._format] + " " + di.config.machine_arch)
@@ -319,6 +322,11 @@ class TheWindow(QMainWindow):
                     QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
                         "Error saving the section data:\n\n" + format(exc),
                         QMessageBox.StandardButton.Ok, self).show()
+    
+    # Just present the slice dialog again
+    # TODO: do this in a more elegant way, without reopening and rereading
+    def on_switchslice(self):
+        self.open_file(self.filename, None)
 
     #############################################################
     # Done with file stuff, now tree navigation
@@ -743,6 +751,10 @@ class TheWindow(QMainWindow):
 
     # All purpose debug hook
     def on_debug(self):
+        self.dwarfinfo.CFI_entries()
+        return
+
+
         import io
         from elftools.dwarf.dwarfinfo import DWARFInfo, DwarfConfig, DebugSectionDescriptor
         # Read the three saved sections as bytestreams
