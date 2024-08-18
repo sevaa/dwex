@@ -4,7 +4,7 @@ from os import path, listdir
 from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
-# Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM, 4 - ELF inside A, 1 - MachO inside A
+# Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM, 4 - ELF inside A, 5 - arch specific MachO inside A
 
 class FormatError(Exception):
     def __init__(self, s):
@@ -12,19 +12,35 @@ class FormatError(Exception):
 
 def read_pe(filename):
     from filebytes.pe import PE, IMAGE_FILE_MACHINE
+    import struct, zlib
 
     pefile = PE(filename)
+    # TODO: debug import section in b.exe
 
     # Section's real size might be padded - see https://github.com/sashs/filebytes/issues/28
-    sections = [(section.name, section,
+    sections = [(section.name if section.name[1] != 'z' else '.' + section.name[2:],
+        section.name[1] == 'z',
+        section,
         section.header.PhysicalAddress_or_VirtualSize,
         section.header.SizeOfRawData)
         for section in pefile.sections
-        if section.name.startswith('.debug')]
+        if section.name.startswith('.debug') or section.name.startswith('.zdebug')]
+    
+    def read_section(name, is_compressed, section, virtual_size, raw_size):
+        data = section.bytes
+        size = raw_size if virtual_size == 0 else min((raw_size, virtual_size))
+        if is_compressed:
+            if size < 12:
+                raise FormatError("Compressesed section %s is unexpectedly short." % (name,))
+            if data[0:4] != b'ZLIB':
+                raise FormatError("Unsupported format in compressesed section %s, ZLIB is expected." % (name,))
+            (size,) = struct.unpack('>Q', data[4:12])
+            data = zlib.decompress(data[12:])
+            if len(data) != size:
+                raise FormatError("Wrong uncompressed size in compressesed section %s: expected %d, got %d." % (name, size, len(data)))
+        return DebugSectionDescriptor(io.BytesIO(data), name, None, size, 0)
 
-    data = {name: DebugSectionDescriptor(io.BytesIO(section.bytes), name, None,
-            raw_size if virtual_size == 0 else min((raw_size, virtual_size)), 0)
-        for (name, section, virtual_size, raw_size) in sections}
+    data = {sec[0]: read_section(*sec) for sec in sections}
 
     if not '.debug_info' in data:
         return None
@@ -249,7 +265,7 @@ def read_elf(file, filename):
 _ar_file_header = namedtuple('ARHeader', ('header_offset', 'data_offset',
                                           'name',
                                           # Don't care for the metadata
-                                          #'mod', 'uid', 'gid', 'mode',
+                                          #'last_mod_date', 'user_id', 'group_id', 'mode',
                                           'size'))
 
 # resolve_slice takes a list of files in the archive, and returns
@@ -268,7 +284,7 @@ def read_staticlib(file, resolve_slice):
             name = file.read(name_len).rstrip(b'\0')
             data_size -= name_len
         # Resolve GNU style long file names
-        if name.startswith(b'/') and len(name) > 1 and ord(b'0') <= name[1] <= ord(b'9'):
+        elif name.startswith(b'/') and len(name) > 1 and ord(b'0') <= name[1] <= ord(b'9'):
             if not long_names:
                 FormatError("Long file name in a static library, but no long name section was found.")
             str_offset = int(name[1:])
@@ -280,7 +296,7 @@ def read_staticlib(file, resolve_slice):
                                #int(b[34:40]), int(b[40:48], 8),
                                data_size)
     
-    # Not used. Just in case.
+    # Not used. Just in case. GNU symtab only.
     def read_symtab(size, is64):
         ilen = 8 if is64 else 4
         length = int.from_bytes(file.read(ilen), 'big')
@@ -289,7 +305,12 @@ def read_staticlib(file, resolve_slice):
         d = file.read(size - (length+1)*ilen)
         symbols = d.split(b'\0')[:-1]
         return zip(offsets, symbols)
+    
+    def skip_content(header):
+        file.seek(((header.size + 1) // 2) * 2, os.SEEK_CUR)
 
+    ############################
+    # read_staticlib starts here
     file.seek(0, os.SEEK_END)
     size = file.tell()
     file.seek(8) # Past the magic signature
@@ -297,7 +318,7 @@ def read_staticlib(file, resolve_slice):
     # First section most likely a symtab - skip
     header = read_header() 
     if header.name == b'/' or header.name == b'/SYM64/' or header.name == b'__.SYMDEF':
-        file.seek(((header.size + 1) // 2) * 2, os.SEEK_CUR)
+        skip_content(header)
         # read_symtab(header.size, header.name == b'/SYM64/')
         # if header.size % 2 == 1:
         #    file.seek(1, os.SEEK_CUR)
@@ -318,11 +339,11 @@ def read_staticlib(file, resolve_slice):
     while file.tell() < size:
         header = read_header()
         headers.append(header)
-        file.seek(((header.size + 1) // 2) * 2, os.SEEK_CUR)
+        skip_content(header)
 
     # Present the user with slice choice
     # TODO: encoding?
-    names = list(h.name.rstrip(b'/').decode('ASCII') for h in headers)
+    names = tuple(h.name.rstrip(b'/').decode('ASCII') for h in headers)
     slice = resolve_slice(names, 'Static Library', 'Choose an object file:')
     if slice is None:
         return False # Cancellation
@@ -338,7 +359,7 @@ def read_staticlib(file, resolve_slice):
         macho = MachO(None, b)
         di = get_macho_dwarf(macho, None)
     elif b[:4] == b'\xCA\xFE\xBA\xBE':
-        raise FormatError("The selected slice of the static library is a MachO fat binary. Those are not supported. Let the author know.")
+        raise FormatError("The selected slice of the static library is a Mach-O fat binary. Those are not supported. Let the author know.")
     else:
         raise FormatError("The selected slice of the static library is not a supported object file. Let the author know.")
     

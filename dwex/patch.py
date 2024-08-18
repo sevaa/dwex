@@ -6,6 +6,7 @@ import elftools.dwarf.dwarf_expr
 import elftools.dwarf.locationlists
 import elftools.elf.elffile
 import elftools.dwarf.dwarfinfo
+import filebytes.pe
 from elftools.common.utils import struct_parse
 from elftools.common.exceptions import DWARFError
 from elftools.dwarf.descriptions import _DESCR_DW_CC
@@ -205,3 +206,6 @@ def monkeypatch():
     # Fix for #1588
     elftools.dwarf.enums.ENUM_DW_LNCT['DW_LNCT_LLVM_source'] = 0x2001
     elftools.dwarf.enums.ENUM_DW_LNCT['DW_LNCT_LLVM_is_MD5'] = 0x2002
+
+    # Short out import directory parsing for now
+    filebytes.pe.PE._parseDataDirectory = lambda self,a,b,c: None

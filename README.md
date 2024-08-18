@@ -7,6 +7,7 @@ debugging information in executable files, built on top of [pyelftools](https://
  - Mach-O (MacOS X, iOS)
  - PE (Windows, Cygwin)
  - WASM (aka WebAssembly)
+ - ar (.a files, Linux/Unix/MacOS X static libraries)
 
 This project came from my desire to see and navigate the DWARF tree of compiled Android and iOS binaries. Seeing the DIEs is easy enough with utilities like `readelf` or `dwarfdump`. However, chasing inter-DIE references back and forth is not straightforward with those.
 
@@ -15,6 +16,8 @@ The utility might be of use for anyone who is building DWARF parsers for one or 
 Note that regular Windows executables (EXE/DLL files) are PE files but don't, as a rule, contain DWARF information. The Microsoft toolchains (Visual Studio and the like) produce debugging information in Microsoft's own format, Program Database (PDB). There are, though, a couple of toolchains that produce PE files with DWARF debug info in them - notably GCC under Cygwin. DWARF Explorer is compatible with those.
 
 The pyelftools library that dwex is based on supports DWARF versions 2-5, and so does dwex. DWARFv5 support might be unstable. DWARF v1 is supported experimentally, in ELF files only.
+
+There is a known issue with incorrect parsing of DWARF in .o files and static libraries that contain them. See [eliben/pyelftools#564](https://github.com/eliben/pyelftools/issues/564). Mach-O fat binary object files inside static libraries are not supported.
 
 Requirements and Dependencies
 ------------
@@ -49,7 +52,7 @@ On the most basic level, the debug information in a compiled file is an array of
 
 The UI of DWARF Explorer was meant for eyeballing that data structure:
 
-![dwex](https://user-images.githubusercontent.com/5807738/77756810-510ad300-7006-11ea-8d97-b7c109d050b1.png)
+![image](https://github.com/user-attachments/assets/2c2f426a-be59-437d-98bb-1520231641f5)
 
 The left hand tree displays the DIEs, with CU root DIEs on the top level. Expand the tree and click on DIEs to see their attributes. DIE attributes that have a substructure or point at larger data structures are clickable.
 
@@ -69,3 +72,8 @@ Prior art
 
 There is also a GUI DWARF visualizer at [simark/dwarftree](https://github.com/simark/dwarftree). Also based on pyelftools,
 with gtk based UI. It's been inactive since 2015. I didn't know about it when I started.
+
+Pairs well with
+---------------
+
+For a free general purpose GUI ELF file visualizer, see [horsicq/XELFViewer](https://github.com/horsicq/XELFViewer).
