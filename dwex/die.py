@@ -80,7 +80,7 @@ class DIETableModel(QAbstractTableModel):
             col = index.column()
             if col == 0:
                 # Unknown keys come across as ints
-                return key if self.prefix or not str(key).startswith('DW_AT_') else key[6:]
+                return self.format_attr_name(key)
             elif col == 1:
                 return hex(attr.offset) if self.lowlevel else self.format_form(attr.form)
             elif col == 2:
@@ -90,12 +90,20 @@ class DIETableModel(QAbstractTableModel):
             elif col == 4:
                 return self.format_value(attr)
         elif role == Qt.ItemDataRole.ToolTipRole:
+            tip = ''
             if attr.form in ('DW_FORM_ref', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
-                return "Double-click to follow"
+                rt = self.ref_target_from_attr(attr)
+                if rt: 
+                    (target_cu, target_offset) = rt
+                    target = target_cu.get_DIE_from_refaddr(target_offset)
+                    if target:
+                        tip = self.format_tag(target.tag) + ' ' + safe_DIE_name(target, '(unknown)') + '\n'
+                tip += "Double-click to follow"
             elif attr.form in ('DW_FORM_ref_sig8', 'DW_FORM_ref_sup4', 'DW_FORM_ref_sup8'):
-                return "Unsupported reference format"
+                tip += "Unsupported reference format"
             elif is_long_blob(attr):
-                return "Click to see it all"
+                tip += "Click to see it all"
+            return tip
         elif role == Qt.ItemDataRole.ForegroundRole:
             if attr.form in ('DW_FORM_ref', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
                 return _blue_brush
@@ -362,6 +370,17 @@ class DIETableModel(QAbstractTableModel):
                 lines = [format_line(off) for off in range(0, len(val), MAX_INLINE_BYTEARRAY_LEN)]
                 return FixedWidthTableModel(('Offset (%s)' % ('hex' if self.hex else 'dec'), 'Bytes'), lines)
         return None
+    
+    def ref_target_from_attr(self, attr):
+        val = attr.value
+        form = attr.form
+        if form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
+            return (self.die.cu, attr.value + self.die.cu.cu_offset)
+        elif form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
+            cualen = len(self.die.cu.dwarfinfo._unsorted_CUs)
+            i = bisect_right(self.die.cu.dwarfinfo._CU_offsets, val) - 1
+            cu = self.die.cu.dwarfinfo._unsorted_CUs[i]
+            return (cu, attr.value)
 
     # Returns (cu, die_offset) or None if not a navigable
     def ref_target(self, index):
@@ -370,15 +389,7 @@ class DIETableModel(QAbstractTableModel):
             if row >= self.meta_count:
                 attr_name = self.keys[row - self.meta_count]
                 attr = self.attributes[attr_name]
-                val = attr.value
-                form = attr.form
-                if form in ('DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8'):
-                    return (self.die.cu, attr.value + self.die.cu.cu_offset)
-                elif form in ('DW_FORM_ref_addr', 'DW_FORM_ref'):
-                    cualen = len(self.die.cu.dwarfinfo._unsorted_CUs)
-                    i = bisect_right(self.die.cu.dwarfinfo._CU_offsets, val) - 1
-                    cu = self.die.cu.dwarfinfo._unsorted_CUs[i]
-                    return (cu, attr.value)
+                return self.ref_target_from_attr(attr)
         except IndexError as exc:
             from .__main__ import version
             from .crash import report_crash
@@ -386,5 +397,11 @@ class DIETableModel(QAbstractTableModel):
             tb = exc.__traceback__
             report_crash(exc, tb, version, currentframe())
             return None
+        
+    def format_attr_name(self, key):
+        return key if self.prefix or not str(key).startswith('DW_AT_') else key[6:]
+    
+    def format_tag(self, tag):
+        return tag if self.prefix or not str(tag).startswith('DW_TAG_') else tag[7:]
 
 
