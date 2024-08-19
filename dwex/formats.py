@@ -15,7 +15,6 @@ def read_pe(filename):
     import struct, zlib
 
     pefile = PE(filename)
-    # TODO: debug import section in b.exe
 
     # Section's real size might be padded - see https://github.com/sashs/filebytes/issues/28
     sections = [(section.name if section.name[1] != 'z' else '.' + section.name[2:],
@@ -57,7 +56,7 @@ def read_pe(filename):
         debug_aranges_sec = data.get('.debug_aranges'),
         debug_abbrev_sec = data.get('.debug_abbrev'),
         debug_frame_sec = data.get('.debug_frame'),
-        eh_frame_sec = None, # Haven't seen one in the wild so far
+        eh_frame_sec = None, # Unwind/exceptino info is stored in PE elsewhere
         debug_str_sec = data.get('.debug_str'),
         debug_loc_sec = data.get('.debug_loc'),
         debug_ranges_sec = data.get('.debug_ranges'),
