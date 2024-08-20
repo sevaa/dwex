@@ -130,6 +130,9 @@ def setup_menu(win):
     win.localsat_menuitem = ana_menu.addAction("Locals at address...")
     win.localsat_menuitem.setEnabled(False)
     win.localsat_menuitem.triggered.connect(win.on_localsat)
+    win.aranges_menuitem = ana_menu.addAction("Aranges...")
+    win.aranges_menuitem.setEnabled(False)
+    win.aranges_menuitem.triggered.connect(win.on_aranges)
     ########
     help_menu = menu.addMenu("Help")
     about_menuitem = help_menu.addAction("About...")

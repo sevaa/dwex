@@ -9,6 +9,7 @@ from .tree import DWARFTreeModel, cu_sort_key
 from .scriptdlg import ScriptDlg, make_execution_environment
 from .ui import setup_ui
 from .locals import LocalsDlg
+from .aranges import ArangesDlg
 
 # Sync with version in setup.py
 version = (4, 0)
@@ -157,6 +158,7 @@ class TheWindow(QMainWindow):
             self.byoffset_menuitem.setEnabled(True)
             self.byoffset_tbitem.setEnabled(True)
             self.localsat_menuitem.setEnabled(True)
+            self.aranges_menuitem.setEnabled(True)
             self.on_highlight_nothing()
             # Navigation stack - empty
             self.navhistory = []
@@ -732,6 +734,15 @@ class TheWindow(QMainWindow):
         dlg = LocalsDlg(self, self.dwarfinfo, self.prefix, self.dwarfregnames, self.hex)
         if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_die:
              self.the_tree.setCurrentIndex(self.tree_model.index_for_die(dlg.selected_die))
+
+    def on_aranges(self):
+        ara = self.dwarfinfo.get_aranges()
+        if ara:
+            ArangesDlg(self, ara, self.dwarfinfo).exec()
+            # TODO: navigate to CU
+        else:
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have an aranges section.",
+                QMessageBox.StandardButton.Ok, self).show()
 
     # If the details pane has data - reload that
     def refresh_details(self):

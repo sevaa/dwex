@@ -53,15 +53,11 @@ class TypeDesc(object):
 def find_cu_by_address(di, address):
     if di._aranges:
         cuoffset = di._aranges.cu_offset_at_addr(address)
-        if cuoffset is None:
-            return None
-        i = bisect_left(di._CU_offsets, cuoffset)
-        return di._unsorted_CUs[i]
-    else:
-        for cu in di._unsorted_CUs:
-            if ip_in_range(cu.get_top_DIE(), address):
+        if cuoffset is not None:
+            cu = di._unsorted_CUs[bisect_left(di._CU_offsets, cuoffset)]
+            if cu.cu_offset == cuoffset:
                 return cu
-    return None
+    return next((cu for cu in di._unsorted_CUs if ip_in_range(cu.get_top_DIE(), address)), None)
 
 # May return None or raise NoBaseError
 def get_cu_base(die):
