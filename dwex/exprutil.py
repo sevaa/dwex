@@ -159,6 +159,9 @@ class ExprFormatter:
         
     def regname(self, regno):
         return self.regnamelist[regno] if not self.regnames and self.regnamelist else "r%d" % (regno,)
+    
+    def format_regoffset(self, regno, offset):
+        return self.regname(regno) + format_offset(offset)
 
 # Hex or dec for small values
 def format_offset(offset):

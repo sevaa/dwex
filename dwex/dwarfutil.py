@@ -81,8 +81,11 @@ def get_di_frames(di):
             di._frames = False
     return di._frames
 
-# returns a list of dictionaries, as found in DecodedCallFrameTable.table
 def get_frame_rules_for_die(die):
+    """
+       Returns a list of dictionaries with 'pc', 'cfa' and other registers, as found in DecodedCallFrameTable.table
+       for the FDE entries that overlap with the range or ranges of the provided DIE.
+    """
     frames = get_di_frames(die.dwarfinfo)
     if not frames:
         return None

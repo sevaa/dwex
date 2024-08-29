@@ -65,24 +65,21 @@ def show_location(self, attr):
     if ll is None:
         return None
     elif isinstance(ll, LocationExpr):
-        # TODO: low level maybe
-        # Spell out args?
-        # Opcode tooltips?
         if ll.loc_expr == [156] and has_code_location(self.die): # Special case of a single call_frame_cfa instruction
-            rules = [r for r in get_frame_rules_for_die(self.die)]
-            rules = [r for (i, r) in enumerate(rules) if i == 0 or rules[i-1].reg != r.reg or rules[i-1].offset != r.offset or rules[i-1].expr != r.expr]
-
             def desc_CFA_rule(rule):
-                if rule is None:
-                    return 'N/A'
-                elif rule.expr is not None:
+                if rule.expr is not None:
                     return '; '.join(self.dump_expr(rule.expr))
                 else:
-                    return self.expr_formatter.regname(rule.reg) + format_offset(rule.offset)
-            
-            lines = [(f"0x{de['pc']:x}", desc_CFA_rule(de.get('cfa'))) for de in rules]
+                    return self.expr_formatter.format_regofset(rule.reg, rule.offset)
+
+            rules = [(r['pc'], r['cfa']) for r in get_frame_rules_for_die(self.die) if 'cfa' in r]
+            rules = [(pc, r) for (i, (pc, r)) in enumerate(rules) if i == 0 or rules[i-1][1] != r.reg or rules[i-1][1].offset != r.offset or rules[i-1][1].expr != r.expr]
+            lines = [(f"0x{pc:x}", desc_CFA_rule(cfa_rule)) for (pc, cfa_rule) in rules]
             return GenericTableModel(("Address", "CFA expression"), lines)
         else:
+            # TODO: low level maybe
+            # Spell out args?
+            # Opcode tooltips?            
             return GenericTableModel(("Command",), ((cmd,) for cmd in self.dump_expr(ll.loc_expr)))
     else: # Loclist
         cu_base = get_cu_base(self.die)
