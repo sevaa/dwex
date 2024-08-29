@@ -2,6 +2,7 @@ from bisect import bisect_left
 from elftools.dwarf.ranges import BaseAddressEntry as RangeBaseAddressEntry, RangeEntry
 from elftools.dwarf.locationlists import LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser
+from elftools.dwarf.callframe import FDE
 
 from dwex.dwarfone import DWARFExprParserV1
 
@@ -10,7 +11,87 @@ class NoBaseError(Exception):
 
 def has_code_location(die):
     attr = die.attributes
-    return 'DW_AT_ranges' in attr or ('DW_AT_low_pc' in attr and 'DW_AT_high_pc' in attr)  
+    return 'DW_AT_ranges' in attr or ('DW_AT_low_pc' in attr and 'DW_AT_high_pc' in attr)
+
+class CodeLocationSimple:
+    def __init__(self, attr):
+        self.low = attr['DW_AT_low_pc'].value
+        self.hi = attr['DW_AT_high_pc'].value
+        if not attr['DW_AT_high_pc'].form == 'DW_FORM_addr':
+            self.hi += self.low
+
+    def intersects_fde(self, fde):
+        fde_begin = fde.header.initial_location
+        fde_end = fde_begin + fde.header.address_range
+        return fde_begin < self.hi and self.low < fde_end
+
+class CodeLocationRanges:
+    def __init__(self, die):
+        cu_base = None
+        rl = get_die_ranges(die)
+        l = []
+        for r in rl:
+            if isinstance(r, RangeEntry):
+                if not r.is_absolute and cu_base is None:
+                    cu_base = get_cu_base(die) # This may throw
+                if r.is_absolute:
+                    r = (r.begin_offset, r.end_offset)
+                else:
+                    r = (cu_base + r.begin_offset, cu_base + r.end_offset)
+                l.append(r)
+            else: # Base entry
+                cu_base = r.base_address
+        self.ranges = l
+
+    def intersects_fde(self, fde):
+        fde_begin = fde.header.initial_location
+        fde_end = fde_begin + fde.header.address_range        
+        return any(1 for (low, hi) in self.ranges if fde_begin < hi and low < fde_end)
+
+# Returns a code location object - range or ranges
+# May throw a NoBaseError
+def get_code_location(die):
+    attr = die.attributes
+    if 'DW_AT_ranges' in attr:
+        return CodeLocationRanges(die)
+    else:
+        return CodeLocationSimple(attr)
+
+# Respects caching. None if no ranges section. Returns the raw ranges
+def get_die_ranges(die):
+    di = die.dwarfinfo
+    if not di._ranges:
+        di._ranges = di.range_lists()
+    if not di._ranges:
+        return None
+    return di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value, cu=die.cu)
+
+# Doesn't return None, returns False if not found
+def get_di_frames(di):
+    if di._frames is None:
+        has_cfi = di.has_CFI()
+        if di.has_EH_CFI():
+            if has_cfi:
+                di._frames = di.EH_CFI_entries() + di.CFI_entries()
+            else:
+                di._frames = di.EH_CFI_entries()
+        elif has_cfi:
+            di._frames = di.CFI_entries()
+        else:
+            di._frames = False
+    return di._frames
+
+# returns a list of dictionaries, as found in DecodedCallFrameTable.table
+def get_frame_rules_for_die(die):
+    frames = get_di_frames(die.dwarfinfo)
+    if not frames:
+        return None
+    try:
+        code_loc = get_code_location(die)
+    except NoBaseError:
+        return None
+    entries = [f for f in frames if isinstance(f, FDE) and code_loc.intersects_fde(f)]
+    return [de for e in entries for de in e.get_decoded().table]    
 
 def is_inline(func):
     return 'DW_AT_inline' in func.attributes and func.attributes['DW_AT_inline'].value != 0
@@ -68,12 +149,9 @@ def get_cu_base(die):
         return top_die.attributes['DW_AT_entry_pc'].value
     # TODO: ranges?
     elif 'DW_AT_ranges' in top_die.attributes:
-        di = die.dwarfinfo
-        if not di._ranges:
-            di._ranges = di.range_lists()
-        if not di._ranges: # Absent in the DWARF file
+        rl = get_die_ranges(top_die)
+        if rl is None:
             raise NoBaseError()
-        rl = di._ranges.get_range_list_at_offset(top_die.attributes['DW_AT_ranges'].value, cu=die.cu)
         base = None
         for r in rl:
             if isinstance(r, RangeEntry) and r.is_absolute and (base is None or r.begin_offset < base):
@@ -122,6 +200,7 @@ def find_funcs_at_address(cu, address):
 # Find helper:
 # Returns true if the specified IP is in [low_pc, high_pc)
 # Or in ranges
+# TODO: rewrite with CodeLocation objects
 def ip_in_range(die, ip):
     if 'DW_AT_ranges' in die.attributes:
         di = die.dwarfinfo
@@ -166,20 +245,22 @@ def get_source_line(die, address):
     file_and_line = None
     prevstate = None
     for entry in lp.get_entries():
+        state = entry.state
         # We're interested in those entries where a new state is assigned
-        if entry.state is None:
+        if state is None:
             continue
-        if entry.state.end_sequence:
-            # if the line number sequence ends, clear prevstate.
-            prevstate = None
-            continue
+
         # Looking for a range of addresses in two consecutive states that
         # contain the required address.
-        if prevstate and prevstate.address <= address < entry.state.address and not file_and_line:
+        if prevstate and prevstate.address <= address < state.address and not file_and_line:
             file = (die.cu.get_top_DIE().attributes['DW_AT_name'].value if not v5 and prevstate.file == 0 else lp['file_entry'][prevstate.file + (0 if v5 else -1)].name).decode('UTF-8')
             line = prevstate.line
             file_and_line = (file, line)
-        prevstate = entry.state
+
+        if state.end_sequence:
+            prevstate = None
+        else:
+            prevstate = state
     return file_and_line
 
 # Resolves source file number in an attribute to a file name

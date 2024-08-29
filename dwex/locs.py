@@ -1,8 +1,10 @@
 from elftools.dwarf.locationlists import LocationParser, LocationExpr, BaseAddressEntry
 from elftools.common.exceptions import ELFParseError
+from elftools.dwarf.callframe import FDE
 from .details import GenericTableModel
 from .dwarfutil import *
 from .ranges import lowlevel_v5_tooltips, one_of
+from .exprutil import format_offset
 
 def parse_location(self, attr):
     di = self.die.dwarfinfo
@@ -52,6 +54,9 @@ def parse_location(self, attr):
         report_crash(exc, tb, version, currentframe(), ctxt)
         return None
 
+# Returns a TableModel for the details table
+# Usually a GenericTableModel
+# Logically in DIETableModel class
 def show_location(self, attr):
 # Expression is a list of ints
 # TODO: clickable expression maybe?
@@ -63,7 +68,22 @@ def show_location(self, attr):
         # TODO: low level maybe
         # Spell out args?
         # Opcode tooltips?
-        return GenericTableModel(("Command",), ((cmd,) for cmd in self.dump_expr(ll.loc_expr)))
+        if ll.loc_expr == [156] and has_code_location(self.die): # Special case of a single call_frame_cfa instruction
+            rules = [r for r in get_frame_rules_for_die(self.die)]
+            rules = [r for (i, r) in enumerate(rules) if i == 0 or rules[i-1].reg != r.reg or rules[i-1].offset != r.offset or rules[i-1].expr != r.expr]
+
+            def desc_CFA_rule(rule):
+                if rule is None:
+                    return 'N/A'
+                elif rule.expr is not None:
+                    return '; '.join(self.dump_expr(rule.expr))
+                else:
+                    return self.expr_formatter.regname(rule.reg) + format_offset(rule.offset)
+            
+            lines = [(f"0x{de['pc']:x}", desc_CFA_rule(de.get('cfa'))) for de in rules]
+            return GenericTableModel(("Address", "CFA expression"), lines)
+        else:
+            return GenericTableModel(("Command",), ((cmd,) for cmd in self.dump_expr(ll.loc_expr)))
     else: # Loclist
         cu_base = get_cu_base(self.die)
         values = list()
@@ -141,3 +161,12 @@ def show_location(self, attr):
                     
         return GenericTableModel(headers, values,
             get_tooltip=lambda row, col: lowlevel_v5_tooltips(raw_ll[row], col-2) if self.lowlevel and ver5 else None)
+    
+def resolve_cfa(self):
+    rules = [r['cfa'] for r in get_frame_rules_for_die(self.die) if 'cfa' in r]
+    rules = [r for (i, r) in enumerate(rules) if i == 0 or rules[i-1].reg != r.reg or rules[i-1].offset != r.offset]
+    if len(rules) == 1:
+        rule = rules[0]
+        if rule.expr is None:
+            return self.expr_formatter.regname(rule.reg) + format_offset(rule.offset)
+    return None

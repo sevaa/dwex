@@ -133,6 +133,9 @@ def setup_menu(win):
     win.aranges_menuitem = ana_menu.addAction("Aranges...")
     win.aranges_menuitem.setEnabled(False)
     win.aranges_menuitem.triggered.connect(win.on_aranges)
+    win.frames_menuitem = ana_menu.addAction("Frames...")
+    win.frames_menuitem.setEnabled(False)
+    win.frames_menuitem.triggered.connect(win.on_frames)    
     ########
     help_menu = menu.addMenu("Help")
     about_menuitem = help_menu.addAction("About...")

@@ -33,7 +33,7 @@ def read_pe(filename):
                 raise FormatError("Compressesed section %s is unexpectedly short." % (name,))
             if data[0:4] != b'ZLIB':
                 raise FormatError("Unsupported format in compressesed section %s, ZLIB is expected." % (name,))
-            (size,) = struct.unpack('>Q', data[4:12])
+            (size,) = struct.unpack_from('>Q', data, offset=4)
             data = zlib.decompress(data[12:])
             if len(data) != size:
                 raise FormatError("Wrong uncompressed size in compressesed section %s: expected %d, got %d." % (name, size, len(data)))
@@ -73,6 +73,7 @@ def read_pe(filename):
     )
     di._format = 2
     di._start_address = pefile.imageNtHeaders.header.OptionalHeader.ImageBase
+    di._frames = None
     return di
 
 # Arch + flavor where flavor matters
@@ -127,8 +128,9 @@ def get_macho_dwarf(macho, fat_arch):
         for cmd in macho.loadCommands
         if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64)
         for section in cmd.sections
-        if section.name.startswith('__debug')
+        if (section.name.startswith('__debug') or section.name in ('__eh_frame', '__unwind_info')) and section.header.offset > 0
     }
+    # '__eh_frame', '__unwind_info' are not in dSYM bundles
 
     #macho_save_sections(friendly_filename, macho)
 
@@ -146,7 +148,7 @@ def get_macho_dwarf(macho, fat_arch):
         debug_aranges_sec = data.get('__debug_aranges'),
         debug_abbrev_sec = data['__debug_abbrev'],
         debug_frame_sec = data.get('__debug_frame'),
-        eh_frame_sec = None, # Haven't seen those in Mach-O
+        eh_frame_sec = data.get('__eh_frame'), # But see also also __unwind_info!
         debug_str_sec = data['__debug_str'],
         debug_loc_sec = data.get('__debug_loc'),
         debug_ranges_sec = data.get('__debug_ranges'),
@@ -165,6 +167,7 @@ def get_macho_dwarf(macho, fat_arch):
     di._fat_arch = fat_arch
     text_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == "__TEXT"), False)
     di._start_address = text_cmd.header.vmaddr if text_cmd else 0
+    di._frames = None
     return di
 
 _WASM_section_header = False
@@ -237,6 +240,7 @@ def read_wasm(file):
     )
     di._format = 3
     di._start_address = 0
+    di._frames = None
     return di
 
 # Filename is only needed for supplemental DWARF resolution
@@ -259,6 +263,7 @@ def read_elf(file, filename):
     if di:
         di._format = 0
         di._start_address = start_address
+        di._frames = None
     return di
 
 _ar_file_header = namedtuple('ARHeader', ('header_offset', 'data_offset',

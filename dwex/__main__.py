@@ -4,12 +4,13 @@ from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 from .die import DIETableModel
 from .formats import read_dwarf, get_debug_sections, FormatError
-from .dwarfutil import has_code_location, ip_in_range
+from .dwarfutil import get_di_frames, has_code_location, ip_in_range
 from .tree import DWARFTreeModel, cu_sort_key
 from .scriptdlg import ScriptDlg, make_execution_environment
 from .ui import setup_ui
-from .locals import LocalsDlg
+from .locals import LocalsDlg, LoadedModuleDlgBase
 from .aranges import ArangesDlg
+from .frames import FramesDlg
 
 # Sync with version in setup.py
 version = (4, 0)
@@ -108,6 +109,7 @@ class TheWindow(QMainWindow):
             # Notably, iter_CUs doesn't cache (TODO, check that in the next version)
             di._ranges = None # Loaded on first use
             di._aranges = None
+            di._frames = None # Loaded on first use, False means missing
             def decorate_cu(cu, i):
                 cu._i = i
                 cu._lineprogram = None
@@ -159,12 +161,14 @@ class TheWindow(QMainWindow):
             self.byoffset_tbitem.setEnabled(True)
             self.localsat_menuitem.setEnabled(True)
             self.aranges_menuitem.setEnabled(True)
+            self.frames_menuitem.setEnabled(True)
             self.on_highlight_nothing()
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
             self.save_filename_in_mru(filename, slice)
-            LocalsDlg.reset(di)
+            LoadedModuleDlgBase.reset(di)
+            LocalsDlg.reset()
             from .crash import set_binary_desc
             set_binary_desc(("ELF", "MachO", "PE", "WASM", "ELFinA", "MachOinA")[di._format] + " " + di.config.machine_arch)
             return True
@@ -536,7 +540,7 @@ class TheWindow(QMainWindow):
     ##########################################################################
 
     def on_about(self):
-        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(str(v) for v in version) + "\n\nSeva Alekseyev, 2020-2023\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
+        QMessageBox(QMessageBox.Icon.Information, "About...", "DWARF Explorer v." + '.'.join(str(v) for v in version) + "\n\nSeva Alekseyev, 2020-2024\nsevaa@sprynet.com\n\ngithub.com/sevaa/dwex",
             QMessageBox.StandardButton.Ok, self).show()
 
     def on_updatecheck(self):
@@ -742,6 +746,15 @@ class TheWindow(QMainWindow):
             # TODO: navigate to CU
         else:
             QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have an aranges section.",
+                QMessageBox.StandardButton.Ok, self).show()
+            
+    def on_frames(self):
+        entries = get_di_frames(self.dwarfinfo)
+        if entries:
+            FramesDlg(self, entries, self.dwarfinfo, self.dwarfregnames).exec()
+            # TODO: navigate to function
+        else:
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have neither an eh_frames section nor a debug_frames section.",
                 QMessageBox.StandardButton.Ok, self).show()
 
     # If the details pane has data - reload that

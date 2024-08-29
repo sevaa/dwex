@@ -94,6 +94,7 @@ class ExprFormatter:
         self.dwarf_version = dwarf_version # Likely to change
         self.hex = hex
         self.address_delta = 0
+        self.cfa_resolver = None # no args, returns the CFA expression formatted to a string
 
     def set_arch(self, arch):
         if arch != self.arch:
@@ -141,6 +142,11 @@ class ExprFormatter:
                 op_name = self.decode_breg(args[0], args[1])
                 args = False
 
+        if op_name == 'DW_OP_call_frame_cfa' and self.cfa_resolver:
+            resolved_cfa = self.cfa_resolver()
+            if resolved_cfa:
+               op_name += f"[{resolved_cfa}]"
+
         if op_name.startswith('DW_OP_') and not self.prefix:
             op_name = op_name[6:]
 
@@ -150,4 +156,19 @@ class ExprFormatter:
             return op_name + ' ' + ', '.join(format_arg(s) for s in args)
         else:
             return op_name
+        
+    def regname(self, regno):
+        return self.regnamelist[regno] if not self.regnames and self.regnamelist else "r%d" % (regno,)
 
+# Hex or dec for small values
+def format_offset(offset):
+    if offset == 0 or offset is None:
+        return ''
+    elif 0 < offset < 0x10:
+        return "+%d" % (offset,)
+    elif -0x10 < offset < 0:
+        return "-%d" % (-offset,)
+    elif offset >= 0x10:
+        return "+0x%x" % (offset,)
+    else:
+        return "-0x%x" % (-offset,)

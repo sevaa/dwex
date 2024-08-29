@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt, QAbstractTableModel, QSize
+from PyQt6.QtCore import Qt, QAbstractTableModel
 from PyQt6.QtWidgets import *
 
 from .dwarfutil import safe_DIE_name

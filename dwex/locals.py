@@ -2,8 +2,9 @@ from PyQt6.QtCore import Qt, QAbstractTableModel, QSize
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QFontInfo, QFont
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
+from elftools.dwarf.callframe import FDE, CFARule
 
-from dwex.exprutil import ExprFormatter
+from dwex.exprutil import ExprFormatter, format_offset
 from .dwarfutil import *
 
 #0x25af0
@@ -78,13 +79,21 @@ class LocalsModel(QAbstractTableModel):
                     return "; ".join(self.expr_formatter.format_op(*op) for op in val)
 
 ############################################################################
-
-class LocalsDlg(QDialog):
-    _last_address = '' # Stored as string to allow for blank
+class LoadedModuleDlgBase(QDialog):
     _last_start_address = 0 # Stored as int
 
-    def __init__(self, win, di, prefix, regnames, hexadecimal):
+    def __init__(self, win):
         QDialog.__init__(self, win, Qt.WindowType.Dialog)
+
+    @classmethod
+    def reset(cl, di):
+        cl._last_start_address = di._start_address
+
+class LocalsDlg(LoadedModuleDlgBase):
+    _last_address = '' # Stored as string to allow for blank
+    
+    def __init__(self, win, di, prefix, regnames, hexadecimal):
+        LoadedModuleDlgBase.__init__(self, win)
         self.selected_die = False
         self.resize(500, 400)
         self.dwarfinfo = di
@@ -149,6 +158,7 @@ class LocalsDlg(QDialog):
                 preferred_start_address = self.dwarfinfo._start_address
                 address += preferred_start_address - real_start_address # Now relative to the preferred start address
                 self.expr_formatter.set_address_delta(real_start_address - preferred_start_address) # Relocate addr on the way out
+                self.expr_formatter.cfa_resolver = lambda: self.resolve_cfa(address)
 
                 # Find the CU for the address
                 di = self.dwarfinfo
@@ -170,7 +180,7 @@ class LocalsDlg(QDialog):
                 (origin, func_desc) = follow_function_spec(func)
                 # This the file:line of the IP. It points at the innermost inline
                 file_and_line = get_source_line(func, address)
-                (address_file, address_line) = ("?","?") if file_and_line is None else file_and_line
+                (address_file, address_line) = ("(unknown)",0) if file_and_line is None else file_and_line
                 (func_name, mangled_func_name) = retrieve_function_names(func_desc, func)
 
                 frames = [] # a collection of (func_name, file, line, die, locals), innermost at the top
@@ -228,8 +238,30 @@ class LocalsDlg(QDialog):
     def on_sel(self, index, prev = None):
         self.nav_bu.setEnabled(index.isValid())
 
+    def resolve_cfa(self, address):
+        di = self.dwarfinfo
+        if di.has_CFI():
+            entries = di.CFI_entries()
+        elif di.has_EH_CFI():
+            entries = di.EH_CFI_entries()
+        else:
+            return False
+        
+        for e in entries:
+            if isinstance(e, FDE) and e.header.initial_location <= address < e.header.initial_location + e.header.address_range:
+                decoded = e.get_decoded().table
+                de = next(reversed([de for de in decoded if de['pc'] <= address]))
+                if 'cfa' in de:
+                    rule = de['cfa']
+                    if isinstance(rule, CFARule):
+                        if rule.expr:
+                            return 'expr'
+                        else:
+                            return self.expr_formatter.regname(rule.reg) + format_offset(rule.offset)
+                    else:
+                        return 'unknown'
+
     @classmethod
-    def reset(cl, di):
-        cl._last_start_address = di._start_address
+    def reset(cl):
         cl._last_address = ''
 
