@@ -14,7 +14,7 @@ from .aranges import ArangesDlg
 from .frames import FramesDlg
 
 # Sync with version in setup.py
-version = (4, 0)
+version = (4, 10)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -735,6 +735,8 @@ class TheWindow(QMainWindow):
             for r in range(0, m.rowCount(QModelIndex())))
         self.on_copy(table_text)
 
+    ##################################################################
+
     def on_localsat(self):
         dlg = LocalsDlg(self, self.dwarfinfo, self.prefix, self.dwarfregnames, self.hex)
         if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_die:
@@ -760,7 +762,8 @@ class TheWindow(QMainWindow):
             FramesDlg(self, entries, self.dwarfinfo, self.dwarfregnames).exec()
             # TODO: navigate to function
         else:
-            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have neither an eh_frames section nor a debug_frames section.",
+            # TODO: https://faultlore.com/blah/compact-unwinding/
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have neither an eh_frames section nor a debug_frames section. Mach-O unwind_info is not supported yet.",
                 QMessageBox.StandardButton.Ok, self).show()
 
     # If the details pane has data - reload that

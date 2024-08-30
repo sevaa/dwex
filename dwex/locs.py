@@ -70,7 +70,7 @@ def show_location(self, attr):
                 if rule.expr is not None:
                     return '; '.join(self.dump_expr(rule.expr))
                 else:
-                    return self.expr_formatter.format_regofset(rule.reg, rule.offset)
+                    return self.expr_formatter.format_regoffset(rule.reg, rule.offset)
 
             rules = [(r['pc'], r['cfa']) for r in get_frame_rules_for_die(self.die) if 'cfa' in r]
             rules = [(pc, r) for (i, (pc, r)) in enumerate(rules) if i == 0 or rules[i-1][1] != r.reg or rules[i-1][1].offset != r.offset or rules[i-1][1].expr != r.expr]

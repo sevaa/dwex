@@ -3,12 +3,17 @@ from PyQt6.QtWidgets import *
 
 from elftools.dwarf.callframe import FDE, RegisterRule, ZERO
 
+from dwex.fx import bold_font
 from dwex.locals import LoadedModuleDlgBase
 
 from .exprutil import _REG_NAME_MAP, format_offset
 
 rheaders = ('Start address', 'End address', 'Length')
 eheaders = ('Type', 'CIE offset', 'Start address', 'End address', 'Length')
+
+# TODO: more fields in entries mode? Version, augmentation, etc? Or a properties window?
+# TODO: dump raw instructions in details?
+# TODO: MachO unwind_info
 
 class EntriesModel(QAbstractTableModel):
     def __init__(self, cfi, fdes_only):
@@ -45,7 +50,8 @@ class EntriesModel(QAbstractTableModel):
                 if col == 0:
                     return ('FDE' if is_fde else 'CIE') if header else 'ZERO'
                 if col == 1:
-                    return (hex(header.CIE_pointer if is_fde else entry.offset))  if header else ''
+                    return (hex(entry.cie.offset if is_fde else entry.offset)) if header else ''
+                    # CIE_offset in FDE header is relative in EH section, absolute in debug_frames
                 else:
                     col -= 2
             if is_fde:
@@ -55,6 +61,9 @@ class EntriesModel(QAbstractTableModel):
                     return hex(header.initial_location + header.address_range - 1)
                 elif col == 2:
                     return hex(header.address_range)
+        elif role == Qt.ItemDataRole.FontRole:
+            if not self.fdes_only and is_fde:
+                return bold_font()
 
 class DecodedEntryModel(QAbstractTableModel):
     def __init__(self, entry, regnamelist):
@@ -192,6 +201,7 @@ class FramesDlg(LoadedModuleDlgBase):
         self.setWindowTitle('Frames')
 
     def set_view(self, fdes_only):
+        # TODO: change the model in place
         self.entries.setModel(EntriesModel(self.cfi, fdes_only))
         self.entries.selectionModel().currentChanged.connect(self.on_entry_sel)
         self.details.setModel(None)

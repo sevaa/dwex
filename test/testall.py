@@ -4,7 +4,7 @@ sys.path.insert(1, os.getcwd()) # To make sure dwex resolves to local path
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from dwex.formats import read_dwarf
 from dwex.die import DIETableModel
-from dwex.tree import strip_path
+from dwex.dwarfutil import strip_path
 
 def test_dwarfinfo(di):
     # Some global cache setup in line with the app proper

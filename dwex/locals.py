@@ -1,11 +1,11 @@
 from PyQt6.QtCore import Qt, QAbstractTableModel, QSize
 from PyQt6.QtWidgets import *
-from PyQt6.QtGui import QFontInfo, QFont
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.callframe import FDE, CFARule
 
 from dwex.exprutil import ExprFormatter, format_offset
 from .dwarfutil import *
+from .fx import bold_font
 
 #0x25af0
 #0xd864 (black)
@@ -15,7 +15,6 @@ from .dwarfutil import *
 #TODO: Objective C, Pascal, more?
 
 headers = ["Name", "Location"]
-_bold_font = None
 
 # TODO: move elsewhere
 class WaitCursor():
@@ -64,11 +63,7 @@ class LocalsModel(QAbstractTableModel):
             return val
         elif role == Qt.ItemDataRole.FontRole:
             if the_row[0]:
-                global _bold_font
-                if not _bold_font:
-                    fi = QFontInfo(QApplication.font())
-                    _bold_font = QFont(fi.family(), fi.pointSize(), QFont.Weight.Bold)
-                return _bold_font
+                return bold_font()
         elif role == Qt.ItemDataRole.ToolTipRole:
             if col == 1 and not the_row[0]: # On the location column of a variable
                 if val is False:
