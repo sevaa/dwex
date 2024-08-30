@@ -1,3 +1,4 @@
+from bisect import bisect_left
 import sys, os
 from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
 from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
@@ -742,8 +743,13 @@ class TheWindow(QMainWindow):
     def on_aranges(self):
         ara = self.dwarfinfo.get_aranges()
         if ara:
-            ArangesDlg(self, ara, self.dwarfinfo).exec()
-            # TODO: navigate to CU
+            dlg = ArangesDlg(self, ara, self.dwarfinfo)
+            if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_cu_offset is not None:
+                di = self.dwarfinfo
+                i = bisect_left(di._CU_offsets, dlg.selected_cu_offset)
+                if i < len(di._CU_offsets) and di._CU_offsets[i] == dlg.selected_cu_offset:
+                    die = di._unsorted_CUs[i].get_top_DIE()
+                    self.the_tree.setCurrentIndex(self.tree_model.index_for_die(die))
         else:
             QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have an aranges section.",
                 QMessageBox.StandardButton.Ok, self).show()

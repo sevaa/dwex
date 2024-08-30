@@ -159,12 +159,14 @@ class FramesDlg(LoadedModuleDlgBase):
         top_pane.addWidget(w)
 
         entries.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        entries.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         top_pane.addWidget(entries)
         w = QWidget()
         w.setLayout(top_pane)
         spl.addWidget(w)
 
         details.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        details.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         #details.doubleClicked.connect(win.on_attribute_dclick)
         bottom_pane = QVBoxLayout()
         bottom_pane.setContentsMargins(0, 0, 0, 0)

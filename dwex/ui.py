@@ -130,6 +130,7 @@ def setup_menu(win):
     win.localsat_menuitem = ana_menu.addAction("Locals at address...")
     win.localsat_menuitem.setEnabled(False)
     win.localsat_menuitem.triggered.connect(win.on_localsat)
+    ana_menu.addSeparator()
     win.aranges_menuitem = ana_menu.addAction("Aranges...")
     win.aranges_menuitem.setEnabled(False)
     win.aranges_menuitem.triggered.connect(win.on_aranges)
@@ -236,6 +237,7 @@ def setup_ui(win):
     rpane = QSplitter(Qt.Orientation.Vertical)
     die_table = win.die_table = QTableView()
     die_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+    die_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     die_table.doubleClicked.connect(win.on_attribute_dclick)
     rpane.addWidget(die_table)
     
@@ -246,6 +248,7 @@ def setup_ui(win):
     rbpane.addWidget(details_warning)
     details_table = win.details_table = QTableView()
     details_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+    details_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     rbpane.addWidget(details_table)
     rbp = QWidget()
     rbp.setLayout(rbpane)

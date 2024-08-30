@@ -1,7 +1,7 @@
 from PyQt6.QtCore import Qt, QAbstractTableModel
 from PyQt6.QtWidgets import *
 
-from .dwarfutil import safe_DIE_name
+from .dwarfutil import top_die_file_name
 
 headers = ["Start address", "Length", 'CU offset', 'Source name']
 
@@ -35,28 +35,44 @@ class AraModel(QAbstractTableModel):
                 return hex(entry.info_offset)
             elif col == 3:
                 cu = self.dwarfinfo.get_CU_at(entry.info_offset)
-                return safe_DIE_name(cu.get_top_DIE(), '?')
+                return top_die_file_name(cu.get_top_DIE())
+
+######################################################################################
+
+# TODO: sort by header click
 
 class ArangesDlg(QDialog):
     def __init__(self, win, ara, di):
         QDialog.__init__(self, win, Qt.WindowType.Dialog)
-        self.resize(500, 400)
+        self.selected_cu_offset = False
+        self.resize(500, 500)
         ly = QVBoxLayout()
 
         self.the_table = QTableView()
         self.the_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.the_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.the_table.setModel(AraModel(ara, di))
-        # self.the_table.doubleClicked.connect(self.on_dclick)
+        self.the_table.selectionModel().currentChanged.connect(self.on_sel)
+        self.the_table.doubleClicked.connect(self.navigate_to_index)
+        self.the_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         ly.addWidget(self.the_table)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, Qt.Orientation.Horizontal, self)
-        #self.nav_bu = QPushButton("Navigate", self)
-        #self.nav_bu.clicked.connect(self.on_navigate)
-        #self.nav_bu.setEnabled(False)
-        #buttons.addButton(self.nav_bu, QDialogButtonBox.ButtonRole.ApplyRole)
+        self.nav_bu = QPushButton("Navigate", self)
+        self.nav_bu.clicked.connect(lambda: self.navigate_to_index(self.the_table.currentIndex()))
+        self.nav_bu.setEnabled(False)
+        buttons.addButton(self.nav_bu, QDialogButtonBox.ButtonRole.ApplyRole)
         buttons.accepted.connect(self.reject)
         buttons.rejected.connect(self.reject)
         ly.addWidget(buttons)
 
         self.setWindowTitle('Aranges')
-        self.setLayout(ly)        
+        self.setLayout(ly)
+
+    def on_sel(self, index, prev = None):
+        self.nav_bu.setEnabled(index.isValid())
+
+    def navigate_to_index(self, index):
+        row = index.row()
+        self.selected_cu_offset = self.the_table.model().entries[row].info_offset
+        self.done(QDialog.DialogCode.Accepted)

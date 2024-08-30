@@ -89,6 +89,8 @@ class LoadedModuleDlgBase(QDialog):
     def reset(cl, di):
         cl._last_start_address = di._start_address
 
+#############################################################################
+
 class LocalsDlg(LoadedModuleDlgBase):
     _last_address = '' # Stored as string to allow for blank
     
@@ -126,12 +128,13 @@ class LocalsDlg(LoadedModuleDlgBase):
 
         self.locals = QTableView()
         self.locals.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.locals.doubleClicked.connect(self.on_dclick)
+        self.locals.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.locals.doubleClicked.connect(self.navigate_to_index)
         ly.addWidget(self.locals)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, Qt.Orientation.Horizontal, self)
         self.nav_bu = QPushButton("Navigate", self)
-        self.nav_bu.clicked.connect(self.on_navigate)
+        self.nav_bu.clicked.connect(lambda: self.navigate_to_index(self.locals.currentIndex()))
         self.nav_bu.setEnabled(False)
         buttons.addButton(self.nav_bu, QDialogButtonBox.ButtonRole.ApplyRole)
         buttons.accepted.connect(self.reject)
@@ -224,16 +227,11 @@ class LocalsDlg(LoadedModuleDlgBase):
         except Exception as exc:
             QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer", 
                 "Unexpected error while analysing the debug information.", QMessageBox.StandardButton.Ok, self).show()
-            
-    def on_navigate(self):
-        row = self.locals.currentIndex().row()
-        self.selected_die = self.locals.model().data[row][3]
-        self.done(QDialog.DialogCode.Accepted)
 
-    def on_dclick(self, index):
+    def navigate_to_index(self, index):
         row = index.row()
         self.selected_die = self.locals.model().data[row][3]
-        self.done(QDialog.DialogCode.Accepted)        
+        self.done(QDialog.DialogCode.Accepted)
 
     def on_sel(self, index, prev = None):
         self.nav_bu.setEnabled(index.isValid())

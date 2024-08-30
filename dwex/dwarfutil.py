@@ -111,6 +111,28 @@ def is_block(form):
 def DIE_name(die):
     return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
 
+# Supports both / and \ - current system separator might not match the system the file came from
+# so os.path.basename won't do
+def strip_path(filename):
+    p = filename.rfind("/")
+    pbsl = filename.rfind("\\")
+    if pbsl >= 0 and (p < 0 or pbsl > p):
+        p = pbsl
+    return filename[p+1:] if p >= 0 else filename
+
+def top_die_file_name(die, Default = 'N/A'):
+    if 'DW_AT_name' in die.attributes:
+        source_name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
+        return strip_path(source_name)
+    elif 'DW_AT_decl_file' in die.attributes:
+        val = die.attributes['DW_AT_decl_file'].value
+        if val > 0:
+            if die.cu._lineprogram is None:
+                die.cu._lineprogram = die.dwarfinfo.line_program_for_CU(die.cu)
+            delta = 1 if die.cu.version < 5 else 0
+            return strip_path(die.cu._lineprogram.header.file_entry[val-delta].name.decode('utf-8', errors='ignore'))
+    return Default
+
 def safe_DIE_name(die, default = ''):
     return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else default
 
