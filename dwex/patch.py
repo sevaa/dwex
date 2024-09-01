@@ -1,11 +1,15 @@
 import os
 from struct import Struct
+from ctypes import c_ubyte, sizeof
+from types import MethodType
+from io import BytesIO
 
 import elftools.dwarf.enums
 import elftools.dwarf.dwarf_expr
 import elftools.dwarf.locationlists
 import elftools.elf.elffile
 import elftools.dwarf.dwarfinfo
+import filebytes.mach_o
 import filebytes.pe
 from elftools.common.utils import struct_parse
 from elftools.common.exceptions import DWARFError
@@ -14,8 +18,7 @@ from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
 from elftools.elf.relocation import RelocationHandler
 from elftools.dwarf.locationlists import LocationLists, LocationListsPair
 from elftools.construct.core import StaticField
-from types import MethodType
-from io import BytesIO
+from filebytes.mach_o import LSB_64_Section, MH, SectionData
 
 # Good reference on DWARF extensions here:
 # https://sourceware.org/elfutils/DwarfExtensions
@@ -209,3 +212,25 @@ def monkeypatch():
 
     # Short out import directory parsing for now
     filebytes.pe.PE._parseDataDirectory = lambda self,a,b,c: None
+
+    # Expand the logic in DSYM bundle loading to load the unwind sections too
+    def __parseSections(self, data, segment, offset):
+        sections = []
+        for i in range(segment.nsects):
+            sec = self._classes.Section.from_buffer(data, offset)
+            if self._classes.Section == LSB_64_Section:
+                offset += 80
+            else:
+                offset += sizeof(self._classes.Section)
+
+            if sec.offset > 0:
+                raw = (c_ubyte * sec.size).from_buffer(data, sec.offset)
+                bytes = bytearray(raw)
+            else:
+                raw = None
+                bytes = None
+            sections.append(SectionData(header=sec, name=sec.sectname.decode('ASCII'), bytes=bytes, raw=raw))
+
+        return sections
+    
+    filebytes.mach_o.MachO._MachO__parseSections = __parseSections

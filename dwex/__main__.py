@@ -14,7 +14,7 @@ from .aranges import ArangesDlg
 from .frames import FramesDlg
 
 # Sync with version in setup.py
-version = (4, 10)
+version = (4, 11)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
