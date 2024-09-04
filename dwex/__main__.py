@@ -3,6 +3,7 @@ import sys, os
 from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
 from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
+
 from .die import DIETableModel
 from .formats import read_dwarf, get_debug_sections, FormatError
 from .dwarfutil import get_di_frames, has_code_location, ip_in_range
@@ -12,6 +13,7 @@ from .ui import setup_ui
 from .locals import LocalsDlg, LoadedModuleDlgBase
 from .aranges import ArangesDlg
 from .frames import FramesDlg
+from .funcmap import FuncMapDlg
 
 # Sync with version in setup.py
 version = (4, 11)
@@ -138,6 +140,7 @@ class TheWindow(QMainWindow):
             if slice is not None:
                 s += ' (' + slice + ')'
             self.setWindowTitle("DWARF Explorer - " + s)
+            # TODO: unite "enable on file load" into a collection
             self.savesection_menuitem.setEnabled(True)
             self.switchslice_menuitem.setEnabled(slice is not None)
             self.back_menuitem.setEnabled(False)
@@ -161,6 +164,7 @@ class TheWindow(QMainWindow):
             self.byoffset_menuitem.setEnabled(True)
             self.byoffset_tbitem.setEnabled(True)
             self.localsat_menuitem.setEnabled(True)
+            self.funcmap_menuitem.setEnabled(True)
             self.aranges_menuitem.setEnabled(True)
             self.frames_menuitem.setEnabled(True)
             self.on_highlight_nothing()
@@ -739,6 +743,11 @@ class TheWindow(QMainWindow):
 
     def on_localsat(self):
         dlg = LocalsDlg(self, self.dwarfinfo, self.prefix, self.dwarfregnames, self.hex)
+        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_die:
+             self.the_tree.setCurrentIndex(self.tree_model.index_for_die(dlg.selected_die))
+
+    def on_funcmap(self):
+        dlg = FuncMapDlg(self, self.dwarfinfo, self.hex)
         if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_die:
              self.the_tree.setCurrentIndex(self.tree_model.index_for_die(dlg.selected_die))
 

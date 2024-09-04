@@ -137,7 +137,7 @@ class FramesDlg(LoadedModuleDlgBase):
         self.cfi = cfi
         self.dwarfinfo = di
         arch = di.config.machine_arch
-        self.regnamelist = _REG_NAME_MAP.get(arch, None) if regnames else None
+        self.regnamelist = _REG_NAME_MAP.get(arch, None) if not regnames else None
 
         self.resize(500, 400)
 

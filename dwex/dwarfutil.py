@@ -20,6 +20,12 @@ class CodeLocationSimple:
         if not attr['DW_AT_high_pc'].form == 'DW_FORM_addr':
             self.hi += self.low
 
+    def start_address(self):
+        return self.low
+    
+    def in_range(self, ip):
+        return self.low <= ip < self.hi
+
     def intersects_fde(self, fde):
         fde_begin = fde.header.initial_location
         fde_end = fde_begin + fde.header.address_range
@@ -42,6 +48,12 @@ class CodeLocationRanges:
             else: # Base entry
                 cu_base = r.base_address
         self.ranges = l
+
+    def start_address(self):
+        return min(*(low for (low, hi) in self.ranges))
+    
+    def in_range(self, ip):
+        return any(1 for (low, hi) in self.ranges if low <= ip < hi)
 
     def intersects_fde(self, fde):
         fde_begin = fde.header.initial_location
@@ -136,6 +148,23 @@ def top_die_file_name(die, Default = 'N/A'):
 def safe_DIE_name(die, default = ''):
     return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else default
 
+def follow_ref_if_present(die, attr_name):
+    return die.get_DIE_from_attribute(attr_name) if attr_name in die.attributes else die
+
+def subprogram_name(die, default=''):
+    """
+        Gets name of a DIE. If not available, drills back to abstract_origin, then specification
+    """
+    if 'DW_AT_name' in die.attributes:
+        return die.attributes['DW_AT_name'].value.decode('UTF-8')
+    die = follow_ref_if_present(die, 'DW_AT_abstract_origin')
+    if 'DW_AT_name' in die.attributes:
+        return die.attributes['DW_AT_name'].value.decode('UTF-8')
+    die = follow_ref_if_present(die, 'DW_AT_specification')
+    if 'DW_AT_name' in die.attributes:
+        return die.attributes['DW_AT_name'].value.decode('UTF-8')
+    return default
+
 def DIE_is_ptr_to_member_struct(type_die):
     if type_die.tag == 'DW_TAG_structure_type':
         members = tuple(die for die in type_die.iter_children() if die.tag == "DW_TAG_member")
@@ -191,6 +220,7 @@ def get_cu_base(die):
 
 # Returns a list of DIEs objects for top level functions that contain the address
 # Inlines analyzed later
+# TODO: namespaces
 def find_funcs_at_address(cu, address):
     funcs = []
     top_die = cu.get_top_DIE()

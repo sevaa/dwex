@@ -14,6 +14,8 @@ from .fx import bold_font
 #TODO: refactor away C++, support C explicitly
 #TODO: Objective C, Pascal, more?
 
+#TODO: saved registers from unwind info
+
 headers = ["Name", "Location"]
 
 # TODO: move elsewhere
