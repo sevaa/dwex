@@ -1,19 +1,19 @@
 from bisect import bisect_left
 import sys, os
-from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
+from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent, QThread, pyqtBoundSignal, QObject, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 
 from .die import DIETableModel
 from .formats import read_dwarf, get_debug_sections, FormatError
-from .dwarfutil import get_di_frames, has_code_location, ip_in_range
+from .dwarfutil import get_code_location, get_di_frames, has_code_location, ip_in_range, subprogram_name
 from .tree import DWARFTreeModel, cu_sort_key
 from .scriptdlg import ScriptDlg, make_execution_environment
 from .ui import setup_ui
 from .locals import LocalsDlg, LoadedModuleDlgBase
 from .aranges import ArangesDlg
 from .frames import FramesDlg
-from .funcmap import FuncMapDlg
+from .funcmap import FuncMapDlg, GatherFuncsThread
 
 # Sync with version in setup.py
 version = (4, 11)
@@ -747,14 +747,30 @@ class TheWindow(QMainWindow):
              self.the_tree.setCurrentIndex(self.tree_model.index_for_die(dlg.selected_die))
 
     def on_funcmap(self):
-        dlg = FuncMapDlg(self, self.dwarfinfo, self.hex)
-        if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_die:
-             self.the_tree.setCurrentIndex(self.tree_model.index_for_die(dlg.selected_die))
+        th = GatherFuncsThread(self, self.dwarfinfo)
+        def done():
+            if not pd.wasCanceled():
+                pd.close()
+
+            if th.funcs:
+                dlg = FuncMapDlg(self, self.hex, th.funcs)
+                if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_die:
+                    self.the_tree.setCurrentIndex(self.tree_model.index_for_die(dlg.selected_die))
+            elif th.exc:
+                print(th.exc)
+
+        last_CU = self.dwarfinfo._unsorted_CUs[-1]
+        pd = QProgressDialog("Gathering functions...", "Cancel", 0, last_CU.cu_offset + last_CU.size, self, Qt.WindowType.Dialog)
+        pd.canceled.connect(th.cancel)
+        pd.show()
+        th.progress.connect(pd.setValue)
+        th.finished.connect(done)
+        th.start() # Will continue in done
 
     def on_aranges(self):
         ara = self.dwarfinfo.get_aranges()
         if ara:
-            dlg = ArangesDlg(self, ara, self.dwarfinfo)
+            dlg = ArangesDlg(self, ara, self.dwarfinfo, self.hex)
             if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_cu_offset is not None:
                 di = self.dwarfinfo
                 i = bisect_left(di._CU_offsets, dlg.selected_cu_offset)
@@ -793,7 +809,24 @@ class TheWindow(QMainWindow):
 
     # All purpose debug hook
     def on_debug(self):
-        self.dwarfinfo.CFI_entries()
+        class MyThread(QThread):
+            def __init__(self, parent):
+                QThread.__init__(self, parent)
+
+            progress = pyqtSignal(int)
+
+            def run(self):
+                try:
+                    for i in range(1000):
+                        self.progress.emit(i)
+                        self.yieldCurrentThread()
+                        pass
+                except Exception as exc:
+                    pass
+
+        th = MyThread(self)
+        th.progress.connect(lambda i:print(i))
+        th.start()
         return
 
 

@@ -119,6 +119,10 @@ class CompileUnitV1(object):
 
     def __getitem__(self, name):
         return self.header._asdict()[name]
+    
+    @property
+    def size(self):
+        return self.header.unit_length # No CU header here
 
     # Caches
     def DIE_at_offset(self, offset):
