@@ -13,6 +13,7 @@ from .ui import setup_ui
 from .locals import LocalsDlg, LoadedModuleDlgBase
 from .aranges import ArangesDlg
 from .frames import FramesDlg
+from .unwind import UnwindDlg
 from .funcmap import FuncMapDlg, GatherFuncsThread
 
 # Sync with version in setup.py
@@ -167,6 +168,7 @@ class TheWindow(QMainWindow):
             self.funcmap_menuitem.setEnabled(True)
             self.aranges_menuitem.setEnabled(True)
             self.frames_menuitem.setEnabled(True)
+            self.unwind_menuitem.setEnabled(di._format in (1, 5))
             self.on_highlight_nothing()
             # Navigation stack - empty
             self.navhistory = []
@@ -784,11 +786,18 @@ class TheWindow(QMainWindow):
     def on_frames(self):
         entries = get_di_frames(self.dwarfinfo)
         if entries:
-            FramesDlg(self, entries, self.dwarfinfo, self.dwarfregnames).exec()
+            FramesDlg(self, entries, self.dwarfinfo, self.dwarfregnames, self.hex).exec()
             # TODO: navigate to function
         else:
-            # TODO: https://faultlore.com/blah/compact-unwinding/
-            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have neither an eh_frames section nor a debug_frames section. Mach-O unwind_info is not supported yet.",
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have neither an eh_frames section nor a debug_frames section.",
+                QMessageBox.StandardButton.Ok, self).show()
+            
+    def on_unwind(self):
+        if self.dwarfinfo._unwind_sec:
+            UnwindDlg(self, self.dwarfinfo._unwind_sec, self.dwarfinfo, self.dwarfregnames, self.hex).exec()
+            # TODO: navigate to function
+        else:
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary/slice does not have an unwind_info section.",
                 QMessageBox.StandardButton.Ok, self).show()
 
     # If the details pane has data - reload that

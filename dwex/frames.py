@@ -13,13 +13,12 @@ eheaders = ('Type', 'CIE offset', 'Start address', 'End address', 'Length')
 
 # TODO: more fields in entries mode? Version, augmentation, etc? Or a properties window?
 # TODO: dump raw instructions in details?
-# TODO: MachO unwind_info
-
 class EntriesModel(QAbstractTableModel):
-    def __init__(self, cfi, fdes_only):
+    def __init__(self, cfi, fdes_only, hex):
         QAbstractTableModel.__init__(self)
         self.fdes_only = fdes_only
         self.headers = rheaders if fdes_only else eheaders
+        self.hex = hex
         if fdes_only:
             self.entries = [e for e in cfi if isinstance(e, FDE)]
             self.entries.sort(key=lambda e: e.header.initial_location)
@@ -60,7 +59,7 @@ class EntriesModel(QAbstractTableModel):
                 elif col == 1:
                     return hex(header.initial_location + header.address_range - 1)
                 elif col == 2:
-                    return hex(header.address_range)
+                    return hex(header.address_range) if self.hex else str(header.address_range)
         elif role == Qt.ItemDataRole.FontRole:
             if not self.fdes_only and is_fde:
                 return bold_font()
@@ -130,14 +129,10 @@ class DecodedEntryModel(QAbstractTableModel):
 
 #########################################################
 
-class FramesDlg(LoadedModuleDlgBase):
-    def __init__(self, win, cfi, di, regnames):
+# Reused for unwind info - sans the top buttons
+class FramesUIDlg(LoadedModuleDlgBase):
+    def __init__(self, win):
         LoadedModuleDlgBase.__init__(self, win)
-
-        self.cfi = cfi
-        self.dwarfinfo = di
-        arch = di.config.machine_arch
-        self.regnamelist = _REG_NAME_MAP.get(arch, None) if not regnames else None
 
         self.resize(500, 400)
 
@@ -150,22 +145,7 @@ class FramesDlg(LoadedModuleDlgBase):
         entries = self.entries = QTableView()
         details = self.details = QTableView()          
 
-        bu_line = QHBoxLayout()
-        rbus = QButtonGroup()
-        rbu = QRadioButton()
-        rbu.setText("Ranges")
-        rbu.toggled.connect(lambda c: self.set_view(True))
-        rbu.setChecked(True)
-        rbus.addButton(rbu)
-        bu_line.addWidget(rbu)
-        rbu = QRadioButton()
-        rbu.setText("Entries")
-        rbu.toggled.connect(lambda c: self.set_view(False))
-        rbus.addButton(rbu)
-        bu_line.addWidget(rbu)
-        w = QWidget()
-        w.setLayout(bu_line)
-        top_pane.addWidget(w)
+        self.make_top(top_pane)
 
         entries.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         entries.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -180,6 +160,7 @@ class FramesDlg(LoadedModuleDlgBase):
         bottom_pane = QVBoxLayout()
         bottom_pane.setContentsMargins(0, 0, 0, 0)
         bottom_pane.addWidget(details)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, Qt.Orientation.Horizontal, self)
         #self.nav_bu = QPushButton("Navigate", self)
         #self.nav_bu.clicked.connect(self.on_navigate)
@@ -200,12 +181,46 @@ class FramesDlg(LoadedModuleDlgBase):
 
         self.setWindowTitle('Frames')
 
-    def set_view(self, fdes_only):
-        # TODO: change the model in place
-        self.entries.setModel(EntriesModel(self.cfi, fdes_only))
-        self.entries.selectionModel().currentChanged.connect(self.on_entry_sel)
-        self.details.setModel(None)
+    def make_top(self, top_pane):
+        pass
+
+class FramesDlg(FramesUIDlg):
+    def __init__(self, win, cfi, di, regnames, hex):
+        self.cfi = cfi
+        self.dwarfinfo = di
+        self.hex = hex
+        arch = di.config.machine_arch
+        self.regnamelist = _REG_NAME_MAP.get(arch, None) if not regnames else None
+
+        FramesUIDlg.__init__(self, win)
 
     def on_entry_sel(self, index, prev = None):
         # TODO: raw mode
         self.details.setModel(DecodedEntryModel(index.internalPointer(), self.regnamelist))
+
+    def make_top(self, top_pane):
+        top_pane.addWidget(make_rbutton_pair(("Ranges", "Entries"), self.set_view))        
+
+    def set_view(self, fdes_only):
+        # TODO: change the model in place
+        self.entries.setModel(EntriesModel(self.cfi, fdes_only, self.hex))
+        self.entries.selectionModel().currentChanged.connect(self.on_entry_sel)
+        self.details.setModel(None)
+
+def make_rbutton_pair(titles, on_toggle):
+    bu_line = QHBoxLayout()
+    rbus = QButtonGroup()
+    rbu = QRadioButton()
+    rbu.setText(titles[0])
+    rbu.toggled.connect(lambda c: on_toggle(True))
+    rbu.setChecked(True)
+    rbus.addButton(rbu)
+    bu_line.addWidget(rbu)
+    rbu = QRadioButton()
+    rbu.setText(titles[1])
+    rbu.toggled.connect(lambda c: on_toggle(False))
+    rbus.addButton(rbu)
+    bu_line.addWidget(rbu)
+    w = QWidget()
+    w.setLayout(bu_line)
+    return w

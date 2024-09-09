@@ -72,6 +72,7 @@ def read_pe(filename):
         gnu_debugaltlink_sec = data.get('.gnu_debugaltlink')
     )
     di._format = 2
+    di._arch_code = machine
     di._start_address = pefile.imageNtHeaders.header.OptionalHeader.ImageBase
     di._frames = None
     return di
@@ -123,19 +124,25 @@ def read_macho(filename, resolve_arch, friendly_filename):
 def get_macho_dwarf(macho, fat_arch):
     from filebytes.mach_o import CpuType, TypeFlags, LC
     # We proceed with macho being a arch-specific file, or a slice within a fat binary
-    data = {
-        section.name: DebugSectionDescriptor(io.BytesIO(section.bytes), section.name, None, len(section.bytes), 0)
+    sections = {
+        section.name: section.bytes
         for cmd in macho.loadCommands
         if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64)
         for section in cmd.sections
         if (section.name.startswith('__debug') or section.name in ('__eh_frame', '__unwind_info')) and section.header.offset > 0
     }
+
+    if not '__debug_info' in sections:
+        return None
+
+    data = {
+        name: DebugSectionDescriptor(io.BytesIO(contents), name, None, len(contents), 0)
+        for (name, contents)
+        in sections.items()
+    }
     # '__eh_frame', '__unwind_info' are not in dSYM bundles
 
     #macho_save_sections(friendly_filename, macho)
-
-    if not '__debug_info' in data:
-        return None
 
     cpu = macho.machHeader.header.cputype
     di = DWARFInfo(
@@ -148,7 +155,7 @@ def get_macho_dwarf(macho, fat_arch):
         debug_aranges_sec = data.get('__debug_aranges'),
         debug_abbrev_sec = data['__debug_abbrev'],
         debug_frame_sec = data.get('__debug_frame'),
-        eh_frame_sec = data.get('__eh_frame'), # But see also also __unwind_info!
+        eh_frame_sec = data.get('__eh_frame'), # __unwind_info separately, not a part of DWARF proper
         debug_str_sec = data['__debug_str'],
         debug_loc_sec = data.get('__debug_loc'),
         debug_ranges_sec = data.get('__debug_ranges'),
@@ -163,7 +170,9 @@ def get_macho_dwarf(macho, fat_arch):
         debug_sup_sec = data.get('__debug_sup'),
         gnu_debugaltlink_sec = data.get('__gnu_debugaltlink')
     )
+    di._unwind_sec = sections.get('__unwind_info')
     di._format = 1
+    di._arch_code = macho.machHeader.header.cputype
     di._fat_arch = fat_arch
     text_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == "__TEXT"), False)
     di._start_address = text_cmd.header.vmaddr if text_cmd else 0
@@ -239,6 +248,7 @@ def read_wasm(file):
         gnu_debugaltlink_sec = None
     )
     di._format = 3
+    di._arch_code = None #N/A
     di._start_address = 0
     di._frames = None
     return di
@@ -263,6 +273,7 @@ def read_elf(file, filename):
     if di:
         di._format = 0
         di._start_address = start_address
+        di._arch_code = elffile.header.e_machine
         di._frames = None
     return di
 
