@@ -5,7 +5,7 @@ from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 
 from .die import DIETableModel
-from .formats import read_dwarf, get_debug_sections, FormatError
+from .formats import read_dwarf, get_debug_sections, load_companion_executable, FormatError
 from .dwarfutil import get_code_location, get_di_frames, has_code_location, ip_in_range, subprogram_name
 from .tree import DWARFTreeModel, cu_sort_key
 from .scriptdlg import ScriptDlg, make_execution_environment
@@ -60,6 +60,11 @@ class TheWindow(QMainWindow):
                     print("The file contains no DWARF information, or it is in an unsupported format.")
             except Exception as exc:
                 print(format(exc))
+        elif os.environ.get("DWEX_LOADLAST") is not None and len(self.mru) > 0:
+            fa = self.mru[0]
+            if os.path.exists(fa[0]):
+                self.open_file_interactive(*fa)
+
 
     def load_settings(self):
         self.sett = QSettings('Seva', 'DWARFExplorer')
@@ -144,6 +149,7 @@ class TheWindow(QMainWindow):
             # TODO: unite "enable on file load" into a collection
             self.savesection_menuitem.setEnabled(True)
             self.switchslice_menuitem.setEnabled(slice is not None)
+            self.loadexec_menuitem.setEnabled(di._format in (1, 5))
             self.back_menuitem.setEnabled(False)
             self.back_tbitem.setEnabled(False)
             self.forward_menuitem.setEnabled(False)
@@ -253,6 +259,17 @@ class TheWindow(QMainWindow):
         filename = QFileDialog.getOpenFileName(self, None, dir)
         if filename[0]:
             self.open_file_interactive(os.path.normpath(filename[0]))
+
+    def on_loadexec(self):
+        dir = os.path.dirname(self.mru[0][0]) if len(self.mru) > 0 else ''
+        filename = QFileDialog.getOpenFileName(self, None, dir)
+        if filename[0]:
+            try:
+                load_companion_executable(filename[0], self.dwarfinfo)
+            except FormatError as exc:
+                QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", 
+                    exc.s,
+                    QMessageBox.StandardButton.Ok, self).show()
 
     def populate_mru_menu(self):
         class MRUHandler(object):
@@ -796,8 +813,11 @@ class TheWindow(QMainWindow):
         if self.dwarfinfo._unwind_sec:
             UnwindDlg(self, self.dwarfinfo._unwind_sec, self.dwarfinfo, self.dwarfregnames, self.hex).exec()
             # TODO: navigate to function
-        else:
-            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary/slice does not have an unwind_info section.",
+        elif self.dwarfinfo._has_exec:
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "Neither this binary/slice nor the companion executable has an unwind_info section.",
+                QMessageBox.StandardButton.Ok, self).show()
+        else: # TODO: distinguish .o files where the section is named differently
+            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary/slice does not have an unwind_info section, but the corresponding executable might. Use File/Load companion... to find and load one.",
                 QMessageBox.StandardButton.Ok, self).show()
 
     # If the details pane has data - reload that

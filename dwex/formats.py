@@ -77,6 +77,10 @@ def read_pe(filename):
     di._frames = None
     return di
 
+########################################################################
+######################### MachO
+########################################################################
+
 # Arch + flavor where flavor matters
 def make_macho_arch_name(macho):
     from filebytes.mach_o import CpuType, CpuSubTypeARM, CpuSubTypeARM64
@@ -134,7 +138,7 @@ def get_macho_dwarf(macho, fat_arch):
 
     if not '__debug_info' in sections:
         return None
-
+    
     data = {
         name: DebugSectionDescriptor(io.BytesIO(contents), name, None, len(contents), 0)
         for (name, contents)
@@ -170,14 +174,83 @@ def get_macho_dwarf(macho, fat_arch):
         debug_sup_sec = data.get('__debug_sup'),
         gnu_debugaltlink_sec = data.get('__gnu_debugaltlink')
     )
-    di._unwind_sec = sections.get('__unwind_info')
+    di._unwind_sec = sections.get('__unwind_info') # VERY unlikely to be None
     di._format = 1
-    di._arch_code = macho.machHeader.header.cputype
+    di._arch_code = (macho.machHeader.header.cputype, macho.machHeader.header.cpusubtype)
     di._fat_arch = fat_arch
+    uuid = next(cmd for cmd in macho.loadCommands if cmd.header.cmd == LC.UUID).uuid
+    di._uuid = uuid
     text_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == "__TEXT"), False)
     di._start_address = text_cmd.header.vmaddr if text_cmd else 0
     di._frames = None
+    di._has_exec = False
     return di
+
+def load_companion_executable(filename, di):
+    from filebytes.mach_o import MachO, CpuType, TypeFlags, LC, BinaryError
+    if path.isdir(filename):
+        binary = binary_from_bundle(filename)
+        if not binary:
+            raise FormatError("The specified bundle does not contain a Mach-O binary, or it could not be found. Try locating the binary manually.")
+    else:
+        binary = filename
+    
+    try:
+        macho = MachO(binary)
+    except BinaryError:
+        raise FormatError("This file is not a valid Mach-O binary.")
+    
+    if macho.isFat:
+        macho = next((slice for slice in macho.fatArches if (slice.machHeader.header.cputype, slice.machHeader.header.cpusubtype) == di._arch_code), None)
+        if macho is None:
+            arch = di._fat_arch
+            raise FormatError(f"This binary does not contain a slice for {arch}.")
+    elif (macho.machHeader.header.cputype, macho.machHeader.header.cpusubtype) != di._arch_code:
+        raise FormatError(f"The architecture of this binary does not match that of the curernt DWARF, which is {arch}.")
+
+    uuid = next(cmd for cmd in macho.loadCommands if cmd.header.cmd == LC.UUID).uuid
+    if uuid != di._uuid:
+        raise FormatError(f"This binary is from a different build than the current DWARF - the UUIDs do not match.")
+    
+    # Match on arch and UUID
+    sections = {
+        section.name: section
+        for cmd in macho.loadCommands
+        if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64)
+        for section in cmd.sections
+        if section.header.offset > 0
+    }
+
+    di._unwind_sec = sections.get('__unwind_info').bytes
+    di._text_sec = sections.get('__text').bytes
+    eh = sections.get('__eh_frame', None)
+    if eh:
+        di.eh_frame_sec = DebugSectionDescriptor(io.BytesIO(eh.bytes), eh.name, None, len(eh.bytes), 0)
+    di._text_section_start = sections.get('__text').header.addr
+    di._has_exec = True
+
+def binary_from_bundle(filename):
+    # Is it a dSYM bundle?
+    nameparts = path.basename(filename).split('.') 
+    if nameparts[-1] == 'dSYM' and path.exists(path.join(filename, 'Contents', 'Resources', 'DWARF')):
+        files = listdir(path.join(filename, 'Contents', 'Resources', 'DWARF'))
+        if len(files) > 0:
+            # When are there multiple DWARF files in a dSYM bundle?
+            # TODO: let the user choose?
+            dsym_file_path = path.join(filename, 'Contents', 'Resources', 'DWARF', files[0])
+            return dsym_file_path
+    # Is it an app bundle? appname.app
+    if len(nameparts) > 1 and nameparts[-1] in ('app', 'framework'):
+        app_file = path.join(filename, '.'.join(nameparts[0:-1]))
+        if path.exists(app_file):
+            return app_file
+
+        # Any other bundle formats we should be aware of?
+    return None
+
+########################################################################
+######################### WASM
+########################################################################
 
 _WASM_section_header = False
 
@@ -411,24 +484,10 @@ def read_dwarf(filename, resolve_arch):
             elif xsignature == b'!<arch>\n':
                 return read_staticlib(file, resolve_arch)
     elif path.isdir(filename):
-        # Is it a dSYM bundle?
-        nameparts = path.basename(filename).split('.') 
-        if nameparts[-1] == 'dSYM' and path.exists(path.join(filename, 'Contents', 'Resources', 'DWARF')):
-            files = listdir(path.join(filename, 'Contents', 'Resources', 'DWARF'))
-            if len(files) > 0:
-                # When are there multiple DWARF files in a dSYM bundle?
-                # TODO: let the user choose?
-                dsym_file_path = path.join(filename, 'Contents', 'Resources', 'DWARF', files[0])
-                return read_macho(dsym_file_path, resolve_arch, filename)
-        # Is it an app bundle? appname.app
-        if len(nameparts) > 1 and nameparts[-1] in ('app', 'framework'):
-            app_file = path.join(filename, '.'.join(nameparts[0:-1]))
-            if path.exists(app_file):
-                return read_macho(app_file, resolve_arch, filename)
-
-        # Any other bundle formats we should be aware of?
-    return None
-
+        binary = binary_from_bundle(filename)
+        if binary:
+            return read_macho(binary, resolve_arch, filename)
+        
 def get_debug_sections(di):
     section_names = {name: "debug_%s_sec" % name
             for name in 

@@ -16,6 +16,9 @@ def setup_menu(win):
     win.savesection_menuitem = file_menu.addAction("Save a section as...")
     win.savesection_menuitem.triggered.connect(win.on_savesection)
     win.savesection_menuitem.setEnabled(False)
+    win.loadexec_menuitem = file_menu.addAction("Load companion executable...")
+    win.loadexec_menuitem.triggered.connect(win.on_loadexec)
+    win.loadexec_menuitem.setEnabled(False)
     win.mru_menu = file_menu.addMenu("Recent files")
     if len(win.mru):
         win.populate_mru_menu()
