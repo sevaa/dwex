@@ -818,64 +818,7 @@ class TheWindow(QMainWindow):
 
     # All purpose debug hook
     def on_debug(self):
-        class MyThread(QThread):
-            def __init__(self, parent):
-                QThread.__init__(self, parent)
-
-            progress = pyqtSignal(int)
-
-            def run(self):
-                try:
-                    for i in range(1000):
-                        self.progress.emit(i)
-                        self.yieldCurrentThread()
-                        pass
-                except Exception as exc:
-                    pass
-
-        th = MyThread(self)
-        th.progress.connect(lambda i:print(i))
-        th.start()
-        return
-
-
-        import io
-        from elftools.dwarf.dwarfinfo import DWARFInfo, DwarfConfig, DebugSectionDescriptor
-        # Read the three saved sections as bytestreams
-        base = os.environ.get("DWEX_ARG")
-        with open(base + '.info.dat', 'rb') as f:
-            info = f.read()
-        with open(base + '.abbrev.dat', 'rb') as f:
-            abbrev = f.read()
-        with open(base + '.str.dat', 'rb') as f:
-            str = f.read()
-
-        # Parse the DWARF info
-        di = DWARFInfo(
-            config = DwarfConfig(little_endian = True, default_address_size = 8, machine_arch = "ARM64"),
-            debug_info_sec = DebugSectionDescriptor(io.BytesIO(info), '__debug_info', None, len(info), 0),
-            debug_aranges_sec = None,
-            debug_abbrev_sec = DebugSectionDescriptor(io.BytesIO(abbrev), '__debug_abbrev', None, len(abbrev), 0),
-            debug_frame_sec = None,
-            eh_frame_sec = None,
-            debug_str_sec = DebugSectionDescriptor(io.BytesIO(str), '__debug_str', None, len(str), 0),
-            debug_loc_sec = None,
-            debug_ranges_sec = None,
-            debug_line_sec = DebugSectionDescriptor(io.BytesIO(b''), '__debug_line', None, 0, 0),
-            debug_pubtypes_sec = None,
-            debug_pubnames_sec = None,
-            debug_addr_sec=None,
-            debug_str_offsets_sec=None,
-            debug_line_str_sec=None,
-            debug_loclists_sec = None,
-            debug_rnglists_sec = None,
-            debug_sup_sec = None,
-            gnu_debugaltlink_sec = None
-        )
-        di._start_address = 0
-        di._format = 1
-
-        self.load_dwarfinfo(di, "", "ARM64")
+        pass
 
     # Doesn't quite work for the delay on tree expansion :( TODO: timer checks before lighting up this
     def start_wait(self):

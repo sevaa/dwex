@@ -97,7 +97,7 @@ class DIETableModel(QAbstractTableModel):
                 if rt: 
                     (target_cu, target_offset) = rt
                     target = target_cu.get_DIE_from_refaddr(target_offset)
-                    if target:
+                    if target and not target.is_null():
                         tip = self.format_tag(target.tag) + ' ' + safe_DIE_name(target, '(unknown)') + '\n'
                 tip += "Double-click to follow"
             elif attr.form in ('DW_FORM_ref_sig8', 'DW_FORM_ref_sup4', 'DW_FORM_ref_sup8'):
