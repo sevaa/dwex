@@ -223,6 +223,10 @@ def load_companion_executable(filename, di):
 
     di._unwind_sec = sections.get('__unwind_info').bytes
     di._text_sec = sections.get('__text').bytes
+
+    #with open(binary+".__text", "wb") as tsf:
+    #    tsf.write(di._text_sec)
+
     eh = sections.get('__eh_frame', None)
     if eh:
         di.eh_frame_sec = DebugSectionDescriptor(io.BytesIO(eh.bytes), eh.name, None, len(eh.bytes), 0)
@@ -501,4 +505,6 @@ def get_debug_sections(di):
     # Display name to section object
     return {display_name: getattr(di, field_name)
         for (display_name, field_name) in section_names.items()
-        if getattr(di, field_name, False)}    
+        if hasattr(di, field_name)}
+
+    # TODO: unwind_info and text on macho

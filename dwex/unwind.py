@@ -14,13 +14,16 @@ def format_arg(e):
 class UnwindDlg(FramesUIDlg):
     def __init__(self, win, unwind_section, di, regnames, hex_):
         FramesUIDlg.__init__(self, win)
-        if not hasattr(di, '_unwind_info'):
+        if hasattr(di, '_unwind_info'):
+            uw = di._unwind_info
+        else:
             uw = di._unwind_info = MachoUnwindInfo(unwind_section, di._arch_code[0])
+
         self.dwarfinfo = di
         self.regnames = _REG_NAME_MAP.get(di.config.machine_arch, None) if not regnames else None
 
-        lines = [(hex(di._start_addr + e.address), hex(e.encoding), e.command.name, format_arg(e), e)
-            for p in uw if p.entries for e in p.entries]
+        lines = [(hex(di._start_address + e.address), hex(e.encoding), e.command.name, format_arg(e), e)
+            for p in uw.pages if p.entries for e in p.entries]
         self.entries.setModel(GenericTableModel(('Address', 'Encoding', 'Command', 'Argument(s)'), lines))
         self.entries.selectionModel().currentChanged.connect(self.on_entry_sel)
 
@@ -34,13 +37,15 @@ class UnwindDlg(FramesUIDlg):
             elif isinstance(de, FallbackEntry):
                 headers = ('',)
                 values = (('See under Frames',),)
-            elif de.has_frame:
-                headers = ('CFA',) + tuple(self.regname(rno) for rno in de.saved_registers.keys())
-                values = ((self.regname(de.cfa_base_register) + format_offset(de.cfa_offset),) + tuple(f"[CFA{format_offset(off)}]" for off in de.saved_registers.values()),)
             else:
-                headers = ('CFA',)
-                values = ((self.regname(de.cfa_base_register) + format_offset(de.cfa_offset),),)
-                # TODO: rule for RA being the same as LR on ARM?
+                headers = ('CFA',) 
+                value = (self.regname(de.cfa_base_register) + format_offset(de.cfa_offset),)
+                if not de.has_frame:
+                    headers += ('lr',)
+                    value += ('lr',)
+                headers += tuple(self.regname(rno) for rno in de.saved_registers.keys())
+                value += tuple(f"[CFA{format_offset(-off)}]" for off in de.saved_registers.values())
+                values = (value,)
         except NotImplementedError:
             headers = ('',)
             values = (('Not supported yet.',),)

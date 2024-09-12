@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #-------------------------------------------------------------------------------
 #
-# A parser for the MachO __unwind_info section, based on format description from:
+# A parser for the Mach-O __unwind_info section, based on format description from:
 # https://faultlore.com/blah/compact-unwinding/
 # https://github.com/llvm-mirror/libunwind/blob/master/include/mach-o/compact_unwind_encoding.h
 # Lehmer code implementation taken from https://github.com/mateuszchudyk/lehmer/
@@ -70,12 +70,30 @@ class UnwindCommandIntel(Enum):
     # None ebx ecx edx edi esi ebp
     # Or
     # None rbx r12 r13 r14 r15 rbp
+    # Example. Prologue goes:
+    #  push   rbp
+    #  mov    rbp,rsp
+    #  push   r15
+    #  push   r14
+    #  push   r12
+    #  push   rbx
+    #  sub    rsp,0x280    
+    # The entry is: offset=4, saved_regs=(0 (None), 5 (r15), 4 (r14), 2 (r12), 1 (rbx))
 
     FramelessImmediate = 2
     # arg is a tuple of (stack_size, register_count, permutation)
+    # Example. Prologue goes:
+    # push   rbp
+    # push   r15
+    # push   r14
+    # push   rbx
+    # sub    rsp,0x18
+    # Encoding 0x02081020 stack_size=8 register_count=0 permutation=32 (0, 2 (r12), 3 (r13), 4 (r14), 1 (rbx), 5 (r15))
 
     FramelessIndirect = 3
     # arg is a tuple of (instruction_offset, stack_adjust, reg_count, permutation)
+    # x86_64 sub rsp, imm32 goes: 48 81 ec (imm32)
+    # x86 sub esp, imm32 goes: 81 ec (imm32)
 
     EH = 4
     # Fallback to eh_frame, arg is FDE offset in eh_frame
@@ -107,7 +125,7 @@ def translate_encoding_intel(address, enc):
     # has_lsda = (enc & 0x40000000) != 0
     # personality_index = (enc >> 28) & 3    
     cmd = UnwindCommandIntel((enc >> 24) & 0xf)
-    if cmd == UnwindCommandARM64.Nop:
+    if cmd == UnwindCommandIntel.Nop:
         arg = None
     elif cmd == UnwindCommandIntel.Frame:
         offset = (enc >> 16) & 0xff
@@ -131,11 +149,12 @@ def translate_encoding_intel(address, enc):
 class MachoUnwindInfo:
     """
     Holds the parsed unwind_info section. The LSDA/personality stuff is not decoded, with some stubs in place.
+    Call find_by_address() to locate the unwind entry for a particular location in code.
     """
     def __init__(self, section_data, cputype, big_endian = False, text_section = None):
         """
         section_data:
-            A bytes or a bytes-like object with the unwind_info section contents
+            A bytes or a Buffer-compatible object with the unwind_info section contents
 
         cputype:
             The machine architecture code from the MachO file or fat slice header
@@ -154,10 +173,10 @@ class MachoUnwindInfo:
             self.decode_entry = self.decode_entry_arm64
         elif cputype == CpuType.I386:
             translate_encoding = translate_encoding_intel
-            self.decode_entry = lambda self, e: self.decode_entry_intel(self, e, 4, RegOrderx86)
+            self.decode_entry = lambda e: self.decode_entry_intel(e, 4, RegOrderx86, 5, 4, 8)
         elif cputype == CpuType.X86_64:
             translate_encoding = translate_encoding_intel
-            self.decode_entry = lambda self, e: self.decode_entry_intel(self, e, 8, RegOrderx64)
+            self.decode_entry = lambda e: self.decode_entry_intel(e, 8, RegOrderx64, 6, 7, 16)
         else:
             raise NotImplementedError("Only x86, x86_64, and ARM64 are currently supported")
         self.cputype = cputype
@@ -198,12 +217,12 @@ class MachoUnwindInfo:
         elif cmd == UnwindCommandARM64.Frameless:
             return DecodedEntry(entry, False, 31, entry.arg, {})
         elif cmd == UnwindCommandARM64.EH:
-            return FallbackEntry(entry, cmd.arg)
+            return FallbackEntry(entry, entry.arg)
         elif cmd == UnwindCommandARM64.Frame:
             # CFA at x29+16, x30 at CFA-16 x31 at CFA-8
             regs = {30: -16, 31: -8}
             off = -32
-            for (r, i) in enumerate(entry.arg):
+            for (i, r) in enumerate(entry.arg):
                 if r:
                     base_regno = PushOrderARM64[i]
                     regs[base_regno] = off
@@ -211,18 +230,44 @@ class MachoUnwindInfo:
                     off -= 16
             return DecodedEntry(entry, True, 29, 16, regs)
 
-    def decode_entry_intel(self, entry, reg_size, regmap):
+    def decode_entry_intel(self, entry, rsize, arch_regmap, bp_regno, sp_regno, ip_regno):
         cmd = entry.command
         if cmd == UnwindCommandIntel.Nop:
-            NopEntry(entry)
+            return NopEntry(entry)
         elif cmd == UnwindCommandIntel.Frame:
-            raise NotImplementedError("Only ARM64 for now")
+            # CFA at Xbp + 2*rsize
+            # Saved Xbp at CFA-2*rsize
+            # Return address at CFA-rsize
+            # Registers go from CFA-3*rsize and up
+
+            # Haven't seen cases where offset is not the same as the 5 minus count of leading zeros in the saved register array
+            (offset, saved_regs) = entry.arg  # len(saved_regs) is 5
+            regs = {bp_regno: 2*rsize, ip_regno: rsize}
+            for (i, r) in enumerate(saved_regs):
+                if r and i >= 5 - offset:
+                    regs[arch_regmap[r-1]] = (i-2 + offset)*rsize
+            return DecodedEntry(entry, True, bp_regno, 2*rsize, regs)
         elif cmd == UnwindCommandIntel.FramelessImmediate:
-            raise NotImplementedError("Only ARM64 for now")
+            # CFA at Xsp + stack_size*rsize
+            (stack_size, reg_count, permutation) = entry.arg
+            regs = {ip_regno: rsize}
+            if reg_count:
+                permutation = lehmer_decode(reg_count, permutation)
+                # TODO the rest once I get an example with nonzero reg_count
+            return DecodedEntry(entry, False, sp_regno, stack_size*rsize, regs)
         elif cmd == UnwindCommandIntel.FramelessIndirect:
-            raise NotImplementedError("Only ARM64 for now")
+            (instruction_offset, stack_adjust, reg_count, permutation) = entry.arg
+
+            if reg_count:
+                permutation = lehmer_decode(reg_count, permutation)
+                regs = {}
+                # TODO the rest once I get an example
+            else:
+                regs = {}
+
+            raise NotImplementedError("Intel/FramelessIndirect is not supported yet")
         elif cmd == UnwindCommandIntel.EH:
-            return FallbackEntry(entry, cmd.arg)
+            return FallbackEntry(entry, entry.arg)
     
     def find_by_address_raw(self, IP):
         """

@@ -249,7 +249,7 @@ class TheWindow(QMainWindow):
                             skip = True
                     if not skip:
                         with open(section_file, 'wb') as f:
-                            f.write(section.stream.getbuffer())
+                            f.write(section.stream.getbuffer())  #TODO: reliance on stream being a BytesIO
                 except:
                     pass
 
