@@ -38,12 +38,10 @@ class UnwindDlg(FramesUIDlg):
                 headers = ('',)
                 values = (('See under Frames',),)
             else:
-                headers = ('CFA',) 
+                # The assumption is that if LR is not saved, it's preserved.
+                # Losing LR altogether can only happen in a noreturn function, which is unlikely.
+                headers = ('CFA',) + tuple(self.regname(rno) for rno in de.saved_registers.keys())
                 value = (self.regname(de.cfa_base_register) + format_offset(de.cfa_offset),)
-                if not de.has_frame:
-                    headers += ('lr',)
-                    value += ('lr',)
-                headers += tuple(self.regname(rno) for rno in de.saved_registers.keys())
                 value += tuple(f"[CFA{format_offset(-off)}]" for off in de.saved_registers.values())
                 values = (value,)
         except NotImplementedError:
