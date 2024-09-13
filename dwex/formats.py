@@ -125,6 +125,43 @@ def read_macho(filename, resolve_arch, friendly_filename):
 
     return get_macho_dwarf(macho, fat_arch)
 
+# TODO, but debug the command line location logic first
+def locate_dsym(uuid):
+    try:
+        # On an off chance that pyobjc is present
+
+        from Foundation import NSMetadataQuery, NSPredicate, NSRunLoop, NSDate
+        from PyQt6.QtCore import QEventLoop
+        from PyQt6.QtWidgets import QApplication
+
+        su = uuid.decode('ASCII').upper()
+        su = f"{su[0:8]}-{su[8:12]}-{su[12:16]}-{su[16:20]}-{su[20:]}"
+        query = NSMetadataQuery.alloc().init()
+        query.setPredicate_(NSPredicate.predicateWithFormat_("(com_apple_xcode_dsym_uuids == "+su+")"))
+        #query.setSearchScopes_(["/Applications", "/Users"])
+        query.startQuery()
+        query.retain()
+        start_time = 0
+        max_time = 20
+        loop = QEventLoop(QApplication.instance())
+        while query.isGathering():# and start_time <= max_time:
+            loop.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 500)
+            #start_time += 0.3
+            #NSRunLoop.currentRunLoop().runUntilDate_(
+            #    NSDate.dateWithTimeIntervalSinceNow_(0.3)
+            #)
+        query.stopQuery()
+        res = query.results()
+        query.release()
+        # get the results of the file names, and find their file path via spotlight attribute
+        for item in res:
+            pathname = item.valueForAttribute_("kMDItemPath")
+            if pathname:
+                pass
+    except ImportError:
+        pass
+
+
 def get_macho_dwarf(macho, fat_arch):
     from filebytes.mach_o import CpuType, TypeFlags, LC
     # We proceed with macho being a arch-specific file, or a slice within a fat binary
@@ -136,7 +173,12 @@ def get_macho_dwarf(macho, fat_arch):
         if (section.name.startswith('__debug') or section.name in ('__eh_frame', '__unwind_info')) and section.header.offset > 0
     }
 
+    uuid = next(cmd for cmd in macho.loadCommands if cmd.header.cmd == LC.UUID).uuid
+    # a bytes with a hex representation of the binary GUID 
+
     if not '__debug_info' in sections:
+        # TODO: locate dSYM by UUID
+        # locate_dsym()
         return None
     
     data = {
@@ -178,7 +220,6 @@ def get_macho_dwarf(macho, fat_arch):
     di._format = 1
     di._arch_code = (macho.machHeader.header.cputype, macho.machHeader.header.cpusubtype)
     di._fat_arch = fat_arch
-    uuid = next(cmd for cmd in macho.loadCommands if cmd.header.cmd == LC.UUID).uuid
     di._uuid = uuid
     text_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == "__TEXT"), False)
     di._start_address = text_cmd.header.vmaddr if text_cmd else 0
