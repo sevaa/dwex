@@ -1,4 +1,5 @@
 from dwex.details import GenericTableModel
+from PyQt6.QtWidgets import QHeaderView
 from .frames import FramesUIDlg
 from .machounwind import MachoUnwindInfo, UnwindCommandARM64, UnwindCommandIntel, NopEntry, FallbackEntry
 from .exprutil import _REG_NAME_MAP, format_offset
@@ -25,6 +26,7 @@ class UnwindDlg(FramesUIDlg):
         lines = [(hex(di._start_address + e.address), hex(e.encoding), e.command.name, format_arg(e), e)
             for p in uw.pages if p.entries for e in p.entries]
         self.entries.setModel(GenericTableModel(('Address', 'Encoding', 'Command', 'Argument(s)'), lines))
+        self.entries.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.entries.selectionModel().currentChanged.connect(self.on_entry_sel)
 
     def on_entry_sel(self, index, prev = None):

@@ -83,12 +83,13 @@ class UnwindCommandIntel(Enum):
     FramelessImmediate = 2
     # arg is a tuple of (stack_size, register_count, permutation)
     # Example. Prologue goes:
-    # push   rbp
-    # push   r15
-    # push   r14
-    # push   rbx
-    # sub    rsp,0x18
-    # Encoding 0x02081020 stack_size=8 register_count=0 permutation=32 (0, 2 (r12), 3 (r13), 4 (r14), 1 (rbx), 5 (r15))
+    # push       rbp
+    # push       r15
+    # push       r14
+    # push       r13
+    # push       r12
+    # push       rbx
+    # Encoding 0x02 07 1800 ->
 
     FramelessIndirect = 3
     # arg is a tuple of (instruction_offset, stack_adjust, reg_count, permutation)
@@ -133,7 +134,7 @@ def translate_encoding_intel(address, enc):
         arg = (offset, regs)
     elif cmd == UnwindCommandIntel.FramelessImmediate:
         size = (enc >> 16) & 0xff
-        n = (enc >> 13) & 7
+        n = (enc >> 10) & 7
         p = enc & 0x3f
         arg = (size, n, p)
     elif cmd == UnwindCommandIntel.FramelessIndirect:

@@ -183,8 +183,8 @@ def get_macho_dwarf(macho, fat_arch):
             if dsym_path:
                 if path.isdir(dsym_path):
                     dsym_path = binary_from_bundle(dsym_path)
-                arch_code = macho_arch_code(macho)
-                di = read_macho(dsym_path, lambda slices, _, __: next((i for (i, slice) in slices if macho_arch_code(slice) == arch_code), None))
+                # TODO: match CPU types instead of strings
+                di = read_macho(dsym_path, lambda slices, _, __: next((i for (i, slice_arch) in enumerate(slices) if slice_arch == fat_arch), None))
                 if di:
                     add_macho_sections_from_executable(di, macho)
                     return di
