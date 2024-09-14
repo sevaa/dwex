@@ -14,71 +14,74 @@ class FormatError(Exception):
         Exception.__init__(self, s)
 
 def read_pe(filename):
-    from filebytes.pe import PE, IMAGE_FILE_MACHINE
+    from filebytes.pe import PE, IMAGE_FILE_MACHINE, BinaryError
     import struct, zlib
 
-    pefile = PE(filename)
+    try:
+        pefile = PE(filename)
 
-    # Section's real size might be padded - see https://github.com/sashs/filebytes/issues/28
-    sections = [(section.name if section.name[1] != 'z' else '.' + section.name[2:],
-        section.name[1] == 'z',
-        section,
-        section.header.PhysicalAddress_or_VirtualSize,
-        section.header.SizeOfRawData)
-        for section in pefile.sections
-        if section.name.startswith('.debug') or section.name.startswith('.zdebug')]
-    
-    def read_section(name, is_compressed, section, virtual_size, raw_size):
-        data = section.bytes
-        size = raw_size if virtual_size == 0 else min((raw_size, virtual_size))
-        if is_compressed:
-            if size < 12:
-                raise FormatError("Compressesed section %s is unexpectedly short." % (name,))
-            if data[0:4] != b'ZLIB':
-                raise FormatError("Unsupported format in compressesed section %s, ZLIB is expected." % (name,))
-            (size,) = struct.unpack_from('>Q', data, offset=4)
-            data = zlib.decompress(data[12:])
-            if len(data) != size:
-                raise FormatError("Wrong uncompressed size in compressesed section %s: expected %d, got %d." % (name, size, len(data)))
-        return DebugSectionDescriptor(io.BytesIO(data), name, None, size, 0)
+        # Section's real size might be padded - see https://github.com/sashs/filebytes/issues/28
+        sections = [(section.name if section.name[1] != 'z' else '.' + section.name[2:],
+            section.name[1] == 'z',
+            section,
+            section.header.PhysicalAddress_or_VirtualSize,
+            section.header.SizeOfRawData)
+            for section in pefile.sections
+            if section.name.startswith('.debug') or section.name.startswith('.zdebug')]
+        
+        def read_section(name, is_compressed, section, virtual_size, raw_size):
+            data = section.bytes
+            size = raw_size if virtual_size == 0 else min((raw_size, virtual_size))
+            if is_compressed:
+                if size < 12:
+                    raise FormatError("Compressesed section %s is unexpectedly short." % (name,))
+                if data[0:4] != b'ZLIB':
+                    raise FormatError("Unsupported format in compressesed section %s, ZLIB is expected." % (name,))
+                (size,) = struct.unpack_from('>Q', data, offset=4)
+                data = zlib.decompress(data[12:])
+                if len(data) != size:
+                    raise FormatError("Wrong uncompressed size in compressesed section %s: expected %d, got %d." % (name, size, len(data)))
+            return DebugSectionDescriptor(io.BytesIO(data), name, None, size, 0)
 
-    data = {sec[0]: read_section(*sec) for sec in sections}
+        data = {sec[0]: read_section(*sec) for sec in sections}
 
-    if not '.debug_info' in data:
-        return None
+        if not '.debug_info' in data:
+            return None
 
-    machine = pefile.imageNtHeaders.header.FileHeader.Machine
-    is64 = machine in (IMAGE_FILE_MACHINE.AMD64, IMAGE_FILE_MACHINE.ARM64, IMAGE_FILE_MACHINE.IA64) # There are also some exotic architectures...
-    di = DWARFInfo(
-        config = DwarfConfig(
-            little_endian = True,
-            default_address_size = 8 if is64 else 4,
-            machine_arch = IMAGE_FILE_MACHINE[machine].name
-        ),
-        debug_info_sec = data['.debug_info'],
-        debug_aranges_sec = data.get('.debug_aranges'),
-        debug_abbrev_sec = data.get('.debug_abbrev'),
-        debug_frame_sec = data.get('.debug_frame'),
-        eh_frame_sec = None, # Unwind/exceptino info is stored in PE elsewhere
-        debug_str_sec = data.get('.debug_str'),
-        debug_loc_sec = data.get('.debug_loc'),
-        debug_ranges_sec = data.get('.debug_ranges'),
-        debug_line_sec = data.get('.debug_line'),
-        debug_pubtypes_sec = data.get('.debug_pubtypes'),
-        debug_pubnames_sec = data.get('.debug_pubnames'),
-        debug_addr_sec = data.get('.debug_addr'),
-        debug_str_offsets_sec = data.get('.debug_str_offsets'),
-        debug_line_str_sec = data.get('.debug_line_str'),
-        debug_loclists_sec = data.get('.debug_loclists'),
-        debug_rnglists_sec = data.get('.debug_rnglists'),
-        debug_sup_sec = data.get('.debug_sup'),
-        gnu_debugaltlink_sec = data.get('.gnu_debugaltlink')
-    )
-    di._format = 2
-    di._arch_code = machine
-    di._start_address = pefile.imageNtHeaders.header.OptionalHeader.ImageBase
-    di._frames = None
-    return di
+        machine = pefile.imageNtHeaders.header.FileHeader.Machine
+        is64 = machine in (IMAGE_FILE_MACHINE.AMD64, IMAGE_FILE_MACHINE.ARM64, IMAGE_FILE_MACHINE.IA64) # There are also some exotic architectures...
+        di = DWARFInfo(
+            config = DwarfConfig(
+                little_endian = True,
+                default_address_size = 8 if is64 else 4,
+                machine_arch = IMAGE_FILE_MACHINE[machine].name
+            ),
+            debug_info_sec = data['.debug_info'],
+            debug_aranges_sec = data.get('.debug_aranges'),
+            debug_abbrev_sec = data.get('.debug_abbrev'),
+            debug_frame_sec = data.get('.debug_frame'),
+            eh_frame_sec = None, # Unwind/exceptino info is stored in PE elsewhere
+            debug_str_sec = data.get('.debug_str'),
+            debug_loc_sec = data.get('.debug_loc'),
+            debug_ranges_sec = data.get('.debug_ranges'),
+            debug_line_sec = data.get('.debug_line'),
+            debug_pubtypes_sec = data.get('.debug_pubtypes'),
+            debug_pubnames_sec = data.get('.debug_pubnames'),
+            debug_addr_sec = data.get('.debug_addr'),
+            debug_str_offsets_sec = data.get('.debug_str_offsets'),
+            debug_line_str_sec = data.get('.debug_line_str'),
+            debug_loclists_sec = data.get('.debug_loclists'),
+            debug_rnglists_sec = data.get('.debug_rnglists'),
+            debug_sup_sec = data.get('.debug_sup'),
+            gnu_debugaltlink_sec = data.get('.gnu_debugaltlink')
+        )
+        di._format = 2
+        di._arch_code = machine
+        di._start_address = pefile.imageNtHeaders.header.OptionalHeader.ImageBase
+        di._frames = None
+        return di
+    except BinaryError as err:
+        raise FormatError("Error parsing the binary.\n" + str(err))
 
 ########################################################################
 ######################### MachO
@@ -115,18 +118,22 @@ def macho_save_sections(filename, macho):
 # the desired index, or None if the user has cancelled
 # filename is a real file name, not bundle 
 def read_macho(filename, resolve_arch):
-    from filebytes.mach_o import MachO
-    fat_arch = None
-    macho = MachO(filename)
-    if macho.isFat:
-        slices = [make_macho_arch_name(slice) for slice in macho.fatArches]
-        arch_no = resolve_arch(slices, 'Mach-O Fat Binary', 'Choose an architecture:')
-        if arch_no is None: # User cancellation
-            return False
-        fat_arch = slices[arch_no]
-        macho = macho.fatArches[arch_no]
+    from filebytes.mach_o import MachO, BinaryError
+    try:
+        fat_arch = None
+        macho = MachO(filename)
+        if macho.isFat:
+            slices = [make_macho_arch_name(slice) for slice in macho.fatArches]
+            arch_no = resolve_arch(slices, 'Mach-O Fat Binary', 'Choose an architecture:')
+            if arch_no is None: # User cancellation
+                return False
+            fat_arch = slices[arch_no]
+            macho = macho.fatArches[arch_no]
 
-    return get_macho_dwarf(macho, fat_arch)
+        return get_macho_dwarf(macho, fat_arch)
+    except BinaryError as err:
+        raise FormatError("Error parsing the binary.\n" + str(err))
+
 
 # TODO, but debug the command line location logic first
 def locate_dsym(uuid):
