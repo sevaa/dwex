@@ -131,7 +131,6 @@ def read_macho(filename, resolve_arch):
 # TODO, but debug the command line location logic first
 def locate_dsym(uuid):
     try:
-        # On an off chance that pyobjc is present
         from Foundation import NSMetadataQuery, NSPredicate
 
         su = uuid.decode('ASCII').upper()
