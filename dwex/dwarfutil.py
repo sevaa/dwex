@@ -201,7 +201,6 @@ def get_cu_base(die):
         return top_die.attributes['DW_AT_low_pc'].value
     elif 'DW_AT_entry_pc' in top_die.attributes:
         return top_die.attributes['DW_AT_entry_pc'].value
-    # TODO: ranges?
     elif 'DW_AT_ranges' in top_die.attributes:
         rl = get_die_ranges(top_die)
         if rl is None:

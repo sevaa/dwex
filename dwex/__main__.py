@@ -5,7 +5,7 @@ from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 
 from .die import DIETableModel
-from .formats import read_dwarf, get_debug_sections, load_companion_executable, FormatError
+from .formats import read_dwarf, get_debug_sections, load_companion_executable, FormatError, section_bytes, write_to_file
 from .dwarfutil import get_code_location, get_di_frames, has_code_location, ip_in_range, subprogram_name
 from .tree import DWARFTreeModel, cu_sort_key
 from .scriptdlg import ScriptDlg, make_execution_environment
@@ -248,8 +248,7 @@ class TheWindow(QMainWindow):
                         elif r == QMessageBox.StandardButton.No:
                             skip = True
                     if not skip:
-                        with open(section_file, 'wb') as f:
-                            f.write(section.stream.getbuffer())  #TODO: reliance on stream being a BytesIO
+                        write_to_file(section_file, section_bytes(section))
                 except:
                     pass
 
@@ -344,10 +343,7 @@ class TheWindow(QMainWindow):
             r = QFileDialog.getSaveFileName(self, "Save a section", self.filename + '.' + section_name)
             if r[0]:
                 try:
-                    section = sections[section_name]
-                    with open(r[0], 'wb') as f:
-                        # Assumes the section is a BytesIO - implementation dependent
-                        f.write(section.stream.getbuffer())
+                    write_to_file(r[0], section_bytes(sections[section_name]))
                 except Exception as exc:
                     QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
                         "Error saving the section data:\n\n" + format(exc),
@@ -890,7 +886,6 @@ def main():
     monkeypatch()
 
     TheApp().start()
-            
 
 # For running via "python -m dwex"
 # Running this file directly won't work, it relies on being in a module

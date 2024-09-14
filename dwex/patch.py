@@ -1,6 +1,6 @@
 import os
 from struct import Struct
-from ctypes import c_ubyte, sizeof
+from ctypes import LittleEndianStructure, c_ubyte, c_uint, sizeof
 from types import MethodType
 from io import BytesIO
 
@@ -18,7 +18,7 @@ from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
 from elftools.elf.relocation import RelocationHandler
 from elftools.dwarf.locationlists import LocationLists, LocationListsPair
 from elftools.construct.core import StaticField
-from filebytes.mach_o import LSB_64_Section, MH, SectionData
+from filebytes.mach_o import LSB_64_Section, MH, SectionData, LoadCommand, LoadCommandData, LC
 
 # Good reference on DWARF extensions here:
 # https://sourceware.org/elfutils/DwarfExtensions
@@ -234,3 +234,43 @@ def monkeypatch():
         return sections
     
     filebytes.mach_o.MachO._MachO__parseSections = __parseSections
+
+    # SYMTAB parsing - LE only, but filebytes is broken anyway in that regard
+    class SymtabCommand(LittleEndianStructure):
+        _pack_ = 4
+        _fields_ = [('cmd', c_uint),
+            ('cmdsize', c_uint),
+            ('symbols_offset', c_uint),
+            ('nsymbols', c_uint),
+            ('strings_offset', c_uint),
+            ('nstrings', c_uint)]
+        
+    def _parseLoadCommands(self, data, machHeader):
+        offset = sizeof(self._classes.MachHeader)
+        load_commands = []
+        for i in range(machHeader.header.ncmds):
+            command = LoadCommand.from_buffer(data, offset)
+            raw = (c_ubyte * command.cmdsize).from_buffer(data, offset)
+
+            if command.cmd == LC.SEGMENT or command.cmd == LC.SEGMENT_64:
+                command = self._MachO__parseSegmentCommand(data, offset, raw)
+            elif command.cmd == LC.UUID:
+                command = self._MachO__parseUuidCommand(data, offset, raw)
+            elif command.cmd == LC.TWOLEVEL_HINTS:
+                command = self._MachO__parseTwoLevelHintCommand(data, offset, raw)
+            elif command.cmd in (LC.ID_DYLIB, LC.LOAD_DYLIB, LC.LOAD_WEAK_DYLIB):
+                command = self._MachO__parseDylibCommand(data, offset, raw)
+            elif command.cmd in (LC.ID_DYLINKER, LC.LOAD_DYLINKER):
+                command = self._MachO__parseDylibCommand(data, offset, raw)
+            elif command.cmd == LC.SYMTAB:
+                uc = SymtabCommand.from_buffer(data, offset)
+                command = LoadCommandData(header=uc)
+            else:
+                command = LoadCommandData(header=command)
+
+            load_commands.append(command)
+
+            offset += command.header.cmdsize
+
+        return load_commands
+    filebytes.mach_o.MachO._parseLoadCommands = _parseLoadCommands

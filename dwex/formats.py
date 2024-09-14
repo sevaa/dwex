@@ -108,8 +108,7 @@ def macho_save_sections(filename, macho):
                 if section.name.startswith('__debug'):
                     sec_file = ".".join((filename, arch, section.name))
                     if not path.exists(sec_file):
-                        with open(sec_file, 'wb') as f:
-                            f.write(section.bytes)
+                        write_to_file(sec_file, section.bytes)
 
 
 # resolve_arch takes a list of architecture descriptions, and returns
@@ -183,6 +182,30 @@ def get_macho_dwarf(macho, fat_arch):
                 if di:
                     add_macho_sections_from_executable(di, macho)
                     return di
+            else:
+                return None
+                
+                # TODO this
+                symtab = next((cmd for cmd in macho.loadCommands if cmd.header.cmd == LC.SYMTAB), False)
+                le = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == '__LINKEDIT'), False)
+                if symtab and le:
+                    import struct
+                    big_endian = False # Oh well
+                    endianness = '>' if big_endian else '<'
+                    is64 = (macho.machHeader.header.cputype & TypeFlags.ABI64) != 0
+                    format = endianness + ("IBBHQ" if is64 else "IBBHI")
+                    # Name Type Sec_no Info Address
+                    stride = struct.calcsize(format)
+                    ledata = le.bytes
+                    sym_start = symtab.header.symbols_offset - le.header.fileoff
+                    str_start = symtab.header.strings_offset - le.header.fileoff
+
+                    def string_at(off):
+                        return ledata[str_start+off:ledata.find(b'\x00', str_start+off)].decode('ASCII')
+                    
+                    st = (struct.unpack_from(format, ledata, sym_start+i*stride) for i in range(symtab.header.nsymbols))
+                    st = [(string_at(name), type, sec, info, address) for (name, type, sec, info, address) in st]
+                    pass
         return None
     
     data = {
@@ -250,7 +273,7 @@ def load_companion_executable(filename, di):
         if macho is None:
             arch = di._fat_arch
             raise FormatError(f"This binary does not contain a slice for {arch}.")
-    elif (macho.machHeader.header.cputype, macho.machHeader.header.cpusubtype) != di._arch_code:
+    elif macho_arch_code(macho) != di._arch_code:
         raise FormatError(f"The architecture of this binary does not match that of the curernt DWARF, which is {arch}.")
 
     uuid = next(cmd for cmd in macho.loadCommands if cmd.header.cmd == LC.UUID).uuid
@@ -272,9 +295,6 @@ def add_macho_sections_from_executable(di, macho):
 
     di._unwind_sec = sections.get('__unwind_info').bytes
     di._text_sec = sections.get('__text').bytes
-
-    #with open(binary+".__text", "wb") as tsf:
-    #    tsf.write(di._text_sec)
 
     eh = sections.get('__eh_frame', None)
     if eh:
@@ -527,7 +547,7 @@ def read_dwarf(filename, resolve_arch):
             elif signature == b'\x7FELF': #It's an ELF
                 return read_elf(file, filename)
             elif signature in (b'\xCA\xFE\xBA\xBE', b'\xFE\xED\xFA\xCE', b'\xFE\xED\xFA\xCF', b'\xCE\xFA\xED\xFE', b'\xCF\xFA\xED\xFE'):
-                if signature == b'\xCA\xFE\xBA\xBE' and int.from_bytes(file.read(4), 'big') >= 0x20:
+                if signature == b'\xCA\xFE\xBA\xBE' and int.from_bytes(xsignature[4:8], 'big') >= 0x20:
                     # Java .class files also have CAFEBABE, check the fat binary arch count
                     return None
                 # Mach-O fat binary, or 32/64-bit Mach-O in big/little-endian format
@@ -550,10 +570,19 @@ def get_debug_sections(di):
             'pubnames', 'loclists', 'rnglists', 'sup')}
     section_names['eh_frame'] = 'eh_frame_sec'
     section_names['gnu_debugaltlink'] = 'gnu_debugaltlink'
+    section_names['unwind_info'] = '_unwind_sec'
+    section_names['text'] = '_text_sec'
 
     # Display name to section object
     return {display_name: getattr(di, field_name)
         for (display_name, field_name) in section_names.items()
         if hasattr(di, field_name)}
 
-    # TODO: unwind_info and text on macho
+# Section can be a SectionDescription or a raw dump
+def section_bytes(section):
+    return section if isinstance(section, (bytes, bytearray, memoryview)) else section.stream.getbuffer()
+    # TODO: reliance on stream being a BytesIO
+
+def write_to_file(filename, data):
+    with open(filename, 'wb') as f:
+        f.write(data)

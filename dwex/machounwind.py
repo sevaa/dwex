@@ -220,14 +220,14 @@ class MachoUnwindInfo:
             return FallbackEntry(entry, entry.arg)
         elif cmd == UnwindCommandARM64.Frame:
             # CFA at x29+16, x30 at CFA-16 x31 at CFA-8
-            regs = {30: -16, 31: -8}
-            off = -32
+            regs = {30: 16, 31: 8}
+            off = 32
             for (i, r) in enumerate(entry.arg):
                 if r:
                     base_regno = PushOrderARM64[i]
                     regs[base_regno] = off
-                    regs[base_regno+1] = off + 8
-                    off -= 16
+                    regs[base_regno+1] = off - 8
+                    off += 16
             return DecodedEntry(entry, True, 29, 16, regs)
 
     def decode_entry_intel(self, entry, rsize, arch_regmap, bp_regno, sp_regno, ip_regno):
