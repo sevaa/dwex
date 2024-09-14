@@ -1,6 +1,6 @@
 from bisect import bisect_left
 import sys, os
-from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent, QThread, pyqtBoundSignal, QObject, pyqtSignal
+from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
 from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 

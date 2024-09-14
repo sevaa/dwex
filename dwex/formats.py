@@ -2,6 +2,9 @@ from collections import namedtuple
 import io, os
 from os import path, listdir
 from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
+
+from .fx import wait_with_events
+
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
 # Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM, 4 - ELF inside A, 5 - arch specific MachO inside A
@@ -111,7 +114,8 @@ def macho_save_sections(filename, macho):
 
 # resolve_arch takes a list of architecture descriptions, and returns
 # the desired index, or None if the user has cancelled
-def read_macho(filename, resolve_arch, friendly_filename):
+# filename is a real file name, not bundle 
+def read_macho(filename, resolve_arch):
     from filebytes.mach_o import MachO
     fat_arch = None
     macho = MachO(filename)
@@ -129,41 +133,32 @@ def read_macho(filename, resolve_arch, friendly_filename):
 def locate_dsym(uuid):
     try:
         # On an off chance that pyobjc is present
-
-        from Foundation import NSMetadataQuery, NSPredicate, NSRunLoop, NSDate
-        from PyQt6.QtCore import QEventLoop
-        from PyQt6.QtWidgets import QApplication
+        from Foundation import NSMetadataQuery, NSPredicate
 
         su = uuid.decode('ASCII').upper()
         su = f"{su[0:8]}-{su[8:12]}-{su[12:16]}-{su[16:20]}-{su[20:]}"
         query = NSMetadataQuery.alloc().init()
-        query.setPredicate_(NSPredicate.predicateWithFormat_("(com_apple_xcode_dsym_uuids == "+su+")"))
+        query.setPredicate_(NSPredicate.predicateWithFormat_("(com_apple_xcode_dsym_uuids == '"+su+"')"))
         #query.setSearchScopes_(["/Applications", "/Users"])
         query.startQuery()
         query.retain()
-        start_time = 0
-        max_time = 20
-        loop = QEventLoop(QApplication.instance())
-        while query.isGathering():# and start_time <= max_time:
-            loop.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 500)
-            #start_time += 0.3
-            #NSRunLoop.currentRunLoop().runUntilDate_(
-            #    NSDate.dateWithTimeIntervalSinceNow_(0.3)
-            #)
+        wait_with_events(lambda: query.isGathering())
         query.stopQuery()
         res = query.results()
         query.release()
-        # get the results of the file names, and find their file path via spotlight attribute
-        for item in res:
-            pathname = item.valueForAttribute_("kMDItemPath")
-            if pathname:
-                pass
+        if len(res):
+            path = res[0].valueForAttribute_("kMDItemPath")
+            if path:
+                return path 
     except ImportError:
         pass
 
+def macho_arch_code(macho):
+    h = macho.machHeader.header
+    return (h.cputype, h.cpusubtype)
 
 def get_macho_dwarf(macho, fat_arch):
-    from filebytes.mach_o import CpuType, TypeFlags, LC
+    from filebytes.mach_o import CpuType, TypeFlags, LC, MH
     # We proceed with macho being a arch-specific file, or a slice within a fat binary
     sections = {
         section.name: section.bytes
@@ -177,8 +172,17 @@ def get_macho_dwarf(macho, fat_arch):
     # a bytes with a hex representation of the binary GUID 
 
     if not '__debug_info' in sections:
-        # TODO: locate dSYM by UUID
-        # locate_dsym()
+        if macho.machHeader.header.filetype == MH.EXECUTE:
+            # TODO: locate dSYM by UUID
+            dsym_path = locate_dsym(uuid)
+            if dsym_path:
+                if path.isdir(dsym_path):
+                    dsym_path = binary_from_bundle(dsym_path)
+                arch_code = macho_arch_code(macho)
+                di = read_macho(dsym_path, lambda slices, _, __: next((i for (i, slice) in slices if macho_arch_code(slice) == arch_code), None))
+                if di:
+                    add_macho_sections_from_executable(di, macho)
+                    return di
         return None
     
     data = {
@@ -218,7 +222,7 @@ def get_macho_dwarf(macho, fat_arch):
     )
     di._unwind_sec = sections.get('__unwind_info') # VERY unlikely to be None
     di._format = 1
-    di._arch_code = (macho.machHeader.header.cputype, macho.machHeader.header.cpusubtype)
+    di._arch_code = macho_arch_code(macho)
     di._fat_arch = fat_arch
     di._uuid = uuid
     text_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == "__TEXT"), False)
@@ -242,7 +246,7 @@ def load_companion_executable(filename, di):
         raise FormatError("This file is not a valid Mach-O binary.")
     
     if macho.isFat:
-        macho = next((slice for slice in macho.fatArches if (slice.machHeader.header.cputype, slice.machHeader.header.cpusubtype) == di._arch_code), None)
+        macho = next((slice for slice in macho.fatArches if macho_arch_code(slice) == di._arch_code), None)
         if macho is None:
             arch = di._fat_arch
             raise FormatError(f"This binary does not contain a slice for {arch}.")
@@ -254,6 +258,10 @@ def load_companion_executable(filename, di):
         raise FormatError(f"This binary is from a different build than the current DWARF - the UUIDs do not match.")
     
     # Match on arch and UUID
+    add_macho_sections_from_executable(di, macho)
+
+def add_macho_sections_from_executable(di, macho):
+    from filebytes.mach_o import LC
     sections = {
         section.name: section
         for cmd in macho.loadCommands
@@ -523,7 +531,7 @@ def read_dwarf(filename, resolve_arch):
                     # Java .class files also have CAFEBABE, check the fat binary arch count
                     return None
                 # Mach-O fat binary, or 32/64-bit Mach-O in big/little-endian format
-                return read_macho(filename, resolve_arch, filename)
+                return read_macho(filename, resolve_arch)
             elif signature == b'\0asm':
                 return read_wasm(file)
             elif xsignature == b'!<arch>\n':
@@ -531,7 +539,7 @@ def read_dwarf(filename, resolve_arch):
     elif path.isdir(filename):
         binary = binary_from_bundle(filename)
         if binary:
-            return read_macho(binary, resolve_arch, filename)
+            return read_macho(binary, resolve_arch)
         
 def get_debug_sections(di):
     section_names = {name: "debug_%s_sec" % name
