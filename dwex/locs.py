@@ -82,7 +82,16 @@ def show_location(self, attr):
             # Opcode tooltips?            
             return GenericTableModel(("Command",), ((cmd,) for cmd in self.dump_expr(ll.loc_expr)))
     else: # Loclist
-        cu_base = get_cu_base(self.die)
+        cu_base = None
+        def base_for_entry(l): # May throw NoBaseException
+            nonlocal cu_base
+            if l.is_absolute:
+                return 0
+            else:
+                if cu_base is None:
+                    cu_base = get_cu_base(self.die) # Throws here
+                return cu_base
+
         values = list()
         if self.lowlevel:
             ver5 = self.die.cu['version'] >= 5
@@ -117,7 +126,7 @@ def show_location(self, attr):
                         from .crash import report_crash
                         from inspect import currentframe
                         report_crash(exc, exc.__traceback__, version, currentframe())
-                    base = 0 if l.is_absolute else cu_base
+                    base = base_for_entry(l)
                     if ver5:
                         is_def_loc = raw.entry_type == 'DW_LLE_default_location'
                         (raw_start_type, raw_start) = one_of(raw, ('index', 'start_index', 'start_offset', 'start_address'))
@@ -151,7 +160,7 @@ def show_location(self, attr):
                         from .crash import report_crash
                         from inspect import currentframe
                         report_crash(exc, exc.__traceback__, version, currentframe())
-                    base = 0 if l.is_absolute else cu_base
+                    base = base_for_entry(l)
                     values.append((hex(base + l.begin_offset),
                         hex(base + l.end_offset),
                         expr_dump))
