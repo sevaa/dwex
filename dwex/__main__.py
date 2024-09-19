@@ -17,7 +17,7 @@ from .unwind import UnwindDlg
 from .funcmap import FuncMapDlg, GatherFuncsThread
 
 # Sync with version in setup.py
-version = (4, 11)
+version = (4, 20)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -267,8 +267,7 @@ class TheWindow(QMainWindow):
                 load_companion_executable(filename[0], self.dwarfinfo)
             except FormatError as exc:
                 QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", 
-                    exc.s,
-                    QMessageBox.StandardButton.Ok, self).show()
+                    str(exc), QMessageBox.StandardButton.Ok, self).show()
 
     def populate_mru_menu(self):
         class MRUHandler(object):

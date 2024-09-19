@@ -14,7 +14,6 @@ from bisect import bisect_left
 from collections import namedtuple
 from enum import Enum
 from struct import unpack_from
-from math import factorial
 
 # MachO cputype values that we care for
 class CpuType(Enum):
@@ -28,9 +27,9 @@ PageHeader = namedtuple('PageHeader', ('first_address', 'second_level_page_offse
 Page = namedtuple('Page', ('header', 'entries'))
 LSDA = namedtuple('LSDA', ('instruction_address', 'lsda_address'))
 UnwindEntry = namedtuple('UnwindEntry', ('address', 'encoding', 'command', 'arg'))
-PushOrderARM64 = (19, 21, 23, 25, 27, 8, 10, 12, 14)
-RegOrderx86 = (3, 1, 2, 7, 6, 5)
-RegOrderx64 = (3, 12, 13, 14, 15, 6)
+PushOrderARM64 = (19, 21, 23, 25, 27, 8, 10, 12, 14) 
+RegOrderx86 = (3, 1, 2, 7, 6, 5) # ebx ecx edx edi esi ebp
+RegOrderx64 = (3, 12, 13, 14, 15, 6) # rbx r12 r13 r14 r15 rbp
 DecodedEntry = namedtuple('DecodedEntry', ('raw', 'has_frame', 'cfa_base_register', 'cfa_offset', 'saved_registers'))
 FallbackEntry = namedtuple('FallbackEntry', ('raw', 'offset'))
 NopEntry = namedtuple('NopEntry', ('raw'))
@@ -53,12 +52,6 @@ class UnwindCommandARM64(Enum):
     # Register pair order in the arg tuple:
     # 19/20 21/22 23/24 25/26 27/29 8/9 10/11 12/13 14/15
     # If they are pushed, they are pushed in this order, so offsets from sp go in the opposite order
-    # Prologue goes something like this (with 1st two):
-    #  sub	sp, sp, #0x40
-    #  stp	x22, x21, [sp,#0x10]
-    #  stp	x20, x19, [sp,#0x20]
-    #  stp	x29, x30, [sp,#0x30]
-    #  add	x29, sp, #0x30
     
 class UnwindCommandIntel(Enum):
     Nop = 0
@@ -70,34 +63,15 @@ class UnwindCommandIntel(Enum):
     # None ebx ecx edx edi esi ebp
     # Or
     # None rbx r12 r13 r14 r15 rbp
-    # Example. Prologue goes:
-    #  push   rbp
-    #  mov    rbp,rsp
-    #  push   r15
-    #  push   r14
-    #  push   r12
-    #  push   rbx
-    #  sub    rsp,0x280    
-    # The entry is: offset=4, saved_regs=(0 (None), 5 (r15), 4 (r14), 2 (r12), 1 (rbx))
 
     FramelessImmediate = 2
     # arg is a tuple of (stack_size, register_count, permutation)
-    # Example. Prologue goes:
-    # push       rbp
-    # push       r15
-    # push       r14
-    # push       r13
-    # push       r12
-    # push       rbx
-    # Encoding 0x02 07 1800 ->
-
+    
     FramelessIndirect = 3
     # arg is a tuple of (instruction_offset, stack_adjust, reg_count, permutation)
-    # x86_64 sub rsp, imm32 goes: 48 81 ec (imm32)
-    # x86 sub esp, imm32 goes: 81 ec (imm32)
 
     EH = 4
-    # Fallback to eh_frame, arg is FDE offset in eh_frame
+    # arg is the offset of the FDE in the eh_frame section
 
 def tranlate_encoding_arm64(address, enc):
     """
@@ -140,7 +114,7 @@ def translate_encoding_intel(address, enc):
     elif cmd == UnwindCommandIntel.FramelessIndirect:
         offset = (enc >> 16) & 0xff
         adj = (enc >> 13) & 7
-        n = (enc >> 10) & 3
+        n = (enc >> 10) & 7
         p = enc & 0x3f
         arg = (offset, adj, n, p)
     elif cmd == UnwindCommandIntel.EH:
@@ -237,9 +211,9 @@ class MachoUnwindInfo:
             return NopEntry(entry)
         elif cmd == UnwindCommandIntel.Frame:
             # CFA at Xbp + 2*rsize
-            # Saved Xbp at CFA-2*rsize
-            # Return address at CFA-rsize
-            # Registers go from CFA-3*rsize and up
+            # Saved Xbp at CFA-2*rsize (Xbp)
+            # Return address at CFA-rsize (Xbp+rsize)
+            # Registers go from CFA-3*rsize (Xbp-rsize) and up
 
             # Haven't seen cases where offset is not the same as the 5 minus count of leading zeros in the saved register array
             (offset, saved_regs) = entry.arg  # len(saved_regs) is 5
@@ -249,24 +223,33 @@ class MachoUnwindInfo:
                     regs[arch_regmap[r-1]] = (i-2 + offset)*rsize
             return DecodedEntry(entry, True, bp_regno, 2*rsize, regs)
         elif cmd == UnwindCommandIntel.FramelessImmediate:
+            raise NotImplementedError("Intel/FramelessImmediate is not supported yet")
+
             # CFA at Xsp + stack_size*rsize
+            # return address at CFA-rsize
+            # Pushed registers above that in the permutation order
             (stack_size, reg_count, permutation) = entry.arg
             regs = {ip_regno: rsize}
             if reg_count:
-                permutation = lehmer_decode(reg_count, permutation)
-                # TODO the rest once I get an example with nonzero reg_count
+                pass
+                #permutation = lehmer_decode(reg_count, permutation)
+                #for (i, p) in enumerate(permutation):
+                #    regs[arch_regmap[p]] = (2+i)*rsize
             return DecodedEntry(entry, False, sp_regno, stack_size*rsize, regs)
         elif cmd == UnwindCommandIntel.FramelessIndirect:
-            (instruction_offset, stack_adjust, reg_count, permutation) = entry.arg
+            raise NotImplementedError("Intel/FramelessIndirect is not supported yet")
 
+            # x86_64 sub rsp, imm32 goes: 48 81 ec (imm32)
+            # x86 sub esp, imm32 goes: 81 ec (imm32)            
+            (instruction_offset, stack_adjust, reg_count, permutation) = entry.arg
+            regs = {}
             if reg_count:
                 permutation = lehmer_decode(reg_count, permutation)
                 regs = {}
                 # TODO the rest once I get an example
             else:
                 regs = {}
-
-            raise NotImplementedError("Intel/FramelessIndirect is not supported yet")
+            return DecodedEntry(entry, False, sp_regno, stack_size*rsize, regs)
         elif cmd == UnwindCommandIntel.EH:
             return FallbackEntry(entry, entry.arg)
     
@@ -298,6 +281,10 @@ class MachoUnwindInfo:
              - saved_registers - maps DWARF register number to the offset (negative) from CFA where it is saved
         """
         return self.decode_entry(self.find_by_address_raw(IP))
+    
+_fact = (1, 1, 2, 6, 24, 120, 720)
+def factorial(n):
+    return _fact[n]
 
 def lehmer_decode(length, lehmer):
     """Return permutation for the given Lehmer Code and permutation length. Result permutation contains

@@ -261,7 +261,7 @@ def get_macho_dwarf(macho, fat_arch):
     return di
 
 def load_companion_executable(filename, di):
-    from filebytes.mach_o import MachO, CpuType, TypeFlags, LC, BinaryError
+    from filebytes.mach_o import MachO, LC, BinaryError, MH
     if path.isdir(filename):
         binary = binary_from_bundle(filename)
         if not binary:
@@ -281,6 +281,10 @@ def load_companion_executable(filename, di):
             raise FormatError(f"This binary does not contain a slice for {arch}.")
     elif macho_arch_code(macho) != di._arch_code:
         raise FormatError(f"The architecture of this binary does not match that of the curernt DWARF, which is {arch}.")
+    
+    ft = macho.machHeader.header.filetype
+    if ft != MH.EXECUTE:
+        raise FormatError(f"This binary is not an executable - type {MH[ft].name}.")
 
     uuid = next(cmd for cmd in macho.loadCommands if cmd.header.cmd == LC.UUID).uuid
     if uuid != di._uuid:
