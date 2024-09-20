@@ -303,12 +303,16 @@ def add_macho_sections_from_executable(di, macho):
         if section.header.offset > 0
     }
 
-    di._unwind_sec = sections.get('__unwind_info').bytes
     di._text_sec = sections.get('__text').bytes
+
+    unwind = sections.get('__unwind_info', None)
+    if unwind:
+        di._unwind_sec = unwind.bytes
 
     eh = sections.get('__eh_frame', None)
     if eh:
         di.eh_frame_sec = DebugSectionDescriptor(io.BytesIO(eh.bytes), eh.name, None, len(eh.bytes), 0)
+        
     di._text_section_start = sections.get('__text').header.addr
     di._has_exec = True
 
