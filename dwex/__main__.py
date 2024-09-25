@@ -732,7 +732,7 @@ class TheWindow(QMainWindow):
         cb.setText(v)
 
     def on_copyvalue(self):
-        t = self.details_table if self.details_table.hasFocus() else self.die_table
+        t = self.details_table if self.details_table.hasFocus() and self.details_table.model() else self.die_table
         m = t.model()
         self.on_copy(m.data(t.currentIndex(), Qt.ItemDataRole.DisplayRole) or "")
 

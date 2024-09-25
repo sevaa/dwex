@@ -44,10 +44,11 @@ def parse_location(self, attr):
                     ctxt['loc_section_len'] = len(buf)
                     if len(tracebacks) > 1 and 'entry_offset' in tracebacks[1].tb_frame.f_locals:
                         fail_entry_offset = tracebacks[1].tb_frame.f_locals['entry_offset']
-                        ctxt['fail_entry_offset'] = fail_entry_offset
                         llend = fail_entry_offset + 8*2+2 if fail_entry_offset - attr.value <= 1024 else attr.value + 1024
                         llbytes = buf[attr.value:llend]
                         ctxt['llbytes'] = ' '.join("%02x" % b for b in llbytes)
+                        for (k, v) in tracebacks[1].tb_frame.f_locals.items():
+                            ctxt['_pllfs_' + k] = v
         except:
             pass
 
