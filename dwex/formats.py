@@ -437,6 +437,10 @@ def read_elf(file, filename):
         di._frames = None
     return di
 
+###########################################################################
+############################ Libraries
+###########################################################################
+
 _ar_file_header = namedtuple('ARHeader', ('header_offset', 'data_offset',
                                           'name',
                                           # Don't care for the metadata
