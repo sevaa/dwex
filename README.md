@@ -62,6 +62,12 @@ DIE attribute values are relatively small scalars - integers, strings, sometimes
 
 In DWARF, tag and attribute names are prefixed with `DW_TAG_` and `DW_AT_`, respectively. DWARF Explorer elides those by default to reduce visual clutter. Use `View/DWARF prefix` in the menu to bring them back.
 
+Help DWEX get better
+--------------------
+
+Compilers and toolchains out there are a diverse bunch, compiled binaries even more so. **If you see DWARF Explorer crash, or misbehave, or complain about parsing errors - please don't hesitate to submit tickets at [github.com/sevaa/dwex/issues](https://github.com/sevaa/dwex/issues).** Ideally, attach the offending binary.
+
+
 Disclaimer
 ----------
 
