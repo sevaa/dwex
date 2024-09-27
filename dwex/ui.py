@@ -1,6 +1,6 @@
 import os
 from PyQt6.QtCore import Qt, QRectF, QSizeF, QPointF, QByteArray
-from PyQt6.QtGui import QKeySequence, QAction, QImage, QPixmap, QPainter, QIcon
+from PyQt6.QtGui import QKeySequence, QAction, QImage, QPixmap, QPainter, QIcon, QFont
 from PyQt6.QtWidgets import *
 from PyQt6.QtSvg import QSvgRenderer
 
@@ -234,10 +234,7 @@ def setup_toolbar(win):
     win.prevhl_tbitem.triggered.connect(win.on_prevhl)
     win.prevhl_tbitem.setToolTip("Navigate to the previous highlighted DIE in the tree")
 
-
-def setup_ui(win):
-    setup_menu(win)
-    setup_toolbar(win)
+def setup_explorer(win):
     # Set up the left pane and the right pane
     tree = win.the_tree = QTreeView()
     tree.header().hide()
@@ -273,6 +270,21 @@ def setup_ui(win):
     spl.setStretchFactor(0, 0)
     spl.setStretchFactor(1, 1) 
     win.setCentralWidget(spl)
+
+def setup_splash(win):
+    l = QLabel()
+    l.setText("Drag\na file\nhere")
+    l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    f = QFont("Verdana", 50)
+    f.setStyleHint(QFont.StyleHint.SansSerif)
+    l.setFont(f)
+    l.setEnabled(False)
+    win.setCentralWidget(l)
+
+def setup_ui(win):
+    setup_menu(win)
+    setup_toolbar(win)
+    setup_splash(win)
 
     win.setWindowTitle("DWARF Explorer")
     win.resize(win.font_metrics.averageCharWidth() * 250, win.font_metrics.height() * 60)

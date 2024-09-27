@@ -9,7 +9,7 @@ from .formats import read_dwarf, get_debug_sections, load_companion_executable, 
 from .dwarfutil import get_code_location, get_di_frames, has_code_location, ip_in_range, subprogram_name
 from .tree import DWARFTreeModel, cu_sort_key
 from .scriptdlg import ScriptDlg, make_execution_environment
-from .ui import setup_ui
+from .ui import setup_explorer, setup_ui
 from .locals import LocalsDlg, LoadedModuleDlgBase
 from .aranges import ArangesDlg
 from .frames import FramesDlg
@@ -44,6 +44,7 @@ class TheWindow(QMainWindow):
         self.setAcceptDrops(True)
 
         # The data model placeholders - to be populated once we read a file
+        self.dwarfinfo = None
         self.tree_model = None # Recreated between files
         self.die_model = None # Reused between DIEs
 
@@ -137,6 +138,8 @@ class TheWindow(QMainWindow):
                     cu._i = i
             di._locparser = None # Created on first use - but see #1683
 
+            if self.dwarfinfo is None:
+                setup_explorer(self)
             self.dwarfinfo = di
             self.filename = filename
             self.tree_model = DWARFTreeModel(di, self.prefix, self.sortcus, self.sortdies)
