@@ -17,7 +17,7 @@ from .unwind import UnwindDlg
 from .funcmap import FuncMapDlg, GatherFuncsThread
 
 # Sync with version in setup.py
-version = (4, 22)
+version = (4, 23)
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog

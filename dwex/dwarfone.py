@@ -235,6 +235,9 @@ class CompileUnitV1(object):
 
                 cur_offset = child._terminator.offset + child._terminator.size
 
+    def get_DIE_from_refaddr(self, refaddr):
+        return self.DIE_at_offset(refaddr)
+
 class LineTableV1(object):
     def __init__(self, stm, structs, len, pc):
         self.stm = stm
@@ -362,6 +365,15 @@ class DWARFInfoV1(object):
     
     def get_aranges(self):
         return None
+    
+    def has_CFI(self):
+        return False
+    
+    def has_CFI(self):
+        return False
+    
+    def has_EH_CFI(self):
+        return False
 
 def parse_dwarf1(elffile):
     return DWARFInfoV1(elffile)
