@@ -18,6 +18,7 @@ from .funcmap import FuncMapDlg, GatherFuncsThread
 
 # Sync with version in setup.py
 version = (4, 23)
+the_app = None
 
 # TODO:
 # On MacOS, start without a main window, instead show the Open dialog
@@ -36,6 +37,7 @@ class DWARFParseError(Exception):
 class TheWindow(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self)
+        self.sett = None
         self.in_tree_nav = False
         self.font_metrics = QFontMetrics(QApplication.font())
 
@@ -856,6 +858,12 @@ def on_exception(exctype, exc, tb):
     elif isinstance(exc, Exception):
         from .crash import report_crash
         report_crash(exc, exc.__traceback__, version)
+        try:
+            global the_app
+            if the_app and the_app.win and the_app.win.sett:
+                the_app.win.sett.setValue("Crashed", True)
+        except Exception:
+            pass
         sys.excepthook = on_exception.prev_exchook
         sys.exit(1)
     elif on_exception.prev_exchook:
@@ -864,6 +872,7 @@ def on_exception(exctype, exc, tb):
 class TheApp(QApplication):
     def __init__(self):
         QApplication.__init__(self, [])
+        self.win = None
 
     def notify(self, o, evt):
         if evt.type() == QEvent.Type.MouseButtonPress and isinstance(o, QWindow) and hasattr(evt, "button"):
@@ -887,7 +896,9 @@ def main():
     from .patch import monkeypatch
     monkeypatch()
 
-    TheApp().start()
+    global the_app
+    the_app = TheApp()
+    the_app.start()
 
 # For running via "python -m dwex"
 # Running this file directly won't work, it relies on being in a module
