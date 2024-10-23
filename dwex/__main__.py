@@ -745,7 +745,7 @@ class TheWindow(QMainWindow):
         t = self.details_table if self.details_table.hasFocus() else self.die_table
         m = t.model()
         row = t.currentIndex().row()
-        line = "\t".join(m.data(m.index(row, c, QModelIndex()), Qt.ItemDataRole.DisplayRole) or ""
+        line = "\t".join(str(m.data(m.index(row, c, QModelIndex()), Qt.ItemDataRole.DisplayRole) or "")
             for c in range(0, m.columnCount(QModelIndex())))
         self.on_copy(line)
 
@@ -753,7 +753,7 @@ class TheWindow(QMainWindow):
         t = self.details_table if self.details_table.hasFocus() else self.die_table
         m = t.model()
         table_text = "\n".join(
-                "\t".join(m.data(m.index(r, c, QModelIndex()), Qt.ItemDataRole.DisplayRole)  or ""
+                "\t".join(str(m.data(m.index(r, c, QModelIndex()), Qt.ItemDataRole.DisplayRole)  or "")
                 for c in range(0, m.columnCount(QModelIndex())))
             for r in range(0, m.rowCount(QModelIndex())))
         self.on_copy(table_text)
