@@ -37,9 +37,7 @@ def load_children(parent_die, sort):
                     die._i = i
         except KeyError as ke:
             # Catching #1516
-            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer",
-                "This executable file is corrupt or incompatible with the current version of DWARF Explorer. Please consider creating a new issue at https://github.com/sevaa/dwex/, and share this file with the tech support.",
-                QMessageBox.StandardButton.Ok, QApplication.instance().win).show()
+            QApplication.instance().win.show_warning("This executable file is corrupt or incompatible with the current version of DWARF Explorer. Please consider creating a new issue at https://github.com/sevaa/dwex/, and share this file with the tech support.")
             parent_die._children = []
 
 class DWARFTreeModel(QAbstractItemModel):

@@ -212,11 +212,9 @@ class TheWindow(QMainWindow):
                     s = "The directory (bundle) could not be resolved to a DWARF containing file, or the file contains no DWARF information. Try navigating inside and open the executable file directly."
                 else:
                     s = "The file contains no DWARF information, or it is in an unsupported format."
-                QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", s,
-                    QMessageBox.StandardButton.Ok, self).show()
+                self.show_warning(s)
         except FormatError as ferr:
-            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer",
-                str(ferr), QMessageBox.StandardButton.Ok, self).show()
+            self.show_warning(str(ferr))
         except DWARFParseError as dperr:
             mb = QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
                 "Error parsing the DWARF information in this file. Would you like to save the debug section contents for manual analysis?",
@@ -271,8 +269,7 @@ class TheWindow(QMainWindow):
             try:
                 load_companion_executable(filename[0], self.dwarfinfo)
             except FormatError as exc:
-                QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", 
-                    str(exc), QMessageBox.StandardButton.Ok, self).show()
+                self.show_warning(str(exc))
 
     def populate_mru_menu(self):
         class MRUHandler(object):
@@ -538,8 +535,7 @@ class TheWindow(QMainWindow):
                 if index:
                     self.the_tree.setCurrentIndex(index)
                 else:
-                    QMessageBox(QMessageBox.Icon.Warning, "DwARF Explorer", "The specified offset was not found. It could be beyond the section size, or fall into a CU header area.",
-                        QMessageBox.StandardButton.Ok, self)
+                    self.show_warning("The specified offset was not found. It could be beyond the section size, or fall into a CU header area.")
             except ValueError:
                 pass
 
@@ -787,7 +783,13 @@ class TheWindow(QMainWindow):
         th.start() # Will continue in done
 
     def on_aranges(self):
-        ara = self.dwarfinfo.get_aranges()
+        from elftools.common.exceptions import ELFParseError
+        try:
+            ara = self.dwarfinfo.get_aranges()
+        except ELFParseError: # Catching the IAR < 9.30 aranges misalignment issue
+            self.show_warning("The aranges section in this binary is corrupt.")
+            return
+
         if ara:
             dlg = ArangesDlg(self, ara, self.dwarfinfo, self.hex)
             if dlg.exec() == QDialog.DialogCode.Accepted and dlg.selected_cu_offset is not None:
@@ -797,8 +799,7 @@ class TheWindow(QMainWindow):
                     die = di._unsorted_CUs[i].get_top_DIE()
                     self.the_tree.setCurrentIndex(self.tree_model.index_for_die(die))
         else:
-            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have an aranges section.",
-                QMessageBox.StandardButton.Ok, self).show()
+            self.show_warning("This binary does not have an aranges section.")
             
     def on_frames(self):
         entries = get_di_frames(self.dwarfinfo)
@@ -806,19 +807,16 @@ class TheWindow(QMainWindow):
             FramesDlg(self, entries, self.dwarfinfo, self.dwarfregnames, self.hex).exec()
             # TODO: navigate to function
         else:
-            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary does not have neither an eh_frames section nor a debug_frames section.",
-                QMessageBox.StandardButton.Ok, self).show()
+            self.show_warning("This binary does not have neither an eh_frames section nor a debug_frames section.")
             
     def on_unwind(self):
         if self.dwarfinfo._unwind_sec:
             UnwindDlg(self, self.dwarfinfo._unwind_sec, self.dwarfinfo, self.dwarfregnames, self.hex).exec()
             # TODO: navigate to function
         elif self.dwarfinfo._has_exec:
-            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "Neither this binary/slice nor the companion executable has an unwind_info section.",
-                QMessageBox.StandardButton.Ok, self).show()
+            self.show_warning("Neither this binary/slice nor the companion executable has an unwind_info section.")
         else: # TODO: distinguish .o files where the section is named differently
-            QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", "This binary/slice does not have an unwind_info section, but the corresponding executable might. Use File/Load companion... to find and load one.",
-                QMessageBox.StandardButton.Ok, self).show()
+            self.show_warning("This binary/slice does not have an unwind_info section, but the corresponding executable might. Use File/Load companion... to find and load one.")
 
     # If the details pane has data - reload that
     def refresh_details(self):
@@ -846,6 +844,9 @@ class TheWindow(QMainWindow):
 
     def end_wait(self):
         QApplication.restoreOverrideCursor()
+
+    def show_warning(self, s):
+        QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", s, QMessageBox.StandardButton.Ok, self).show()
 
 def on_exception(exctype, exc, tb):
     if isinstance(exc, MemoryError):
