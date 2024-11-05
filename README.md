@@ -17,7 +17,7 @@ Note that regular Windows executables (EXE/DLL files) are PE files but don't, as
 
 The pyelftools library that dwex is based on supports DWARF versions 2-5, and so does dwex. DWARFv5 support might be unstable. DWARF v1 is supported experimentally, in ELF files only.
 
-There is a known issue with incorrect parsing of DWARF in .o files and static libraries that contain them. See [eliben/pyelftools#564](https://github.com/eliben/pyelftools/issues/564). Mach-O fat binary object files inside static libraries are not supported.
+There is a known issue with incorrect parsing of DWARF in .o files and static libraries that contain them. See [eliben/pyelftools#564](https://github.com/eliben/pyelftools/issues/564). Multiarchitecture ("fat") Mach-O  static libraries are not supported.
 
 Requirements and Dependencies
 ------------
