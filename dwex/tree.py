@@ -104,7 +104,7 @@ class DWARFTreeModel(QAbstractItemModel):
                     s = ('DW_TAG_user_%X' if self.prefix else 'user_%X') % die.tag
                 else:
                     s = die.tag if self.prefix or not str(die.tag).startswith('DW_TAG_') else die.tag[7:]
-                if 'DW_AT_name' in die.attributes:
+                if 'DW_AT_name' in die.attributes and die.attributes['DW_AT_name'].value is not None:
                     s += ": " + die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
                 return s
         elif role == Qt.ItemDataRole.ToolTipRole:

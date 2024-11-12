@@ -146,7 +146,7 @@ def top_die_file_name(die, Default = 'N/A'):
     return Default
 
 def safe_DIE_name(die, default = ''):
-    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes else default
+    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes and die.attributes['DW_AT_name'].value is not None else default
 
 def follow_ref_if_present(die, attr_name):
     return die.get_DIE_from_attribute(attr_name) if attr_name in die.attributes else die
