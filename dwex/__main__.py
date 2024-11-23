@@ -17,7 +17,7 @@ from .unwind import UnwindDlg
 from .funcmap import FuncMapDlg, GatherFuncsThread
 
 # Sync with version in setup.py
-version = (4, 23)
+version = (4, 24)
 the_app = None
 
 # TODO:

@@ -40,7 +40,7 @@ def show_ranges(self, attr):
     ll = self.lowlevel
 
     if v5 and ll: # Dump untranslated v5 entries
-        ranges = di._ranges.get_range_list_at_offset_ex(attr.value)
+        ranges = di._ranges.get_range_list_at_offset_ex(attr.value, cu = self.die.cu)
         has_relative_entries = next((r for r in ranges if r.entry_type == 'DW_RLE_offset_pair'), False)
     else:
         ranges = di._ranges.get_range_list_at_offset(attr.value, cu = self.die.cu)

@@ -238,7 +238,7 @@ def find_funcs_at_address(cu, address):
         if die.tag in ('DW_TAG_subprogram', 'DW_TAG_global_subroutine') and has_code_location(die):
             if 'DW_AT_range' in die.attributes:
                 cu_base = top_die.attributes['DW_AT_low_pc'].value
-                rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value)
+                rl = di._ranges.get_range_list_at_offset(die.attributes['DW_AT_ranges'].value, cu = die.cu)
                 for r in rl:
                     if r.begin_offset <= address - cu_base < r.end_offset:
                         funcs.append(die)

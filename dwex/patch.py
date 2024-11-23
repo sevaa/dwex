@@ -123,12 +123,24 @@ def monkeypatch():
                                'DW_AT_call_data_value',
                                'DW_AT_upper_bound',
                                'DW_AT_count'))
+    def get_location_list_at_offset(self, offset, die=None): # Fix for variable bitness in PS3
+        if self.version >= 5 and die is None:
+            raise DWARFError("For this binary, \"die\" needs to be provided")              
+        self.stream.seek(offset, os.SEEK_SET)
+        if die:
+            self.structs = die.cu.structs
+            self._max_addr = 2 ** (self.structs.address_size * 8) - 1
+        return self._parse_location_list_from_stream_v5(die.cu) if self.version >= 5 else self._parse_location_list_from_stream()
     elftools.dwarf.locationlists.LocationParser._attribute_has_loc_list = MethodType(_attribute_has_loc_list, elftools.dwarf.locationlists.LocationParser)
     elftools.dwarf.locationlists.LocationParser._attribute_is_loclistptr_class = MethodType(_attribute_is_loclistptr_class, elftools.dwarf.locationlists.LocationParser)
+    elftools.dwarf.locationlists.LocationLists.get_location_list_at_offset = get_location_list_at_offset
 
     # Raw location lists
-    def get_location_list_at_offset_ex(self, offset):
+    def get_location_list_at_offset_ex(self, offset, die=None):
         self.stream.seek(offset, os.SEEK_SET)
+        if die:
+            self.structs = die.cu.structs
+            self._max_addr = 2 ** (self.structs.address_size * 8) - 1
         return [entry
             for entry
             in struct_parse(self.structs.Dwarf_loclists_entries, self.stream)]
@@ -141,6 +153,30 @@ def monkeypatch():
     def translate_v5_entry(self, entry, cu):
         return self._rnglists.translate_v5_entry(entry, cu)
     elftools.dwarf.ranges.RangeListsPair.translate_v5_entry = translate_v5_entry
+
+    # Fix for a corollary of 1683
+    def get_range_list_at_offset(self, offset, cu=None):
+        """ Get a range list at the given offset in the section.
+
+            The cu argument is necessary if the ranges section is a
+            DWARFv5 debug_rnglists one, and the target rangelist
+            contains indirect encodings
+        """
+        if cu:
+            self.structs = cu.structs
+            self._max_addr = 2 ** (self.structs.address_size * 8) - 1            
+        self.stream.seek(offset, os.SEEK_SET)
+        return self._parse_range_list_from_stream(cu)
+    def get_range_list_at_offset_ex(self, offset, cu=None):
+        """Get a DWARF v5 range list, addresses and offsets unresolved,
+        at the given offset in the section
+        """
+        if cu:
+            self.structs = cu.structs
+            self._max_addr = 2 ** (self.structs.address_size * 8) - 1            
+        return struct_parse(self.structs.Dwarf_rnglists_entries, self.stream, offset)    
+    elftools.dwarf.ranges.RangeLists.get_range_list_at_offset = get_range_list_at_offset
+    elftools.dwarf.ranges.RangeLists.get_range_list_at_offset_ex = get_range_list_at_offset_ex
 
     # DWARF5 calling convention codes
     _DESCR_DW_CC[4] = '(pass by ref)'

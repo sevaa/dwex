@@ -99,7 +99,7 @@ def show_location(self, attr):
             ver5 = self.die.cu['version'] >= 5
             if ver5:
                 headers = ("Entry offset", "Type", "Start/Index/Base", "End/Index/Length", "Start address", "End address", "Expr bytes", "Expression")
-                raw_ll = self.die.dwarfinfo.location_lists().get_location_lists_at_offset_ex(attr.value)
+                raw_ll = self.die.dwarfinfo.location_lists().get_location_lists_at_offset_ex(attr.value, self.die)
             else:
                 headers = ("Entry offset", "Type", "Start address", "End address", "Expr bytes", "Expression")
             for (i, l) in enumerate(raw_ll if ver5 else ll):
