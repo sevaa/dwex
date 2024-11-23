@@ -49,6 +49,7 @@ def parse_location(self, attr):
                         ctxt['llbytes'] = ' '.join("%02x" % b for b in llbytes)
                         for (k, v) in tracebacks[1].tb_frame.f_locals.items():
                             ctxt['_pllfs_' + k] = v
+                        ctxt['llparser_addr_size'] = tracebacks[1].tb_frame.f_locals['self'].structs.address_size
         except:
             pass
 
