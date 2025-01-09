@@ -2,11 +2,12 @@ from PyQt6.QtCore import Qt, QAbstractTableModel
 from PyQt6.QtWidgets import *
 
 from elftools.dwarf.callframe import FDE, RegisterRule, ZERO
+from elftools.dwarf.dwarf_expr import DWARFExprParser
 
-from dwex.fx import bold_font
-from dwex.locals import LoadedModuleDlgBase
-
-from .exprutil import _REG_NAME_MAP, format_offset
+from .exprdlg import ExpressionDlg
+from .fx import bold_font
+from .locals import LoadedModuleDlgBase
+from .exprutil import _REG_NAME_MAP, ExprFormatter, format_offset
 
 rheaders = ('Start address', 'End address', 'Length')
 eheaders = ('Type', 'CIE offset', 'Start address', 'End address', 'Length')
@@ -65,10 +66,12 @@ class EntriesModel(QAbstractTableModel):
                 return bold_font()
 
 class DecodedEntryModel(QAbstractTableModel):
-    def __init__(self, entry, regnamelist):
+    def __init__(self, entry, regnamelist, p, f):
         QAbstractTableModel.__init__(self)
         self.table = entry.get_decoded() # Anything else from the entry?
         self.regnamelist = regnamelist
+        self.parser = p
+        self.formatter = f
         # TODO: sort them?
 
     def headerData(self, section, ori, role):
@@ -91,6 +94,16 @@ class DecodedEntryModel(QAbstractTableModel):
         return self.createIndex(row, col, self.table.table[row])
     
     def data(self, index, role):
+        # Helper...
+        def format_rule_expr(expr):
+            if not hasattr(rule, 'expr'): # Implementation detail: rule is an open ended object
+                rule.expr = self.parser.parse_expr(rule.arg)
+            expr = rule.expr
+            if len(expr) > 3:
+                return '; '.join(self.formatter.format_op(*op) for op in expr[:3]) + f';...{len(expr)-3} more'
+            else:
+                return '; '.join(self.formatter.format_op(*op) for op in expr)
+
         col = index.column()
         line = index.internalPointer()
         if role == Qt.ItemDataRole.DisplayRole:
@@ -110,7 +123,7 @@ class DecodedEntryModel(QAbstractTableModel):
                     if type == 'ARCHITECTURAL':
                         return '(arch)'
                     elif type == 'EXPRESSION':
-                        return '(expr)' # TODO
+                        return f'[{format_rule_expr(rule)}]'
                     elif type == 'OFFSET':
                         return "[CFA%s]" % (format_offset(rule.arg),)
                     elif type == 'REGISTER':
@@ -120,12 +133,36 @@ class DecodedEntryModel(QAbstractTableModel):
                     elif type == 'UNDEFINED':
                         return '(undef)'
                     elif type == 'VAL_EXPRESSION':
-                        return '(val_expr)' # TODO
+                        return format_rule_expr(rule)
                     elif type == 'VAL_OFFSET':
                         return "CFA%s" % (format_offset(rule.arg),)
+        elif role == Qt.ItemDataRole.ToolTipRole:
+            if col >= 2:
+                regno = self.table.reg_order[col-2]
+                if regno in line:
+                    rule = line[regno]
+                    if rule.type in ('EXPRESSION', 'VAL_EXPRESSION'):
+                        return 'Double-click for details'
                 
     def regname(self, regno):
         return self.regnamelist[regno] if self.regnamelist else "r%d" % (regno,)
+    
+    def get_expr_rule(self, index):
+        col = index.column()
+        if col >= 2:
+            regno = self.table.reg_order[col-2]
+            rule = index.internalPointer()[regno]
+            if rule.type in ('VAL_EXPRESSION', 'EXPRESSION'):
+                if not hasattr(rule, 'expr'): # Implementation detail: rule is an open ended object
+                    rule.expr = self.parser.parse_expr(rule.arg)
+                return rule
+            
+    def get_regname_by_index(self, index):
+        col = index.column()
+        if col >= 2:
+            regno = self.table.reg_order[col-2]
+            return self.regname(regno)
+
 
 #########################################################
 
@@ -143,7 +180,7 @@ class FramesUIDlg(LoadedModuleDlgBase):
 
         # Init ahead of time so that it may be populated in the RB handler
         entries = self.entries = QTableView()
-        details = self.details = QTableView()          
+        details = self.details = QTableView()
 
         self.make_top(top_pane)
 
@@ -154,9 +191,8 @@ class FramesUIDlg(LoadedModuleDlgBase):
         w.setLayout(top_pane)
         spl.addWidget(w)
 
-        details.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        details.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems) # Double click to zoom in on expression
         details.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        #details.doubleClicked.connect(win.on_attribute_dclick)
         bottom_pane = QVBoxLayout()
         bottom_pane.setContentsMargins(0, 0, 0, 0)
         bottom_pane.addWidget(details)
@@ -191,12 +227,29 @@ class FramesDlg(FramesUIDlg):
         self.hex = hex
         arch = di.config.machine_arch
         self.regnamelist = _REG_NAME_MAP.get(arch, None) if not regnames else None
+        dwarf_version = 2 # If no debug sections, can't tell if it's V1. Frames were not in V1.
+        self.expr_parser = DWARFExprParser(di.structs)
+        self.expr_formatter = ExprFormatter(regnames, False, arch, dwarf_version, True)
 
         FramesUIDlg.__init__(self, win)
 
+        # Expression details browser
+        self.details.doubleClicked.connect(self.on_rule_dclick)
+
     def on_entry_sel(self, index, prev = None):
         # TODO: raw mode
-        self.details.setModel(DecodedEntryModel(index.internalPointer(), self.regnamelist))
+        self.details.setModel(DecodedEntryModel(index.internalPointer(), self.regnamelist, self.expr_parser, self.expr_formatter))
+
+    def on_rule_dclick(self, index):
+        if index and index.isValid():
+            model = self.details.model()
+            rule = model.get_expr_rule(index)
+            if rule:
+                regname = model.get_regname_by_index(index)
+                pc = index.internalPointer()['pc'] # :(
+                target = regname if rule.type == 'VAL_EXPRESSION' else f'address of {regname}'
+                title = f'Expression for {target} at/past 0x{pc:x}'
+                ExpressionDlg(self, title, rule.expr, self.expr_formatter).exec()
 
     def make_top(self, top_pane):
         top_pane.addWidget(make_rbutton_pair(("Ranges", "Entries"), self.set_view))        

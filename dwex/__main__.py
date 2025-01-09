@@ -17,7 +17,7 @@ from .unwind import UnwindDlg
 from .funcmap import FuncMapDlg, GatherFuncsThread
 
 # Sync with version in setup.py
-version = (4, 24)
+version = (4, 30)
 the_app = None
 
 # TODO:
@@ -128,8 +128,7 @@ class TheWindow(QMainWindow):
                 cu._exprparser = None
                 return cu
             di._unsorted_CUs = [decorate_cu(cu, i) for (i, cu) in enumerate(di.iter_CUs())] # We'll need them first thing, might as well load here
-            if not len(di._unsorted_CUs):
-                return None # Weird, but saw it once - debug sections present, but no CUs
+
             # For quick CU search by offset within the info section, regardless of sorting
             di._CU_offsets = [cu.cu_offset for cu in di._unsorted_CUs]
             di._CUs = list(di._unsorted_CUs)
@@ -144,9 +143,16 @@ class TheWindow(QMainWindow):
                 setup_explorer(self)
             self.dwarfinfo = di
             self.filename = filename
-            self.tree_model = DWARFTreeModel(di, self.prefix, self.sortcus, self.sortdies)
-            self.the_tree.setModel(self.tree_model)
-            self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
+            has_CUs = bool(len(di._unsorted_CUs))
+            if has_CUs:
+                self.tree_model = DWARFTreeModel(di, self.prefix, self.sortcus, self.sortdies)
+                self.the_tree.setModel(self.tree_model)
+                self.the_tree.selectionModel().currentChanged.connect(self.on_tree_selection)
+            else: # Loading a binary with no CUs - possible
+                self.tree_model = None
+                self.the_tree.setModel(None)
+                self.die_table.setModel(None)
+                self.details_table.setModel(None)
             s = os.path.basename(filename)
             if slice is not None:
                 s += ' (' + slice + ')'
@@ -161,23 +167,23 @@ class TheWindow(QMainWindow):
             self.forward_tbitem.setEnabled(False)
             self.followref_menuitem.setEnabled(False)
             self.followref_tbitem.setEnabled(False)
-            self.highlightcode_menuitem.setEnabled(True)
-            self.highlightsubstring_menuitem.setEnabled(True)
-            self.highlightcondition_menuitem.setEnabled(True)
-            self.highlightnothing_menuitem.setEnabled(True)
+            self.highlightcode_menuitem.setEnabled(has_CUs)
+            self.highlightsubstring_menuitem.setEnabled(has_CUs)
+            self.highlightcondition_menuitem.setEnabled(has_CUs)
+            self.highlightnothing_menuitem.setEnabled(has_CUs)
             self.copy_menuitem.setEnabled(False)
             self.copy_tbitem.setEnabled(False)
             self.copyline_menuitem.setEnabled(False)
             self.copytable_menuitem.setEnabled(False)
-            self.findbycondition_menuitem.setEnabled(True)
-            self.find_menuitem.setEnabled(True)
-            self.find_tbitem.setEnabled(True)
-            self.findip_menuitem.setEnabled(True)
-            self.byoffset_menuitem.setEnabled(True)
-            self.byoffset_tbitem.setEnabled(True)
-            self.localsat_menuitem.setEnabled(True)
-            self.funcmap_menuitem.setEnabled(True)
-            self.aranges_menuitem.setEnabled(True)
+            self.findbycondition_menuitem.setEnabled(has_CUs)
+            self.find_menuitem.setEnabled(has_CUs)
+            self.find_tbitem.setEnabled(has_CUs)
+            self.findip_menuitem.setEnabled(has_CUs)
+            self.byoffset_menuitem.setEnabled(has_CUs)
+            self.byoffset_tbitem.setEnabled(has_CUs)
+            self.localsat_menuitem.setEnabled(has_CUs)
+            self.funcmap_menuitem.setEnabled(has_CUs)
+            self.aranges_menuitem.setEnabled(has_CUs)
             self.frames_menuitem.setEnabled(True)
             self.unwind_menuitem.setEnabled(di._format in (1, 5))
             self.on_highlight_nothing()
@@ -701,7 +707,8 @@ class TheWindow(QMainWindow):
         self.highlightsubstring_menuitem.setChecked(False)
         self.highlightcondition_menuitem.setChecked(False)
         self.manage_hlnavigation(False)
-        self.tree_model.clear_highlight()
+        if self.tree_model:
+            self.tree_model.clear_highlight()
 
     def on_nexthl(self):
         index = self.tree_model.find(self.the_tree.currentIndex(), self.tree_model.is_highlighted, False)

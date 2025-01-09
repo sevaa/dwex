@@ -85,6 +85,8 @@ class ExprFormatter:
     # Operator codes differ in DWARFv1, thus the need for version
     # regnames: False for friendly names, True for DWARF names
     # prefix: False for friendly, True for DW_OP_xxx
+    # arch is for register name set selection
+    # dwarf_version only matters whether it is 1 or greater
     # address_delta is the addend that will account for a custom loading address
     def __init__(self, regnames, prefix, arch, dwarf_version, hex):
         self.regnames = regnames
