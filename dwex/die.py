@@ -1,15 +1,17 @@
 from bisect import bisect_right
+from collections.abc import Sequence
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex
 from PyQt6.QtGui import QBrush
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
-from elftools.dwarf.dwarf_expr import DWARFExprParser
+from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp
 from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _DESCR_DW_CC
 from elftools.common.exceptions import ELFParseError
 
-from dwex.exprutil import ExprFormatter
+from .exprutil import ExprFormatter, is_parsed_expression
 from .dwarfone import DWARFExprParserV1
 from .dwarfutil import *
 from .details import GenericTableModel, FixedWidthTableModel
+from .exprdlg import ExpressionTableModel, ExpressionDlg, op_has_nested_expression
 
 MAX_INLINE_BYTEARRAY_LEN = 32
 
@@ -45,7 +47,7 @@ class DIETableModel(QAbstractTableModel):
         self.expr_formatter.cfa_resolver = self.resolve_cfa
 
     from .ranges import show_ranges
-    from .locs import parse_location, show_location, resolve_cfa
+    from .locs import parse_location, show_location, show_loclist, resolve_cfa
 
     def headerData(self, section, ori, role):
         if ori == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
@@ -130,19 +132,35 @@ class DIETableModel(QAbstractTableModel):
                     return str(self.die.has_children)
         elif role == Qt.ItemDataRole.BackgroundRole:
             return _ltgrey_brush
+        
+    def parse_expr(self, expr):
+        """expr is a blob
+        """
+        if self.die.cu._exprparser is None:
+            self.die.cu._exprparser = DWARFExprParser(self.die.cu.structs) if self.die.cu['version'] > 1 else DWARFExprParserV1(self.die.cu.structs)
+        return self.die.cu._exprparser.parse_expr(expr)
+    
+    def format_op(self, op):
+        return self.expr_formatter.format_op(*op)
+    
+    def format_expr(self, expr, len_cutoff = None):
+        """expr is a list of parsed operations
+        """
+        if len_cutoff is not None and len(expr) > len_cutoff:
+            return '; '.join(self.format_op(op) for op in expr[:len_cutoff]) + f'...+{len(expr)-len_cutoff} more'
+        else:
+            return '; '.join(self.format_op(op) for op in expr)
 
     # Expr is an expression blob
     # Returns a list of strings for ops
     # Format: op arg, arg...
-    def dump_expr(self, expr):
-        if self.die.cu._exprparser is None:
-            self.die.cu._exprparser = DWARFExprParser(self.die.cu.structs) if self.die.cu['version'] > 1 else DWARFExprParserV1(self.die.cu.structs)
-
+    def dump_expr(self, expr, len_cutoff = None):
+        """expr is a blob"""
         # Challenge: for nested expressions, args is a list with a list of commands
         # For those, the format is: op {op arg, arg; op arg, arg}
         # Can't just check for iterable, str is iterable too
-        return [self.expr_formatter.format_op(*op) for op in self.die.cu._exprparser.parse_expr(expr)]
-
+        return self.format_expr(self.parse_expr(expr), len_cutoff)
+    
     # Big DIE attribute value interpreter for the top right table
     def format_value(self, attr):
         try:
@@ -167,7 +185,7 @@ class DIETableModel(QAbstractTableModel):
                 if ll is None:
                     return "(parse error - please report at github.com/sevaa/dwex)"
                 elif isinstance(ll, LocationExpr):
-                    return '; '.join(self.dump_expr(ll.loc_expr))
+                    return self.dump_expr(ll.loc_expr)
                 else:
                     return "Loc list: 0x%x" % attr.value
             elif key == 'DW_AT_language':
@@ -198,7 +216,7 @@ class DIETableModel(QAbstractTableModel):
             elif key == 'DW_AT_stmt_list':
                 return 'LNP at 0x%x' % val
             elif key in ('DW_AT_upper_bound', 'DW_AT_lower_bound') and is_block(form):
-                return '; '.join(self.dump_expr(val))
+                return self.dump_expr(val)
             elif isinstance(val, bytes):
                 if form in ('DW_FORM_strp', 'DW_FORM_string', 'DW_FORM_line_strp', 'DW_FORM_strp_sup',
                     'DW_FORM_strx', 'DW_FORM_strx1', 'DW_FORM_strx2', 'DW_FORM_strx3', 'DW_FORM_strx4'):
@@ -362,7 +380,7 @@ class DIETableModel(QAbstractTableModel):
                 # TODO: commands vs states
                 return GenericTableModel(('Address', 'File', 'Line', 'Stmt', 'Basic block', 'End seq', 'End prologue', 'Begin epilogue'), states)
             elif key in ('DW_AT_upper_bound', 'DW_AT_lower_bound') and is_block(form):
-                return GenericTableModel(("Command",), [(o,) for o in self.dump_expr(attr.value)])
+                return ExpressionTableModel(self.parse_expr(attr.value), self.expr_formatter)
             elif is_long_blob(attr):
                 val = attr.value
                 def format_line(off):
@@ -404,5 +422,12 @@ class DIETableModel(QAbstractTableModel):
     
     def format_tag(self, tag):
         return tag if self.prefix or not str(tag).startswith('DW_TAG_') else tag[7:]
+
+def on_details_row_dclick(index, o, win):
+    # For now, used for drilling into DWARF expressions
+    if isinstance(o, DWARFExprOp) and op_has_nested_expression(o):
+        ExpressionDlg(win, 'Nested expression', o.args[0], win.expr_formatter()).exec()
+    elif isinstance(o, Sequence) and is_parsed_expression(o[-1]):
+        ExpressionDlg(win, 'Expression', o[-1], win.expr_formatter()).exec()
 
 

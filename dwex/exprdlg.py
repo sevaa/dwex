@@ -3,9 +3,20 @@ from PyQt6.QtCore import Qt, QAbstractTableModel
 
 HEADERS = ('#', 'Offset', 'Operation')
 
-class ExpressionModel(QAbstractTableModel):
+def op_has_nested_expression(op):
+    return op.op in ('DW_OP_entry_value', 'DW_OP_GNU_entry_value')
+
+# TODO: low level maybe
+# Spell out args?
+# Opcode tooltips?
+class ExpressionTableModel(QAbstractTableModel):
+    # Expr is a list of operation objects
+    # Used also for expressions in the details pane
+    # Assumes double-clicks are caught by the table owner, elsewhere
+    # But presents "double-click for details
+    # The index data item is an operation namedtuple from DWARFExprParser
     def __init__(self, expr, formatter):
-        QAbstractTableModel.__init__(self)
+        super().__init__()
         self.expr = expr
         self.formatter = formatter
 
@@ -33,7 +44,7 @@ class ExpressionModel(QAbstractTableModel):
             else:
                 return self.formatter.format_op(*op)
         elif role == Qt.ItemDataRole.ToolTipRole:
-            if col == 2 and op.op in ('DW_OP_entry_value', 'DW_OP_GNU_entry_value'):
+            if col == 2 and op_has_nested_expression(op):
                 return 'Double-click for details'
 
 # TODO: a dialog with a table and a close button should be reused elsewhere
@@ -43,12 +54,12 @@ class ExpressionModel(QAbstractTableModel):
 # This is a dialog for browsing DWARF expressions, not entering Python expressions
 class ExpressionDlg(QDialog):
     def __init__(self, win, title, e, f):
-        QDialog.__init__(self, win, Qt.WindowType.Dialog)
+        super().__init__(win, Qt.WindowType.Dialog)
         self.setWindowTitle(title)
         self.resize(500, 400)
 
         entries = self.entries = QTableView()
-        entries.setModel(ExpressionModel(e, f))
+        entries.setModel(ExpressionTableModel(e, f))
         header = entries.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -67,7 +78,7 @@ class ExpressionDlg(QDialog):
 
     def on_line_dclick(self, index):
         op = index.internalPointer()
-        if op.op in ('DW_OP_entry_value', 'DW_OP_GNU_entry_value'):
+        if op_has_nested_expression(op):
             title = f'Nested expression in {op.op} at 0x{op.offset:x}'
             ExpressionDlg(self, title, op.args[0], self.formatter).exec()
 

@@ -1,10 +1,12 @@
 from elftools.dwarf.locationlists import LocationParser, LocationExpr, BaseAddressEntry
 from elftools.common.exceptions import ELFParseError
 from elftools.dwarf.callframe import FDE
+
+from .exprdlg import ExpressionTableModel
 from .details import GenericTableModel
 from .dwarfutil import *
 from .ranges import lowlevel_v5_tooltips, one_of
-from .exprutil import format_offset
+from .exprutil import format_offset, is_parsed_expression
 
 def parse_location(self, attr):
     di = self.die.dwarfinfo
@@ -66,11 +68,11 @@ def show_location(self, attr):
     ll = self.parse_location(attr)
     if ll is None:
         return None
-    elif isinstance(ll, LocationExpr):
+    elif isinstance(ll, LocationExpr): # Location expression: spell out the commands in the details window
         if ll.loc_expr == [156] and has_code_location(self.die): # Special case of a single call_frame_cfa instruction
             def desc_CFA_rule(rule):
                 if rule.expr is not None:
-                    return '; '.join(self.dump_expr(rule.expr))
+                    return self.dump_expr(rule.expr)
                 else:
                     return self.expr_formatter.format_regoffset(rule.reg, rule.offset)
 
@@ -79,96 +81,110 @@ def show_location(self, attr):
             lines = [(f"0x{pc:x}", desc_CFA_rule(cfa_rule)) for (pc, cfa_rule) in rules]
             return GenericTableModel(("Address", "CFA expression"), lines)
         else:
-            # TODO: low level maybe
-            # Spell out args?
-            # Opcode tooltips?            
-            return GenericTableModel(("Command",), ((cmd,) for cmd in self.dump_expr(ll.loc_expr)))
-    else: # Loclist
-        cu_base = None
-        def base_for_entry(l): # May throw NoBaseException
-            nonlocal cu_base
-            if l.is_absolute:
-                return 0
-            else:
-                if cu_base is None:
-                    cu_base = get_cu_base(self.die) # Throws here
-                return cu_base
+            return ExpressionTableModel(self.parse_expr(ll.loc_expr), self.expr_formatter)
+    else: # Loclist - location lines in the details window, double-click navigates to expression
+        return self.show_loclist(ll, attr.value)
+    
+def show_loclist(self, ll, ll_offset):
+    # Returns a table model for a loclist
+    cu_base = None
+    def base_for_entry(l): # May throw NoBaseException
+        nonlocal cu_base
+        if l.is_absolute:
+            return 0
+        else:
+            if cu_base is None:
+                cu_base = get_cu_base(self.die) # Throws here
+            return cu_base
 
-        values = list()
-        if self.lowlevel:
-            ver5 = self.die.cu['version'] >= 5
-            if ver5:
-                headers = ("Entry offset", "Type", "Start/Index/Base", "End/Index/Length", "Start address", "End address", "Expr bytes", "Expression")
-                raw_ll = self.die.dwarfinfo.location_lists().get_location_lists_at_offset_ex(attr.value, self.die)
-            else:
-                headers = ("Entry offset", "Type", "Start address", "End address", "Expr bytes", "Expression")
-            for (i, l) in enumerate(raw_ll if ver5 else ll):
-                if ver5: #l is raw
-                    raw = l
-                    l = ll[i] # Translated entry
+    values = list()
+    lowlevel = self.lowlevel
+    if lowlevel:
+        ver5 = self.die.cu['version'] >= 5
+        if ver5:
+            headers = ("Entry offset", "Type", "Start/Index/Base", "End/Index/Length", "Start address", "End address", "Expr bytes", "Expression")
+            raw_ll = self.die.dwarfinfo.location_lists().get_location_lists_at_offset_ex(ll_offset, self.die)
+        else:
+            headers = ("Entry offset", "Type", "Start address", "End address", "Expr bytes", "Expression")
+        for (i, l) in enumerate(raw_ll if ver5 else ll):
+            if ver5: #l is raw
+                raw = l
+                l = ll[i] # Translated entry
 
-                if isinstance(l, BaseAddressEntry):
-                    cu_base = l.base_address
-                    if ver5:
-                        (raw_base_type, raw_base) = one_of(raw, ('index','address'))
-                        values.append((hex(l.entry_offset),
-                            raw.entry_type if self.prefix else raw.entry_type[7:],
-                            hex(raw_base) if raw_base_type == 1 else str(raw_base),
-                            '',
-                            hex(l.base_address),
-                            '', '', ''))
-                    else:
-                        values.append((hex(l.entry_offset), 'Base', hex(l.base_address), '', '', ''))
+            if isinstance(l, BaseAddressEntry):
+                cu_base = l.base_address
+                if ver5:
+                    (raw_base_type, raw_base) = one_of(raw, ('index','address'))
+                    values.append((hex(l.entry_offset),
+                        raw.entry_type if self.prefix else raw.entry_type[7:],
+                        hex(raw_base) if raw_base_type == 1 else str(raw_base),
+                        '',
+                        hex(l.base_address),
+                        '', '', ''))
                 else:
-                    try: # Catching #1609
-                        expr_dump = '; '.join(self.dump_expr(l.loc_expr))
-                    except KeyError as exc:
-                        expr_dump = "<unrecognized expression>"
-                        from .__main__ import version
-                        from .crash import report_crash
-                        from inspect import currentframe
-                        report_crash(exc, exc.__traceback__, version, currentframe())
-                    base = base_for_entry(l)
-                    if ver5:
-                        is_def_loc = raw.entry_type == 'DW_LLE_default_location'
-                        (raw_start_type, raw_start) = one_of(raw, ('index', 'start_index', 'start_offset', 'start_address'))
-                        (raw_end_type, raw_end) = one_of(raw, ('end_index', 'length', 'end_offset', 'end_address'))
-                        values.append((hex(l.entry_offset),
-                            raw.entry_type if self.prefix else raw.entry_type[7:],
-                            '' if is_def_loc else (hex(raw_start) if raw_start_type >= 2 else str(raw_start)),
-                            '' if is_def_loc else (hex(raw_end) if raw_end_type >= 2 or (raw_end_type == 1 and self.hex) else str(raw_end)),
-                            hex(base + l.begin_offset),
-                            hex(base + l.end_offset),
-                            ' '.join("%02x" % b for b in l.loc_expr),
-                            expr_dump))
-                    else:
-                        values.append((hex(l.entry_offset),
-                            'Range',
-                            hex(base + l.begin_offset),
-                            hex(base + l.end_offset),
-                            ' '.join("%02x" % b for b in l.loc_expr),
-                            expr_dump))
-        else: # Not low level
-            headers = ("Start address", "End address", "Expression")
-            for l in ll:
-                if 'base_address' in l._fields:
-                    cu_base = l.base_address
-                else:
-                    try: # Catching #1609
-                        expr_dump = '; '.join(self.dump_expr(l.loc_expr))
-                    except KeyError as exc:
-                        expr_dump = "<unrecognized expression>"
-                        from .__main__ import version
-                        from .crash import report_crash
-                        from inspect import currentframe
-                        report_crash(exc, exc.__traceback__, version, currentframe())
-                    base = base_for_entry(l)
-                    values.append((hex(base + l.begin_offset),
+                    values.append((hex(l.entry_offset), 'Base', hex(l.base_address), '', '', ''))
+            else:
+                try: # Catching #1609
+                    expr = self.parse_expr(l.loc_expr)
+                    expr_dump = self.format_expr(expr, 5)
+                except KeyError as exc:
+                    expr = None
+                    expr_dump = "<unrecognized expression>"
+                    from .__main__ import version
+                    from .crash import report_crash
+                    from inspect import currentframe
+                    report_crash(exc, exc.__traceback__, version, currentframe())
+                base = base_for_entry(l)
+                if ver5:
+                    is_def_loc = raw.entry_type == 'DW_LLE_default_location'
+                    (raw_start_type, raw_start) = one_of(raw, ('index', 'start_index', 'start_offset', 'start_address'))
+                    (raw_end_type, raw_end) = one_of(raw, ('end_index', 'length', 'end_offset', 'end_address'))
+                    values.append((hex(l.entry_offset),
+                        raw.entry_type if self.prefix else raw.entry_type[7:],
+                        '' if is_def_loc else (hex(raw_start) if raw_start_type >= 2 else str(raw_start)),
+                        '' if is_def_loc else (hex(raw_end) if raw_end_type >= 2 or (raw_end_type == 1 and self.hex) else str(raw_end)),
+                        hex(base + l.begin_offset),
                         hex(base + l.end_offset),
-                        expr_dump))
-                    
-        return GenericTableModel(headers, values,
-            get_tooltip=lambda row, col: lowlevel_v5_tooltips(raw_ll[row], col-2) if self.lowlevel and ver5 else None)
+                        ' '.join("%02x" % b for b in l.loc_expr),
+                        expr_dump,
+                        expr))
+                else:
+                    values.append((hex(l.entry_offset),
+                        'Range',
+                        hex(base + l.begin_offset),
+                        hex(base + l.end_offset),
+                        ' '.join("%02x" % b for b in l.loc_expr),
+                        expr_dump,
+                        expr))
+    else: # Not low level
+        headers = ("Start address", "End address", "Expression")
+        for l in ll:
+            if 'base_address' in l._fields:
+                cu_base = l.base_address
+            else:
+                try: # Catching #1609
+                    expr = self.parse_expr(l.loc_expr)
+                    expr_dump = self.format_expr(expr, 5)
+                except KeyError as exc:
+                    expr = None
+                    expr_dump = "<unrecognized expression>"
+                    from .__main__ import version
+                    from .crash import report_crash
+                    from inspect import currentframe
+                    report_crash(exc, exc.__traceback__, version, currentframe())
+                base = base_for_entry(l)
+                values.append((hex(base + l.begin_offset),
+                    hex(base + l.end_offset),
+                    expr_dump,
+                    expr))
+                
+    def get_tooltip(row, col, entry):
+        if len(entry) >= 2 and is_parsed_expression(entry[-1]):
+            return 'Double-click for details'
+        elif lowlevel and ver5:
+            return lowlevel_v5_tooltips(raw_ll[row], col-2)
+
+    return GenericTableModel(headers, values, get_tooltip=get_tooltip)
     
 def resolve_cfa(self):
     rules = [r['cfa'] for r in get_frame_rules_for_die(self.die) if 'cfa' in r]

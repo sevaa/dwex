@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, QModelIndex, QSettings, QUrl, QEvent
 from PyQt6.QtGui import QFontMetrics, QDesktopServices, QWindow
 from PyQt6.QtWidgets import *
 
-from .die import DIETableModel
+from .die import DIETableModel, on_details_row_dclick
 from .formats import read_dwarf, get_debug_sections, load_companion_executable, FormatError, section_bytes, write_to_file
 from .dwarfutil import get_code_location, get_di_frames, has_code_location, ip_in_range, subprogram_name
 from .tree import DWARFTreeModel, cu_sort_key
@@ -36,7 +36,7 @@ class DWARFParseError(Exception):
 
 class TheWindow(QMainWindow):
     def __init__(self):
-        QMainWindow.__init__(self)
+        super().__init__()
         self.sett = None
         self.in_tree_nav = False
         self.font_metrics = QFontMetrics(QApplication.font())
@@ -410,8 +410,9 @@ class TheWindow(QMainWindow):
             self.details_table.setModel(details_model)
             if details_model is not None:
                 self.details_table.resizeColumnsToContents()
-                self.details_warning.setVisible(details_model.warning is not None)
-                if details_model.warning is not None:
+                has_warning = hasattr(details_model, 'warning') and details_model.warning is not None
+                self.details_warning.setVisible(has_warning)
+                if has_warning:
                     self.details_warning.setText(details_model.warning)
             else:
                 self.details_warning.setVisible(False)
@@ -467,16 +468,9 @@ class TheWindow(QMainWindow):
     def on_followref(self):
         self.followref()
 
-    # Back-forward mouse buttons are shortcuts for back/forward navigation
-    # Qt docs claim capturing is not necessary
-    #def mouseReleaseEvent(self, evt):
-    #    QMainWindow.mouseReleaseEvent(self, evt)
-    #    b = evt.button()
-    #    if b == Qt.MouseButton.BackButton:
-    #        self.on_nav(1)
-    #    elif b == Qt.MouseButton.ForwardButton:
-    #        self.on_nav(-1)
-        
+    def on_details_dclick(self, index):
+        if index.isValid():
+            on_details_row_dclick(index, index.internalPointer(), self)
 
     ##########################################################################
     # Find/Find next stuff
@@ -855,6 +849,9 @@ class TheWindow(QMainWindow):
     def show_warning(self, s):
         QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", s, QMessageBox.StandardButton.Ok, self).show()
 
+    def expr_formatter(self):
+        return self.die_model.expr_formatter
+
 def on_exception(exctype, exc, tb):
     if isinstance(exc, MemoryError):
         app = QApplication.instance()
@@ -879,7 +876,7 @@ def on_exception(exctype, exc, tb):
 
 class TheApp(QApplication):
     def __init__(self):
-        QApplication.__init__(self, [])
+        super().__init__([])
         self.win = None
 
     def notify(self, o, evt):

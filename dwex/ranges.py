@@ -102,4 +102,4 @@ def show_ranges(self, attr):
         headers = ("Start address", "End address")
         
     return GenericTableModel(headers, lines, warn,
-        get_tooltip=lambda row, col: lowlevel_v5_tooltips(ranges[row], col-2) if v5 and ll else None)
+        get_tooltip=lambda row, col, _: lowlevel_v5_tooltips(ranges[row], col-2) if v5 and ll else None)

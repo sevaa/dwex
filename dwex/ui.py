@@ -255,6 +255,7 @@ def setup_explorer(win):
     details_table = win.details_table = QTableView()
     details_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     details_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+    details_table.doubleClicked.connect(win.on_details_dclick)
     rbpane.addWidget(details_table)
     rbp = QWidget()
     rbp.setLayout(rbpane)

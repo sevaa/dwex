@@ -82,4 +82,4 @@ with gtk based UI. It's been inactive since 2015. I didn't know about it when I 
 Pairs well with
 ---------------
 
-For a free general purpose GUI ELF file visualizer, see [horsicq/XELFViewer](https://github.com/horsicq/XELFViewer).
+For a free general purpose GUI ELF file visualizer, see [horsicq/XELFViewer](https://github.com/horsicq/XELFViewer). They also have a viewer for [Mach-O](https://github.com/horsicq/XMachOViewer) and [PE](https://github.com/horsicq/XPEViewer) binaries.

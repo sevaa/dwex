@@ -177,3 +177,8 @@ def format_offset(offset):
         return "+0x%x" % (offset,)
     else:
         return "-0x%x" % (-offset,)
+    
+def is_parsed_expression(l):
+    """If the arg is a list, and the first element in the list is a DWARFExprOp
+    """
+    return isinstance(l, list) and len(l) and isinstance(l[0], DWARFExprOp)
