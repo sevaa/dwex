@@ -133,8 +133,8 @@ def strip_path(filename):
     return filename[p+1:] if p >= 0 else filename
 
 def top_die_file_name(die, Default = 'N/A'):
-    if 'DW_AT_name' in die.attributes:
-        source_name = die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
+    if DIE_has_name(die):
+        source_name = DIE_name(die)
         return strip_path(source_name)
     elif 'DW_AT_decl_file' in die.attributes:
         val = die.attributes['DW_AT_decl_file'].value
@@ -145,8 +145,14 @@ def top_die_file_name(die, Default = 'N/A'):
             return strip_path(die.cu._lineprogram.header.file_entry[val-delta].name.decode('utf-8', errors='ignore'))
     return Default
 
+ # See #1742
+def DIE_has_name(die):
+    """DIE object has a name attribute and the name is bytes or compatible
+    """
+    return 'DW_AT_name' in die.attributes and die.attributes['DW_AT_name'].value is not None and hasattr(die.attributes['DW_AT_name'].value, 'decode')
+
 def safe_DIE_name(die, default = ''):
-    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes and die.attributes['DW_AT_name'].value is not None else default
+    return die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore') if 'DW_AT_name' in die.attributes and die.attributes['DW_AT_name'].value is not None and hasattr(die.attributes['DW_AT_name'].value, 'decode') else default
 
 def follow_ref_if_present(die, attr_name):
     return die.get_DIE_from_attribute(attr_name) if attr_name in die.attributes else die
@@ -565,3 +571,6 @@ def parse_location(loc, cu, address):
         return list((DWARFExprParser(cu.structs) if cu['version'] > 1 else DWARFExprParserV1(cu.structs)).parse_expr(loc_expr))
     else:
         return []
+
+def quote_filename(fn):
+    return f'"{fn}"' if ' ' in fn else fn

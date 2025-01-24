@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import *
 
 from .die import DIETableModel, on_details_row_dclick
 from .formats import read_dwarf, get_debug_sections, load_companion_executable, FormatError, section_bytes, write_to_file
-from .dwarfutil import get_code_location, get_di_frames, has_code_location, ip_in_range, subprogram_name
+from .dwarfutil import get_code_location, get_di_frames, has_code_location, ip_in_range, quote_filename, subprogram_name
 from .tree import DWARFTreeModel, cu_sort_key
 from .scriptdlg import ScriptDlg, make_execution_environment
 from .ui import setup_explorer, setup_ui
@@ -17,7 +17,7 @@ from .unwind import UnwindDlg
 from .funcmap import FuncMapDlg, GatherFuncsThread
 
 # Sync with version in setup.py
-version = (4, 30)
+version = (4, 31)
 the_app = None
 
 # TODO:
@@ -66,7 +66,7 @@ class TheWindow(QMainWindow):
         elif os.environ.get("DWEX_LOADLAST") is not None and len(self.mru) > 0:
             fa = self.mru[0]
             if os.path.exists(fa[0]):
-                self.open_file_interactive(*fa)
+                self.open_file(*fa)
 
 
     def load_settings(self):
@@ -115,6 +115,7 @@ class TheWindow(QMainWindow):
     def load_dwarfinfo(self, di, filename, arch):
         # Arch comes from opening with arch (via MRU), not from the interactive selection
         # Some degree of graceful handling of wrong format
+        # File name in case of Mach-O bundles refers to the bundle path, not to the binary path within
         try:
             slice = di._fat_arch if hasattr(di, '_fat_arch') else None
             # Some cached top level stuff

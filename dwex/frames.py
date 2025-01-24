@@ -113,8 +113,10 @@ class DecodedEntryModel(QAbstractTableModel):
                 rule = line['cfa']
                 if rule.expr is not None:
                     return '(expr)' # TODO!!!
-                else:
+                elif rule.reg is not None:
                     return self.regname(rule.reg) + format_offset(rule.offset)
+                else:
+                    return '(unclear)' # TODO: catch? #1743
             else:
                 regno = self.table.reg_order[col-2]
                 if regno in line:

@@ -418,7 +418,7 @@ def read_elf(file, filename):
     from elftools.elf.elffile import ELFFile
     file.seek(0)
     # TODO: interactive supplemental DWARF resolver here...
-    elffile = ELFFile(file, lambda s: open(path.join(path.dirname(filename), s), 'rb'))
+    elffile = ELFFile(file, lambda s: open(path.join(path.dirname(filename), s.decode('UTF-8')), 'rb'))
 
     # Retrieve the preferred loading address
     load_segment = next((seg for seg in elffile.iter_segments() if seg.header.p_type == 'PT_LOAD'), None)
@@ -547,14 +547,16 @@ def read_staticlib(file, resolve_slice):
         di._fat_arch = names[slice]
     return di
 
-# UI agnostic - resolve_arch might be interactive
-# Returns slightly augmented DWARFInfo
-# Or None if not a DWARF containing file (or unrecognized)
-# Or False if user has cancelled
-# Or throws an exception
-# resolve_arch is for Mach-O fat binaries - see read_macho()
-# and repurposed for .a static libraries
 def read_dwarf(filename, resolve_arch):
+    """ UI agnostic - resolve_arch might be interactive
+        Returns slightly augmented DWARFInfo
+        Or None if not a DWARF containing file (or unrecognized)
+        Or False if user has cancelled
+        Or throws an exception
+        resolve_arch is for Mach-O fat binaries - see read_macho()
+        and repurposed for .a static libraries
+        Primary point of call is open_file() in main
+    """
     if path.isfile(filename): # On MacOS, opening dSYM bundles as is would be right, and they are technically folders
         with open(filename, 'rb') as file:
             xsignature = file.read(8)

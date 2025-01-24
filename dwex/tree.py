@@ -1,10 +1,10 @@
 from bisect import bisect_left, bisect_right
 from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex
-from PyQt6.QtGui import QFont, QFontInfo, QBrush
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtGui import QFontInfo, QBrush
+from PyQt6.QtWidgets import QApplication
 
 from .fx import bold_font
-from .dwarfutil import has_code_location, safe_DIE_name, top_die_file_name
+from .dwarfutil import DIE_has_name, DIE_name, has_code_location, safe_DIE_name, top_die_file_name
 
 def cu_sort_key(cu):
     return top_die_file_name(cu.get_top_DIE()).lower()
@@ -104,8 +104,8 @@ class DWARFTreeModel(QAbstractItemModel):
                     s = ('DW_TAG_user_%X' if self.prefix else 'user_%X') % die.tag
                 else:
                     s = die.tag if self.prefix or not str(die.tag).startswith('DW_TAG_') else die.tag[7:]
-                if 'DW_AT_name' in die.attributes and die.attributes['DW_AT_name'].value is not None:
-                    s += ": " + die.attributes['DW_AT_name'].value.decode('utf-8', errors='ignore')
+                if DIE_has_name(die):
+                    s += ": " + DIE_name(die)
                 return s
         elif role == Qt.ItemDataRole.ToolTipRole:
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
