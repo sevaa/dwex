@@ -7,7 +7,7 @@ from .fx import wait_with_events
 
 # This doesn't depend on Qt
 # The dependency on filebytes only lives here
-# Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM, 4 - ELF inside A, 5 - arch specific MachO inside A
+# Format codes: 0 = ELF, 1 = MACHO, 2 = PE, 3 - WASM, 4 - ELF inside A, 5 - arch specific MachO inside A, 6 - MachO inside A inside a fat binary
 
 class FormatError(Exception):
     def __init__(self, s):
@@ -37,7 +37,7 @@ def read_pe(filename):
                     raise FormatError("Compressesed section %s is unexpectedly short." % (name,))
                 if data[0:4] != b'ZLIB':
                     raise FormatError("Unsupported format in compressesed section %s, ZLIB is expected." % (name,))
-                (size,) = struct.unpack_from('>Q', data, offset=4)
+                (size,) = struct.unpack_from('>Q', data, offset=4) #TODO, replace, no need to bring structs over this
                 data = zlib.decompress(data[12:])
                 if len(data) != size:
                     raise FormatError("Wrong uncompressed size in compressesed section %s: expected %d, got %d." % (name, size, len(data)))
@@ -84,22 +84,28 @@ def read_pe(filename):
         raise FormatError("Error parsing the binary.\n" + str(err))
 
 ########################################################################
-######################### MachO
+######################### Mach-O
 ########################################################################
 
-# Arch + flavor where flavor matters
-def make_macho_arch_name(macho):
+# CPU type, CPU subtupe - numeric
+def make_macho_arch_name_raw(c, st):
     from filebytes.mach_o import CpuType, CpuSubTypeARM, CpuSubTypeARM64
-    h = macho.machHeader.header
-    c = h.cputype
-    st = h.cpusubtype
     flavor = ''
     if st != 0:
         if c == CpuType.ARM:
             flavor = CpuSubTypeARM[st].name
         elif c == CpuType.ARM64:
-            flavor = CpuSubTypeARM64[st].name
+            # With ARM64E, ABI flags are in the subuppermost byte
+            # They don't seem to be acknowledged by dump tools
+            # https://llvm.org/doxygen/BinaryFormat_2MachO_8h.html
+            flavor = CpuSubTypeARM64[st & 0xffffff].name
     return CpuType[c].name + flavor
+
+# Arch + flavor where flavor matters
+# The arg is a slice object or a MachO object
+def make_macho_arch_name(macho):
+    h = macho.machHeader.header
+    return make_macho_arch_name_raw(h.cputype, h.cpusubtype)
         
 # For debugging purposes only - dump individual debug related sections in a Mach-O file/slice as files
 def macho_save_sections(filename, macho):
@@ -114,26 +120,75 @@ def macho_save_sections(filename, macho):
                         write_to_file(sec_file, section.bytes)
 
 
+_MACHO_fat_header = False
+
 # resolve_arch takes a list of architecture descriptions, and returns
-# the desired index, or None if the user has cancelled
+# the desired index/multiindex, or None if the user has cancelled
+# file read position should be past the fat signature
 # filename is a real file name, not bundle 
-def read_macho(filename, resolve_arch):
-    from filebytes.mach_o import MachO, BinaryError
-    try:
-        fat_arch = None
-        macho = MachO(filename)
-        if macho.isFat:
-            slices = [make_macho_arch_name(slice) for slice in macho.fatArches]
-            arch_no = resolve_arch(slices, 'Mach-O Fat Binary', 'Choose an architecture:')
-            if arch_no is None: # User cancellation
-                return False
-            fat_arch = slices[arch_no]
-            macho = macho.fatArches[arch_no]
+def read_fat_macho(file, resolve_arch):
+    global _MACHO_fat_header
+    if not _MACHO_fat_header:
+        from elftools.construct import PrefixedArray, Struct, UBInt32
+        _MACHO_fat_header = PrefixedArray(
+            Struct('MACHOFatSlice',
+                UBInt32('cputype'),
+                UBInt32('cpusubtype'),
+                UBInt32('offset'),
+                UBInt32('size'),
+                UBInt32('align')),
+            UBInt32(''))
 
-        return get_macho_dwarf(macho, fat_arch)
-    except BinaryError as err:
-        raise FormatError("Error parsing the binary.\n" + str(err))
+    arches = _MACHO_fat_header.parse_stream(file)
+    # Fat executable binary or fat static lib?
+    slice_names = list()
+    libs_by_arch = dict() # Arch index to lib file list
+    for (i, arch) in enumerate(arches):
+        arch_name = make_macho_arch_name_raw(arch.cputype, arch.cpusubtype)
+        file.seek(arch.offset, os.SEEK_SET)
+        signature = file.read(8)
+        if signature[:4] in (b'\xFE\xED\xFA\xCE', b'\xFE\xED\xFA\xCF', b'\xCE\xFA\xED\xFE', b'\xCF\xFA\xED\xFE'):
+            slice_names.append(arch_name)
+        elif signature == b'!<arch>\n':
+            lib_headers = scan_staticlib(file, arch.size)
+            libs_by_arch[i] = lib_headers
+            slice_names.append((arch_name, tuple(h.name.decode('UTF-8') for h in lib_headers))) # TODO: encoding
+        else:
+            raise FormatError(f"Slice #{i+1} in this file is of unrecognized or unsupported type: {''.join('%02X' % b for b in signature)}. Let the author know")
 
+    arch_no = resolve_arch(slice_names, 'Mach-O Fat Binary', 'Choose an architecture:')
+    if arch_no is None: # User cancellation
+        return False
+    if isinstance(arch_no, tuple):
+        (arch_no, file_no) = arch_no
+        slice_code = (slice_names[arch_no][0], slice_names[arch_no][1][file_no])
+    else:
+        slice_code = (slice_names[arch_no],)
+        file_no = None
+
+    if file_no is not None: # Object inside lib inside fat binary
+        libfile = libs_by_arch[arch_no][file_no]
+        offset = libfile.data_offset
+        size = libfile.size
+        format = 6 # file inside lib inside fat
+    else:
+        slice = arches[arch_no]
+        offset = slice.offset
+        size = slice.size
+        format = 1 # Plain Mach-O or slice inside fat
+
+    file.seek(offset)
+    data = file.read(size) # TODO: avoid copying? Hand-parse MachO maybe
+    macho = open_macho('', data)
+    di = get_macho_dwarf(macho, slice_code)
+    if di:
+        di._format = format
+    return di
+
+# Only used for nonfat, standalone macho files.    
+def read_macho(filename):
+    macho = open_macho(filename) # Not fat - checked upstack
+    return get_macho_dwarf(macho, None)
 
 # TODO, but debug the command line location logic first
 def locate_dsym(uuid):
@@ -162,8 +217,9 @@ def macho_arch_code(macho):
     h = macho.machHeader.header
     return (h.cputype, h.cpusubtype)
 
-def get_macho_dwarf(macho, fat_arch):
-    from filebytes.mach_o import CpuType, TypeFlags, LC, MH
+def get_macho_dwarf(macho, slice_code):
+    """Slice_code is (arch_name,) or (arch_name, file_name) or None"""
+    from filebytes.mach_o import TypeFlags, LC, MH
     # We proceed with macho being a arch-specific file, or a slice within a fat binary
     sections = {
         section.name: section.bytes
@@ -173,11 +229,12 @@ def get_macho_dwarf(macho, fat_arch):
         if (section.name.startswith('__debug') or section.name in ('__eh_frame', '__unwind_info')) and section.header.offset > 0
     }
 
-    uuid = next(cmd for cmd in macho.loadCommands if cmd.header.cmd == LC.UUID).uuid
+    uuid_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd == LC.UUID), None)
+    uuid = uuid_cmd.uuid if uuid_cmd else None
     # a bytes with a hex representation of the binary GUID 
 
     if not '__debug_info' in sections:
-        if macho.machHeader.header.filetype == MH.EXECUTE:
+        if macho.machHeader.header.filetype == MH.EXECUTE and uuid:
             # TODO: locate dSYM by UUID
             dsym_path = locate_dsym(uuid)
             if dsym_path:
@@ -250,9 +307,9 @@ def get_macho_dwarf(macho, fat_arch):
         gnu_debugaltlink_sec = data.get('__gnu_debugaltlink')
     )
     di._unwind_sec = sections.get('__unwind_info') # VERY unlikely to be None
-    di._format = 1
+    di._format = 1 # Will be adjusted later if Mach-O within A within fat Mach-O
     di._arch_code = macho_arch_code(macho)
-    di._fat_arch = fat_arch
+    di._slice_code = slice_code
     di._uuid = uuid
     text_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == "__TEXT"), False)
     di._start_address = text_cmd.header.vmaddr if text_cmd else 0
@@ -260,8 +317,19 @@ def get_macho_dwarf(macho, fat_arch):
     di._has_exec = False
     return di
 
+def open_macho(filename, contents=None):
+    """ Wrapper around the filebytes' MachO constructor
+        that translates filebytes' exceptions to our own
+    """
+    from filebytes.mach_o import MachO, BinaryError
+    try:
+        return MachO(filename, contents)
+    except BinaryError as err:
+        raise FormatError("Error parsing the binary.\n" + str(err))
+
+# TODO: don't load the whole binary, load just the right slice
 def load_companion_executable(filename, di):
-    from filebytes.mach_o import MachO, LC, BinaryError, MH
+    from filebytes.mach_o import LC, MH
     if path.isdir(filename):
         binary = binary_from_bundle(filename)
         if not binary:
@@ -269,15 +337,11 @@ def load_companion_executable(filename, di):
     else:
         binary = filename
     
-    try:
-        macho = MachO(binary)
-    except BinaryError:
-        raise FormatError("This file is not a valid Mach-O binary.")
-    
+    macho = open_macho(binary)
     if macho.isFat:
         macho = next((slice for slice in macho.fatArches if macho_arch_code(slice) == di._arch_code), None)
         if macho is None:
-            arch = di._fat_arch
+            arch = make_macho_arch_name_raw(*di._arch_code)
             raise FormatError(f"This binary does not contain a slice for {arch}.")
     elif macho_arch_code(macho) != di._arch_code:
         raise FormatError(f"The architecture of this binary does not match that of the curernt DWARF, which is {arch}.")
@@ -447,10 +511,13 @@ _ar_file_header = namedtuple('ARHeader', ('header_offset', 'data_offset',
                                           #'last_mod_date', 'user_id', 'group_id', 'mode',
                                           'size'))
 
-# resolve_slice takes a list of files in the archive, and returns
-# the desired index, or None if the user has cancelled
-def read_staticlib(file, resolve_slice):
-    from io import BytesIO
+
+def scan_staticlib(file, size):
+    """Returns an array of headers.
+       file read position should be past the A signature.
+       size should include the A signature
+       Offsets are relative to the file top, not to the position on entry
+    """
     long_names = False
     def read_header():
         header_offset = file.tell()
@@ -490,9 +557,8 @@ def read_staticlib(file, resolve_slice):
 
     ############################
     # read_staticlib starts here
-    file.seek(0, os.SEEK_END)
-    size = file.tell()
-    file.seek(8) # Past the magic signature
+
+    top_offset = file.tell()-8
 
     # First section most likely a symtab - skip
     header = read_header() 
@@ -502,7 +568,7 @@ def read_staticlib(file, resolve_slice):
         # if header.size % 2 == 1:
         #    file.seek(1, os.SEEK_CUR)
     else: # Skip back
-        file.seek(header.header_offset)
+        file.seek(header.header_offset, os.SEEK_SET)
 
     # Probably a long file name directory - read and keep
     header = read_header() 
@@ -511,14 +577,25 @@ def read_staticlib(file, resolve_slice):
         if header.size % 2 == 1:
             file.seek(1, os.SEEK_CUR)
     else: # It's a file, skip back
-        file.seek(header.header_offset)
+        file.seek(header.header_offset, os.SEEK_SET)
         
     # Read all file headers, build a list
     headers = list()
-    while file.tell() < size:
+    while file.tell() - top_offset < size:
         header = read_header()
         headers.append(header)
         skip_content(header)
+    return headers
+
+# resolve_slice takes a list of files in the archive, and returns
+# the desired index, or None if the user has cancelled
+def read_staticlib(file, resolve_slice):
+    from io import BytesIO
+
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(8) # Past the magic signature    
+    headers = scan_staticlib(file, size)
 
     # Present the user with slice choice
     # TODO: encoding?
@@ -530,13 +607,16 @@ def read_staticlib(file, resolve_slice):
     header = headers[slice]
     file.seek(header.data_offset)
     b = file.read(header.size)
+    slice_code = (names[slice],)
     # We support ELF and MachO static libraries so far
     if b[:4] == b'\x7FELF':
         di = read_elf(BytesIO(b), None)
+        if di:
+            di._slice_code = slice_code
     elif b[:4] in (b'\xFE\xED\xFA\xCE', b'\xFE\xED\xFA\xCF', b'\xCE\xFA\xED\xFE', b'\xCF\xFA\xED\xFE'):
         from filebytes.mach_o import MachO
-        macho = MachO(None, b)
-        di = get_macho_dwarf(macho, None)
+        macho = open_macho(None, b)
+        di = get_macho_dwarf(macho, slice_code)
     elif b[:4] == b'\xCA\xFE\xBA\xBE':
         raise FormatError("The selected slice of the static library is a Mach-O fat binary. Those are not supported. Let the author know.")
     else:
@@ -544,8 +624,11 @@ def read_staticlib(file, resolve_slice):
     
     if di:
         di._format += 4
-        di._fat_arch = names[slice]
     return di
+
+#########################################################################
+######################## The main entry point - file in, DWARF out
+#########################################################################
 
 def read_dwarf(filename, resolve_arch):
     """ UI agnostic - resolve_arch might be interactive
@@ -566,12 +649,17 @@ def read_dwarf(filename, resolve_arch):
                 return read_pe(filename)
             elif signature == b'\x7FELF': #It's an ELF
                 return read_elf(file, filename)
-            elif signature in (b'\xCA\xFE\xBA\xBE', b'\xFE\xED\xFA\xCE', b'\xFE\xED\xFA\xCF', b'\xCE\xFA\xED\xFE', b'\xCF\xFA\xED\xFE'):
-                if signature == b'\xCA\xFE\xBA\xBE' and int.from_bytes(xsignature[4:8], 'big') >= 0x20:
+            elif signature in (b'\xFE\xED\xFA\xCE', b'\xFE\xED\xFA\xCF', b'\xCE\xFA\xED\xFE', b'\xCF\xFA\xED\xFE'):
+                # Mach-O 32/64-bit Mach-O in big/little-endian format, but not a fat binary
+                # TODO: little endian is not supported!
+                return read_macho(filename)
+            elif signature == b'\xCA\xFE\xBA\xBE': 
+                # Mach-O fat binary - could be executable, or a multiarch static lib.
+                if int.from_bytes(xsignature[4:8], 'big') >= 0x20:
                     # Java .class files also have CAFEBABE, check the fat binary arch count
                     return None
-                # Mach-O fat binary, or 32/64-bit Mach-O in big/little-endian format
-                return read_macho(filename, resolve_arch)
+                file.seek(4, os.SEEK_SET)
+                return read_fat_macho(file, resolve_arch)
             elif signature == b'\0asm':
                 return read_wasm(file)
             elif xsignature == b'!<arch>\n':

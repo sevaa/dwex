@@ -3,6 +3,7 @@
 /samples*
 __pycache__
 .vscode
+.vs
 /dwex.egg-info
 /dist
 /**/*.pyc

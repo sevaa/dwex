@@ -5,7 +5,7 @@ from elftools.dwarf.callframe import FDE, CFARule
 
 from dwex.exprutil import ExprFormatter, format_offset
 from .dwarfutil import *
-from .fx import bold_font
+from .fx import bold_font, WaitCursor
 
 #0x25af0
 #0xd864 (black)
@@ -17,14 +17,6 @@ from .fx import bold_font
 #TODO: saved registers from unwind info
 
 headers = ["Name", "Location"]
-
-# TODO: move elsewhere
-class WaitCursor():
-    def __enter__(self):
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
-    def __exit__(self, *args):
-        QApplication.restoreOverrideCursor()
 
 class SeveralFunctionsError(Exception):
     pass

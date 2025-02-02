@@ -1,9 +1,11 @@
-from PyQt6.QtCore import QEventLoop
+from PyQt6.QtCore import Qt, QEventLoop
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QFontInfo, QFont
+from PyQt6.QtGui import QFontInfo, QFont, QBrush
 
 _bold_font = None
 _fixed_font = None
+blue_brush = QBrush(Qt.GlobalColor.blue)
+ltgrey_brush = QBrush(Qt.GlobalColor.lightGray)
 
 def bold_font():
     global _bold_font
@@ -24,3 +26,18 @@ def wait_with_events(cond, timeout=100):
     loop = QEventLoop(QApplication.instance())
     while cond():
         loop.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, timeout)
+
+# Doesn't quite work for the delay on tree expansion :( TODO: timer checks before lighting up this
+class WaitCursor():
+    def __enter__(self):
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
+    def __exit__(self, *args):
+        QApplication.restoreOverrideCursor()
+
+class ArrowCursor():
+    def __enter__(self):
+        QApplication.restoreOverrideCursor()
+
+    def __exit__(self, *args):
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)

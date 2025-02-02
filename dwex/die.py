@@ -1,7 +1,6 @@
 from bisect import bisect_right
 from collections.abc import Sequence
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex
-from PyQt6.QtGui import QBrush
 from elftools.dwarf.locationlists import LocationParser, LocationExpr
 from elftools.dwarf.dwarf_expr import DWARFExprParser, DWARFExprOp
 from elftools.dwarf.descriptions import _DESCR_DW_LANG, _DESCR_DW_ATE, _DESCR_DW_ACCESS, _DESCR_DW_INL, _DESCR_DW_CC
@@ -12,6 +11,7 @@ from .dwarfone import DWARFExprParserV1
 from .dwarfutil import *
 from .details import GenericTableModel, FixedWidthTableModel
 from .exprdlg import ExpressionTableModel, ExpressionDlg, op_has_nested_expression
+from .fx import blue_brush, ltgrey_brush
 
 MAX_INLINE_BYTEARRAY_LEN = 32
 
@@ -22,9 +22,6 @@ def is_long_blob(attr):
 #------------------------------------------------
 # DIE formatter
 #------------------------------------------------
-
-_blue_brush = QBrush(Qt.GlobalColor.blue)
-_ltgrey_brush = QBrush(Qt.GlobalColor.lightGray)
 
 _ll_headers = ("Attribute", "Offset", "Form", "Raw", "Value")
 _noll_headers = ("Attribute", "Form", "Value")
@@ -109,10 +106,10 @@ class DIETableModel(QAbstractTableModel):
             return tip
         elif role == Qt.ItemDataRole.ForegroundRole:
             if attr.form in ('DW_FORM_ref', 'DW_FORM_ref1', 'DW_FORM_ref2', 'DW_FORM_ref4', 'DW_FORM_ref8', 'DW_FORM_ref_addr'):
-                return _blue_brush
+                return blue_brush
         elif role == Qt.ItemDataRole.BackgroundRole:
             if self.lowlevel and index.column() == 3 and attr.raw_value == attr.value:
-                return _ltgrey_brush                
+                return ltgrey_brush                
 
     # Data for the metadata lines - ones that are not attributes
     def meta_data(self, index, role):

@@ -15,9 +15,11 @@ from .aranges import ArangesDlg
 from .frames import FramesDlg
 from .unwind import UnwindDlg
 from .funcmap import FuncMapDlg, GatherFuncsThread
+from .fx import WaitCursor, ArrowCursor
+from .treedlg import TreeDlg
 
 # Sync with version in setup.py
-version = (4, 31)
+version = (4, 40)
 the_app = None
 
 # TODO:
@@ -66,7 +68,7 @@ class TheWindow(QMainWindow):
         elif os.environ.get("DWEX_LOADLAST") is not None and len(self.mru) > 0:
             fa = self.mru[0]
             if os.path.exists(fa[0]):
-                self.open_file(*fa)
+                self.open_file(fa[0], fa[1:])
 
 
     def load_settings(self):
@@ -82,7 +84,8 @@ class TheWindow(QMainWindow):
             f = self.sett.value("General/MRU%d" % i, False)
             if f:
                 arch = self.sett.value("General/MRUArch%d" % i, None)
-                fa = (f,) if arch is None else (f,arch) 
+                fn = self.sett.value("General/MRUArchA%d" % i, None)
+                fa = (f,) if arch is None else (f, arch) if fn is None else (f, arch, fn)
                 self.mru.append(fa)        
 
     ###################################################################
@@ -91,33 +94,46 @@ class TheWindow(QMainWindow):
 
     # Callback for the Mach-O fat binary opening logic
     # Taking a cue from Hopper or IDA, we parse only one slice at a time
-    # Also reused for 
+    # arches is a list of strings in the simple case,
+    # list of strings and tuples in the tree case (Mach-O fat library)
     def resolve_arch(self, arches, title, message):
-        r = QInputDialog.getItem(self, title, message, arches, 0, False, Qt.WindowType.Dialog)
-        return arches.index(r[0]) if r[1] else None
+        with ArrowCursor():
+            if any(not isinstance(a, str) for a in arches):
+                dlg = TreeDlg(self, title, arches)
+                if dlg.exec() == QDialog.DialogCode.Accepted:
+                    mi = dlg.selection
+                    return mi[0] if len(mi) == 1 else mi
+            else:
+                r = QInputDialog.getItem(self, title, message, arches, 0, False, Qt.WindowType.Dialog)
+                return arches.index(r[0]) if r[1] else None
     
     # Can throw an exception
     # Returns None if it doesn't seem to contain DWARF
     # False if the user cancelled
     # True if the DWARF tree was loaded
-    def open_file(self, filename, arch = None):
-        self.start_wait()
-        try:
-            di = read_dwarf(filename, self.resolve_arch if arch is None else lambda arches, title, text: arches.index(arch))
+    def open_file(self, filename, slice = None):
+        with WaitCursor():
+            def recall_slice(slices, title, text):
+                if len(slice) == 1:
+                    return slices.index(slice[0])
+                else: # arch is a tuple, assuming no more than two levels
+                    (arch, fn) = slice
+                    (i, a) = next(ia for ia in enumerate(slices) if ia[1][0] == arch)
+                    j = a[1].index(fn)
+                    return (i, j)
+            di = read_dwarf(filename, self.resolve_arch if slice is None else recall_slice)
             if not di: # Covers both False and None
                 return di
             
-            return self.load_dwarfinfo(di, filename, arch)
-        finally:
-            self.end_wait()
+            return self.load_dwarfinfo(di, filename)
 
     # May throw if parsing fails
-    def load_dwarfinfo(self, di, filename, arch):
-        # Arch comes from opening with arch (via MRU), not from the interactive selection
+    def load_dwarfinfo(self, di, filename):
         # Some degree of graceful handling of wrong format
         # File name in case of Mach-O bundles refers to the bundle path, not to the binary path within
         try:
-            slice = di._fat_arch if hasattr(di, '_fat_arch') else None
+            #TODO, slice
+            slice_code = di._slice_code if hasattr(di, '_slice_code') else None
             # Some cached top level stuff
             # Notably, iter_CUs doesn't cache (TODO, check that in the next version)
             di._ranges = None # Loaded on first use
@@ -155,12 +171,12 @@ class TheWindow(QMainWindow):
                 self.die_table.setModel(None)
                 self.details_table.setModel(None)
             s = os.path.basename(filename)
-            if slice is not None:
-                s += ' (' + slice + ')'
+            if slice_code is not None:
+                s += ' (' + ':'.join(slice_code) + ')'
             self.setWindowTitle("DWARF Explorer - " + s)
             # TODO: unite "enable on file load" into a collection
             self.savesection_menuitem.setEnabled(True)
-            self.switchslice_menuitem.setEnabled(slice is not None)
+            self.switchslice_menuitem.setEnabled(slice_code is not None)
             self.loadexec_menuitem.setEnabled(di._format in (1, 5))
             self.back_menuitem.setEnabled(False)
             self.back_tbitem.setEnabled(False)
@@ -191,11 +207,11 @@ class TheWindow(QMainWindow):
             # Navigation stack - empty
             self.navhistory = []
             self.navpos = -1
-            self.save_filename_in_mru(filename, slice)
+            self.save_filename_in_mru(filename, slice_code)
             LoadedModuleDlgBase.reset(di)
             LocalsDlg.reset()
             from .crash import set_binary_desc
-            set_binary_desc(("ELF", "MachO", "PE", "WASM", "ELFinA", "MachOinA")[di._format] + " " + di.config.machine_arch)
+            set_binary_desc(("ELF", "MachO", "PE", "WASM", "ELFinA", "MachOinA", "MachOinAinFat")[di._format] + " " + di.config.machine_arch)
             return True
         except AssertionError as ass: # Covers exeptions during parsing
             raise DWARFParseError(ass, di)        
@@ -203,15 +219,24 @@ class TheWindow(QMainWindow):
     def save_mru(self):
         for i, fa in enumerate(self.mru):
             self.sett.setValue("General/MRU%d" % i, fa[0])    
+
+            if len(fa) > 2:
+                self.sett.setValue("General/MRUArchA%d" % i, fa[2])
+            else:
+                self.sett.remove("General/MRUArchA%d" % i)
+
             if len(fa) > 1:
                 self.sett.setValue("General/MRUArch%d" % i, fa[1])
             else:
                 self.sett.remove("General/MRUArch%d" % i)
+
         for i in range(len(self.mru), 10):
             self.sett.remove("General/MRU%d" % i)
             self.sett.remove("General/MRUArch%d" % i)
+            self.sett.remove("General/MRUArchA%d" % i)
 
     # Open a file, display an error if failure
+    # Called from menu/File/Open, toolbar/Open, File/MRU, and the drop handler. MRU provides the arch
     def open_file_interactive(self, filename, arch = None):
         try:
             if self.open_file(filename, arch) is None:
@@ -280,31 +305,35 @@ class TheWindow(QMainWindow):
 
     def populate_mru_menu(self):
         class MRUHandler(object):
-            def __init__(self, fa, win):
+            def __init__(self, fn, sc, win):
                 object.__init__(self)
-                self.fa = fa
+                self.fn = fn
+                self.sc = sc
                 self.win = win
             def __call__(self):
-                fa = self.fa
-                if os.path.exists(self.fa[0]):
-                    self.win.open_file_interactive(*fa)
+                if os.path.exists(self.fn):
+                    self.win.open_file_interactive(self.fn, self.sc)
                 else:
                     mb =  QMessageBox(QMessageBox.Icon.Critical, "DWARF Explorer",
-                        "The file or bundle %s does not exist or is not accessible. Shall we remove it from the recent file menu?" % (fa[0],),
+                        f"The file or bundle {self.fn} does not exist or is not accessible. Shall we remove it from the recent file menu?",
                         QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No, self.win)
                     mb.setEscapeButton(QMessageBox.StandardButton.No)
                     r = mb.exec()
                     if r == QMessageBox.StandardButton.Yes:
                         self.win.delete_from_mru(fa)
 
-        for i, fa in enumerate(self.mru):
-            s = fa[0]
-            if len(fa) > 1:
-                s += ' (' + fa[1] + ')'
-            self.mru_menu.addAction(s).triggered.connect(MRUHandler(fa, self))
+        for i, fnsc in enumerate(self.mru):
+            s = fn = fnsc[0]
+            if len(fnsc) > 1:
+                slice_code = fnsc[1:]
+                s += ' (' + ':'.join(slice_code) + ')'
+            else:
+                slice_code = None
+            self.mru_menu.addAction(s).triggered.connect(MRUHandler(fn, slice_code, self))
 
-    def save_filename_in_mru(self, filename, arch = None):
-        mru_record = (filename,) if arch is None else (filename, arch)
+    # slice_code is a tuple
+    def save_filename_in_mru(self, filename, slice_code = None):
+        mru_record = (filename,) if slice_code is None else (filename,) + slice_code
         try:
             i = self.mru.index(mru_record)
         except ValueError:
@@ -455,15 +484,15 @@ class TheWindow(QMainWindow):
             self.forward_tbitem.setEnabled(np > 0)
 
     def followref(self, index = None):
-        self.start_wait() # TODO: only show the wait cursor if it's indeed time consuming
-        if index is None:
-            index = self.die_table.currentIndex()
-        navitem = self.die_model.ref_target(index)  # Retrieve the ref target from the DIE model...
-        if navitem:
-            target_tree_index = self.tree_model.index_for_navitem(navitem) # ...and feed it to the tree model.
-            if target_tree_index:
-                self.the_tree.setCurrentIndex(target_tree_index) # Calls on_tree_selection internally
-        self.end_wait()
+        with WaitCursor():
+            # TODO: only show the wait cursor if it's indeed time consuming
+            if index is None:
+                index = self.die_table.currentIndex()
+            navitem = self.die_model.ref_target(index)  # Retrieve the ref target from the DIE model...
+            if navitem:
+                target_tree_index = self.tree_model.index_for_navitem(navitem) # ...and feed it to the tree model.
+                if target_tree_index:
+                    self.the_tree.setCurrentIndex(target_tree_index) # Calls on_tree_selection internally
 
     # Called for double-click on a reference type attribute, and via the menu
     def on_followref(self):
@@ -567,23 +596,19 @@ class TheWindow(QMainWindow):
     def on_updatecheck(self):
         from urllib.request import urlopen
         import json
-        try:
-            self.start_wait()
+        releases = False
+        with WaitCursor():
             resp = urlopen('https://api.github.com/repos/sevaa/dwex/releases')
             if resp.getcode() == 200:
-                releases = resp.read()
-                self.end_wait()
-                releases = json.loads(releases)
-                if len(releases) > 0:
-                    max_ver = max(tuple(int(v) for v in r['tag_name'].split('.')) for r in releases)
-                    max_tag = '.'.join(str(i) for i in max_ver)
-                    if max_ver > version:
-                        s = "DWARF Explorer v." + max_tag + " is out. Use \"pip install --upgrade dwex\" to update."
-                    else: 
-                        s = "You have the latest version."
-                    QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", s, QMessageBox.StandardButton.Ok, self).show()
-        except:
-            self.end_wait()
+                releases = json.loads(resp.read())
+        if releases and len(releases) > 0:
+            max_ver = max(tuple(int(v) for v in r['tag_name'].split('.')) for r in releases)
+            max_tag = '.'.join(str(i) for i in max_ver)
+            if max_ver > version:
+                s = "DWARF Explorer v." + max_tag + " is out. Use \"pip install --upgrade dwex\" to update."
+            else: 
+                s = "You have the latest version."
+            QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", s, QMessageBox.StandardButton.Ok, self).show()
 
     def on_exit(self):
         self.destroy()
@@ -840,13 +865,6 @@ class TheWindow(QMainWindow):
     def on_debug(self):
         pass
 
-    # Doesn't quite work for the delay on tree expansion :( TODO: timer checks before lighting up this
-    def start_wait(self):
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
-    def end_wait(self):
-        QApplication.restoreOverrideCursor()
-
     def show_warning(self, s):
         QMessageBox(QMessageBox.Icon.Warning, "DWARF Explorer", s, QMessageBox.StandardButton.Ok, self).show()
 
@@ -894,7 +912,7 @@ class TheApp(QApplication):
         self.exec()
 
 def main():
-    under_debugger = sys.gettrace() # Lame way to detect a debugger
+    under_debugger = hasattr(sys, 'gettrace') and sys.gettrace() or hasattr(sys, 'monitoring') and sys.monitoring.get_tool(sys.monitoring.DEBUGGER_ID) # Lame way to detect a debugger
     if not under_debugger: 
         on_exception.prev_exchook = sys.excepthook
         sys.excepthook = on_exception

@@ -1,9 +1,8 @@
 from bisect import bisect_left, bisect_right
 from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex
-from PyQt6.QtGui import QFontInfo, QBrush
 from PyQt6.QtWidgets import QApplication
 
-from .fx import bold_font
+from .fx import bold_font, blue_brush
 from .dwarfutil import DIE_has_name, DIE_name, has_code_location, safe_DIE_name, top_die_file_name
 
 def cu_sort_key(cu):
@@ -46,8 +45,6 @@ class DWARFTreeModel(QAbstractItemModel):
         self.prefix = prefix
         self.top_dies = [decorate_die(CU.get_top_DIE(), i) for (i, CU) in enumerate(di._CUs)]
         self.highlight_condition = None
-        fi = QFontInfo(QApplication.font())
-        self.blue_brush = QBrush(Qt.GlobalColor.blue)
         self.sortcus = sortcus
         self.sortdies = sortdies
 
@@ -111,7 +108,7 @@ class DWARFTreeModel(QAbstractItemModel):
             if die.tag == 'DW_TAG_compile_unit' or die.tag == 'DW_TAG_partial_unit':
                 return safe_DIE_name(die, None)
         elif role == Qt.ItemDataRole.ForegroundRole and self.is_highlighted(die):
-            return self.blue_brush
+            return blue_brush
         elif role == Qt.ItemDataRole.FontRole and self.is_highlighted(die):
             return bold_font()
 
