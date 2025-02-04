@@ -128,7 +128,7 @@ class DIETableModel(QAbstractTableModel):
                 elif row == 3:
                     return str(self.die.has_children)
         elif role == Qt.ItemDataRole.BackgroundRole:
-            return _ltgrey_brush
+            return ltgrey_brush
         
     def parse_expr(self, expr):
         """expr is a blob
