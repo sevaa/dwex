@@ -19,7 +19,7 @@ from .fx import WaitCursor, ArrowCursor
 from .treedlg import TreeDlg
 
 # Sync with version in setup.py
-version = (4, 41)
+version = (4, 42)
 the_app = None
 
 # TODO:
@@ -596,19 +596,23 @@ class TheWindow(QMainWindow):
     def on_updatecheck(self):
         from urllib.request import urlopen
         import json
-        releases = False
-        with WaitCursor():
-            resp = urlopen('https://api.github.com/repos/sevaa/dwex/releases')
-            if resp.getcode() == 200:
-                releases = json.loads(resp.read())
-        if releases and len(releases) > 0:
-            max_ver = max(tuple(int(v) for v in r['tag_name'].split('.')) for r in releases)
-            max_tag = '.'.join(str(i) for i in max_ver)
-            if max_ver > version:
-                s = "DWARF Explorer v." + max_tag + " is out. Use \"pip install --upgrade dwex\" to update."
-            else: 
-                s = "You have the latest version."
-            QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", s, QMessageBox.StandardButton.Ok, self).show()
+        try:
+            releases = False
+            with WaitCursor():
+                resp = urlopen('https://api.github.com/repos/sevaa/dwex/releases')
+                if resp.getcode() == 200:
+                    releases = json.loads(resp.read())
+            if releases and len(releases) > 0:
+                max_ver = max(tuple(int(v) for v in r['tag_name'].split('.')) for r in releases)
+                max_tag = '.'.join(str(i) for i in max_ver)
+                if max_ver > version:
+                    s = "DWARF Explorer v." + max_tag + " is out. Use \"pip install --upgrade dwex\" to update."
+                    # TODO: not only pip
+                else: 
+                    s = "You have the latest version."
+                QMessageBox(QMessageBox.Icon.Information, "DWARF Explorer", s, QMessageBox.StandardButton.Ok, self).show()
+        except:
+            pass
 
     def on_exit(self):
         self.destroy()
