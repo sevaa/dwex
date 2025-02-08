@@ -38,7 +38,8 @@ Alternatively, get the dwex source tree from Github, and run `python setup.py in
 On Linux, sometimes the `python` command defaults to Python 2 while Python 3 is installed side by side. In this case, use `python3` and `pip3`, respectively. Use `python -V` to check.
 
 Once you install it, there will be a `dwex` command. On Windows, there will be a `dwex.exe` in the `Scripts` folder under the Python folder, and also a start menu item "DWARF Explorer". On Linux, there
-will be a "DWARF Explorer" in the app menu (tested under GNOME).
+will be a "DWARF Explorer" in the app menu (tested under GNOME). On MacOS X, there will be "DWARF Explorer" in the Applications
+folder, or in the user's Applications folder if the systemwide one is off limits.
 
 In January 2022, the utility was migrated from PyQt5 to PyQt6, and the major version was bumped to 2. That cut off support for Python 3.5. The 1.x version that is compatible with Python 3.5 is still out in the repository, and pip should resolve it. 
 If it does not, install by running `pip install "dwex<2"`.

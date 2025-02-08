@@ -1,7 +1,7 @@
 from setuptools import setup
 from setuptools.command.install import install
 import platform, sys, os, site
-from os import path, environ
+from os import path, environ, makedirs
 
 #------------------------------------
 # Start menu item creation on Windows
@@ -51,14 +51,68 @@ def register_desktop_app():
         pass
 
 #--------------------------------------
+# App bundle on MacOS X
+#--------------------------------------
+def save_as_plist(d, f):
+    f.write('<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict>')
+    for (key, value) in d.items():
+        f.write(f'<key>{key}</key>')
+        if isinstance(value, str):
+            f.write(f'<string>{value}</string>')
+        elif isinstance(value, (tuple, list)):
+            values = ''.join(f'<string>{e}</string>' for e in value)
+            f.write(f'<array>{values}</array>')
+    f.write('</dict></plist>')
+
+def create_app_bundle_under(app_ver, apps):
+    p = path.join(apps, 'DWARF Explorer.app')
+    makedirs(p, exist_ok=True)
+    p = path.join(p, 'Contents')
+    makedirs(p, exist_ok=True)
+    with open(path.join(p, 'Info.plist'), 'wt') as f:
+        save_as_plist({
+            'CFBundleDevelopmentRegion': 'English',
+            'CFBundleDisplayName': 'DWARF Explorer',
+            'CFBundleExecutable': 'dwex',
+            'CFBundleIdentifier': 'com.dwex.dwex',
+            'CFBundleInfoDictionaryVersion': '6.0',
+            'CFBundleName': 'DWARF Explorer',
+            'CFBundlePackageType': 'APPL',
+            'CFBundleShortVersionString': app_ver,
+            'CFBundleSupportedPlatforms': ('MacOSX',),
+            'CFBundleVersion': app_ver,
+            'LSApplicationCategoryType': 'public.app-category.utilities',
+            'LSArchitecturePriority': ('arm64', 'x86_64', 'i386')}, f)
+    p = path.join(p, 'MacOS')
+    makedirs(p, exist_ok=True)
+    p = path.join(p, 'dwex')
+    with open(p, 'wt') as f:
+        f.write(f'#!{sys.executable}\nfrom dwex.__main__ import main\nmain()')
+    os.chmod(p, 0o755)
+
+def create_app_bundle(inst):
+    try:
+        try:
+            app_ver = inst.config_vars['dist_version']
+            create_app_bundle_under(app_ver, '/Applications')
+        except OSError:
+            makedirs('~/Applications', exist_ok=True)
+            create_app_bundle_under(app_ver, '~/Applications')
+    except Exception as exc:
+        pass
+
+#--------------------------------------
 
 class my_install(install):
     def run(self):
         install.run(self)
-        if platform.system() == 'Windows':
+        os_name = platform.system()
+        if os_name == 'Windows':
             create_shortcut(self)
-        elif platform.system() == 'Linux':
+        elif os_name == 'Linux':
             register_desktop_app()
+        elif os_name == 'Darwin':
+            create_app_bundle(self)
 
 # Pull the long desc from the readme
 try:
@@ -69,7 +123,7 @@ except:
 
 setup(
     name='dwex',
-    version='4.42',  # Sync with version in __main__
+    version='4.45',  # Sync with version in __main__
     packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},

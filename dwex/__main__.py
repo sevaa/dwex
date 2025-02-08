@@ -19,7 +19,7 @@ from .fx import WaitCursor, ArrowCursor
 from .treedlg import TreeDlg
 
 # Sync with version in setup.py
-version = (4, 42)
+version = (4, 45)
 the_app = None
 
 # TODO:
