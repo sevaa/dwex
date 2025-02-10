@@ -187,7 +187,10 @@ def show_loclist(self, ll, ll_offset):
     return GenericTableModel(headers, values, get_tooltip=get_tooltip)
     
 def resolve_cfa(self):
-    rules = [r['cfa'] for r in get_frame_rules_for_die(self.die) if 'cfa' in r]
+    rules = get_frame_rules_for_die(self.die)
+    if not rules: # Shorting out 1747
+        return None
+    rules = [r['cfa'] for r in rules if 'cfa' in r]
     rules = [r for (i, r) in enumerate(rules) if i == 0 or rules[i-1].reg != r.reg or rules[i-1].offset != r.offset]
     if len(rules) == 1:
         rule = rules[0]
