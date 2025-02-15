@@ -34,8 +34,25 @@ def load_children(parent_die, sort):
                 parent_die._children.sort(key = die_sort_key)
                 for (i, die) in enumerate(parent_die._children):
                     die._i = i
-        except KeyError as ke:
+        except KeyError as exc:
             # Catching #1516
+            from .__main__ import version
+            from .crash import report_crash
+            from inspect import currentframe
+            tb = exc.__traceback__
+            ctxt = dict()
+            try:
+                cu = parent_die.cu
+                stm = cu.dwarfinfo.debug_info_sec.stream
+                crash_pos = ctxt['crash_pos'] = stm.tell()
+                last_die_index = bisect_left(cu._diemap, crash_pos)-1
+                last_die = ctxt['last_die'] = cu._dielist[last_die_index]
+                slice = stm.getbuffer()[last_die.offset:crash_pos+1]
+                ctxt['sec_at_last_die'] =  ' '.join("%02x" % b for b in slice)
+            except Exception:
+                pass
+            report_crash(exc, tb, version, currentframe(), ctxt)
+
             QApplication.instance().win.show_warning("This executable file is corrupt or incompatible with the current version of DWARF Explorer. Please consider creating a new issue at https://github.com/sevaa/dwex/, and share this file with the tech support.")
             parent_die._children = []
 
@@ -248,12 +265,32 @@ class DWARFTreeModel(QAbstractItemModel):
             cu_offset = cu.cu_offset
             # Parse all DIEs in the current CU
             if cu_cond(cu) if cu_cond else True:
-                for die in cu.iter_DIEs():
-                    # Quit condition with search from position - quit once we go past the starting position after the wrap
-                    if have_start_pos and cu_offset >= start_cu_offset and die.offset > start_die_offset and wrapped:
-                        break
-                    if not die.is_null() and (not have_start_pos or cu_offset != start_cu_offset or (not wrapped and die.offset > start_die_offset)) and cond(die):
-                        return self.index_for_die(die)
+                try: #1516
+                    for die in cu.iter_DIEs():
+                        # Quit condition with search from position - quit once we go past the starting position after the wrap
+                        if have_start_pos and cu_offset >= start_cu_offset and die.offset > start_die_offset and wrapped:
+                            break
+                        if not die.is_null() and (not have_start_pos or cu_offset != start_cu_offset or (not wrapped and die.offset > start_die_offset)) and cond(die):
+                            return self.index_for_die(die)
+                except KeyError as exc: #1516
+                    from .__main__ import version
+                    from .crash import report_crash
+                    from inspect import currentframe
+                    tb = exc.__traceback__
+                    ctxt = dict()
+                    try:
+                        stm = cu.dwarfinfo.debug_info_sec.stream
+                        crash_pos = ctxt['crash_pos'] = stm.tell()
+                        last_die_index = bisect_left(cu._diemap, crash_pos)-1
+                        last_die = ctxt['last_die'] = cu._dielist[last_die_index]
+                        slice = stm.getbuffer()[last_die.offset:crash_pos+1]
+                        ctxt['sec_at_last_die'] =  ' '.join("%02x" % b for b in slice)
+                    except Exception:
+                        pass
+                    report_crash(exc, tb, version, currentframe(), ctxt)
+
+                    QApplication.instance().win.show_warning("This executable file is corrupt or incompatible with the current version of DWARF Explorer. Please consider creating a new issue at https://github.com/sevaa/dwex/issues, and share this file with the tech support.")
+                    return False
 
             # We're at the end of the CU. What next?
             if cu._i < len(self.top_dies) - 1: # More CUs to scan
