@@ -123,7 +123,7 @@ except:
 
 setup(
     name='dwex',
-    version='4.46',  # Sync with version in __main__
+    version='4.47',  # Sync with version in __main__
     packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
@@ -137,7 +137,7 @@ setup(
     long_description_content_type="text/markdown",
     python_requires=">=3.6.1",
     setup_requires=[],
-    install_requires=['PyQt6', 'filebytes>=0.10.1', 'pyelftools>=0.30'] + (['pyobjc'] if platform.system() == 'Darwin' else []),
+    install_requires=['PyQt6', 'filebytes>=0.10.1', 'pyelftools>=0.32'] + (['pyobjc'] if platform.system() == 'Darwin' else []),
     platforms='any',
     classifiers=[
         "Development Status :: 5 - Production/Stable",

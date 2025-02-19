@@ -73,7 +73,8 @@ def read_pe(filename):
             debug_loclists_sec = data.get('.debug_loclists'),
             debug_rnglists_sec = data.get('.debug_rnglists'),
             debug_sup_sec = data.get('.debug_sup'),
-            gnu_debugaltlink_sec = data.get('.gnu_debugaltlink')
+            gnu_debugaltlink_sec = data.get('.gnu_debugaltlink'),
+            debug_types_sec = data.get('.debug_types')
         )
         di._format = 2
         di._arch_code = machine
@@ -122,11 +123,8 @@ def macho_save_sections(filename, macho):
 
 _MACHO_fat_header = False
 
-# resolve_arch takes a list of architecture descriptions, and returns
-# the desired index/multiindex, or None if the user has cancelled
-# file read position should be past the fat signature
-# filename is a real file name, not bundle 
-def read_fat_macho(file, resolve_arch):
+# Given a file pointer past the fat signature, returns an array of slice headers
+def parse_fat_header(file):
     global _MACHO_fat_header
     if not _MACHO_fat_header:
         from elftools.construct import PrefixedArray, Struct, UBInt32
@@ -138,8 +136,14 @@ def read_fat_macho(file, resolve_arch):
                 UBInt32('size'),
                 UBInt32('align')),
             UBInt32(''))
+    return _MACHO_fat_header.parse_stream(file)    
 
-    arches = _MACHO_fat_header.parse_stream(file)
+# resolve_arch takes a list of architecture descriptions, and returns
+# the desired index/multiindex, or None if the user has cancelled
+# file read position should be past the fat signature
+# filename is a real file name, not bundle 
+def read_fat_macho(file, resolve_arch):
+    arches = parse_fat_header(file)
     # Fat executable binary or fat static lib?
     slice_names = list()
     libs_by_arch = dict() # Arch index to lib file list
@@ -189,6 +193,23 @@ def read_fat_macho(file, resolve_arch):
 def read_macho(filename):
     macho = open_macho(filename) # Not fat - checked upstack
     return get_macho_dwarf(macho, None)
+
+# Given a filename and an arch code (type, subtype), returns dwarfinfo, if any
+# The arch code must be given. If the target is fat, it will choose the right slice.
+# No provision for fat libraries. TODO what happens if you build a fat library with DWARF in dSYM.
+def read_macho_with_arch(filename, slice_code, arch_code):
+    with open(filename, 'rb') as file:
+        signature = file.read(4)
+        if signature == b'\xCA\xFE\xBA\xBE':
+            arches = parse_fat_header(file)
+            arch = next(a for a in arches if arch_code == (a.cputype, a.cpusubtype))
+            file.seek(arch.offset, os.SEEK_SET)
+            data = file.read(arch.size)
+        else:
+            file.seek(arch.offset, 0)
+            data = file.read()
+        macho = open_macho(filename, data)
+        return get_macho_dwarf(macho, slice_code)
 
 # TODO, but debug the command line location logic first
 def locate_dsym(uuid):
@@ -241,7 +262,7 @@ def get_macho_dwarf(macho, slice_code):
                 if path.isdir(dsym_path):
                     dsym_path = binary_from_bundle(dsym_path)
                 # TODO: match CPU types instead of strings
-                di = read_macho(dsym_path, lambda slices, _, __: next((i for (i, slice_arch) in enumerate(slices) if slice_arch == fat_arch), None))
+                di = read_macho_with_arch(dsym_path, macho_arch_code(macho))
                 if di:
                     add_macho_sections_from_executable(di, macho)
                     return di
@@ -304,7 +325,8 @@ def get_macho_dwarf(macho, slice_code):
         debug_loclists_sec = data.get('__debug_loclists'),
         debug_rnglists_sec = data.get('__debug_rnglists'),
         debug_sup_sec = data.get('__debug_sup'),
-        gnu_debugaltlink_sec = data.get('__gnu_debugaltlink')
+        gnu_debugaltlink_sec = data.get('__gnu_debugaltlink'),
+        debug_types_sec = data.get('__debug_types'),
     )
     di._unwind_sec = sections.get('__unwind_info') # VERY unlikely to be None
     di._format = 1 # Will be adjusted later if Mach-O within A within fat Mach-O
@@ -469,7 +491,8 @@ def read_wasm(file):
         debug_loclists_sec = data.get('.debug_loclists'),
         debug_rnglists_sec = data.get('.debug_rnglists'),
         debug_sup_sec = None,
-        gnu_debugaltlink_sec = None
+        gnu_debugaltlink_sec = None,
+        debug_types_sec = data.get('.debug_types')
     )
     di._format = 3
     di._arch_code = None #N/A
@@ -665,9 +688,9 @@ def read_dwarf(filename, resolve_arch):
             elif xsignature == b'!<arch>\n':
                 return read_staticlib(file, resolve_arch)
     elif path.isdir(filename):
-        binary = binary_from_bundle(filename)
-        if binary:
-            return read_macho(binary, resolve_arch)
+        binary_filename = binary_from_bundle(filename)
+        if binary_filename:
+            return read_dwarf(binary_filename, resolve_arch)
         
 def get_debug_sections(di):
     section_names = {name: "debug_%s_sec" % name
