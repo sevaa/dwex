@@ -320,7 +320,7 @@ class TheWindow(QMainWindow):
                     mb.setEscapeButton(QMessageBox.StandardButton.No)
                     r = mb.exec()
                     if r == QMessageBox.StandardButton.Yes:
-                        self.win.delete_from_mru(fa)
+                        self.win.delete_from_mru((self.fn,) if self.sc is None else (self.fn,) + self.sc)
 
         for i, fnsc in enumerate(self.mru):
             s = fn = fnsc[0]
