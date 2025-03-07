@@ -73,6 +73,7 @@ def read_pe(filename):
             debug_loclists_sec = data.get('.debug_loclists'),
             debug_rnglists_sec = data.get('.debug_rnglists'),
             debug_sup_sec = data.get('.debug_sup'),
+            debug_types_sec = data.get('.debug_types'),
             gnu_debugaltlink_sec = data.get('.gnu_debugaltlink')
         )
         di._format = 2
