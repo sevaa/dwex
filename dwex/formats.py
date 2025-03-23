@@ -512,7 +512,7 @@ def read_elf(file, filename):
     start_address = load_segment.header.p_vaddr if load_segment else 0
     di = None
     if elffile.has_dwarf_info():
-        di = elffile.get_dwarf_info(elffile.header.e_type != 'ET_REL')
+        di = elffile.get_dwarf_info() # elffile.header.e_type != 'ET_REL' - was trying to address pyelftools/#564
     elif elffile.get_section_by_name(".debug"):
         from .dwarfone import parse_dwarf1
         di = parse_dwarf1(elffile)
