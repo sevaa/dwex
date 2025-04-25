@@ -16,6 +16,8 @@ from elftools.common.exceptions import DWARFError
 from elftools.dwarf.descriptions import _DESCR_DW_CC
 from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
 from elftools.elf.relocation import RelocationHandler
+from elftools.elf.sections import Section
+from elftools.elf.dynamic import DynamicSection, Dynamic
 from elftools.dwarf.locationlists import LocationLists, LocationListsPair
 from elftools.construct.core import StaticField
 from filebytes.mach_o import LSB_64_Section, MH, SectionData, LoadCommand, LoadCommandData, LC
@@ -96,6 +98,14 @@ def monkeypatch():
             return None
         
     elftools.dwarf.dwarfinfo.DWARFInfo.location_lists = location_lists
+
+    # Fix for strtab link to NULL
+    def DynamicSection_init(self, header, name, elffile):
+        Section.__init__(self, header, name, elffile)
+        stringtable = elffile.get_section(header['sh_link'], ('SHT_STRTAB', 'SHT_NOBITS', 'SHT_NULL'))
+        Dynamic.__init__(self, self.stream, self.elffile, stringtable,
+            self['sh_offset'], self['sh_type'] == 'SHT_NOBITS')
+    DynamicSection.__init__ = DynamicSection_init
 
     # Short out import directory parsing for now
     filebytes.pe.PE._parseDataDirectory = lambda self,a,b,c: None
