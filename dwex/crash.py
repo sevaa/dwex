@@ -70,6 +70,12 @@ def make_exc_report(exc, tb, version, catchpoint, ctxt=None):
     report += "DWEX " + '.'.join(str(v) for v in version) + "\n"
     report += "Python " + sys.version + "\n"
     report += "System: " + platform.platform() + "\n"
+    try:
+        import elftools
+        if hasattr(elftools, '__version__'):
+            report += "Pyelftools: " + elftools.__version__ + "\n"
+    except ImportError:
+        pass
     if _binary_desc:
         report += "Binary: " + _binary_desc + "\n"
     try:

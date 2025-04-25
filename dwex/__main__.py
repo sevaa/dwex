@@ -19,7 +19,7 @@ from .fx import WaitCursor, ArrowCursor
 from .treedlg import TreeDlg
 
 # Sync with version in setup.py
-version = (4, 48)
+version = (4, 49)
 the_app = None
 
 # TODO:
@@ -397,28 +397,29 @@ class TheWindow(QMainWindow):
 
     # Index is a tree index - the DIE is the data object within
     def display_die(self, index):
-        die = index.internalPointer()
-        die_table = self.die_table
-        if not self.die_model:
-            self.die_model = DIETableModel(die, self.prefix, self.lowlevel, self.hex, self.dwarfregnames)
-            die_table.setModel(self.die_model)
-            die_table.selectionModel().currentChanged.connect(self.on_attribute_selection)
-        else:
-            self.die_model.display_DIE(die)
-        self.die_table.resizeColumnsToContents()
-        self.details_table.setModel(None)
-        self.followref_menuitem.setEnabled(False)
-        self.followref_tbitem.setEnabled(False)
-        self.cuproperties_menuitem.setEnabled(True)
-        self.die_table.setCurrentIndex(QModelIndex()) # Will cause on_attribute_selection
+        if self.details_table and self.die_table: # Short out for #1753
+            die = index.internalPointer()
+            die_table = self.die_table
+            if not self.die_model:
+                self.die_model = DIETableModel(die, self.prefix, self.lowlevel, self.hex, self.dwarfregnames)
+                die_table.setModel(self.die_model)
+                die_table.selectionModel().currentChanged.connect(self.on_attribute_selection)
+            else:
+                self.die_model.display_DIE(die)
+            self.die_table.resizeColumnsToContents()
+            self.details_table.setModel(None)
+            self.followref_menuitem.setEnabled(False)
+            self.followref_tbitem.setEnabled(False)
+            self.cuproperties_menuitem.setEnabled(True)
+            self.die_table.setCurrentIndex(QModelIndex()) # Will cause on_attribute_selection
 
-        #TODO: resize the attribute table vertically dynamically
-        #attr_count = self.die_model.rowCount(None)
-        #die_table.resize(die_table.size().width(),
-        #    die_table.rowViewportPosition(attr_count-1) + 
-        #        die_table.rowHeight(attr_count-1) +
-        #        die_table.horizontalHeader().size().height() + 1 + attr_count)
-        #self.rpane_layout.update()
+            #TODO: resize the attribute table vertically dynamically
+            #attr_count = self.die_model.rowCount(None)
+            #die_table.resize(die_table.size().width(),
+            #    die_table.rowViewportPosition(attr_count-1) + 
+            #        die_table.rowHeight(attr_count-1) +
+            #        die_table.horizontalHeader().size().height() + 1 + attr_count)
+            #self.rpane_layout.update()
 
     # Invoked for tree clicks and keyboard navigation, ref follow, back-forward
     def on_tree_selection(self, index, prev = None):

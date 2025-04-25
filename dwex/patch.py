@@ -8,6 +8,7 @@ import elftools.dwarf.enums
 import elftools.dwarf.dwarf_expr
 import elftools.dwarf.locationlists
 import elftools.elf.elffile
+import elftools.elf.dynamic
 import elftools.dwarf.dwarfinfo
 import filebytes.mach_o
 import filebytes.pe
@@ -17,7 +18,7 @@ from elftools.dwarf.descriptions import _DESCR_DW_CC
 from elftools.dwarf.dwarfinfo import DebugSectionDescriptor
 from elftools.elf.relocation import RelocationHandler
 from elftools.elf.sections import Section
-from elftools.elf.dynamic import DynamicSection, Dynamic
+from elftools.elf.dynamic import Dynamic
 from elftools.dwarf.locationlists import LocationLists, LocationListsPair
 from elftools.construct.core import StaticField
 from filebytes.mach_o import LSB_64_Section, MH, SectionData, LoadCommand, LoadCommandData, LC
@@ -105,7 +106,7 @@ def monkeypatch():
         stringtable = elffile.get_section(header['sh_link'], ('SHT_STRTAB', 'SHT_NOBITS', 'SHT_NULL'))
         Dynamic.__init__(self, self.stream, self.elffile, stringtable,
             self['sh_offset'], self['sh_type'] == 'SHT_NOBITS')
-    DynamicSection.__init__ = DynamicSection_init
+    elftools.elf.dynamic.DynamicSection.__init__ = DynamicSection_init
 
     # Short out import directory parsing for now
     filebytes.pe.PE._parseDataDirectory = lambda self,a,b,c: None
