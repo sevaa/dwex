@@ -129,7 +129,7 @@ setup(
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
     cmdclass={'install': my_install},
     keywords = ['dwarf', 'debug', 'debugging', 'symbols', 'viewer', 'view', 'browser', 'browse', 'tree'],
-    license="BSD",
+    license="BSD-3-Clause",
     author="Seva Alekseyev",
     author_email="sevaa@sprynet.com",
     description="GUI viewer for DWARF debug information",
@@ -142,7 +142,6 @@ setup(
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
-        "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
         "Environment :: MacOS X :: Cocoa",
         "Environment :: Win32 (MS Windows)",
