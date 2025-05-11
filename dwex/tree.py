@@ -1,9 +1,15 @@
 from bisect import bisect_left, bisect_right
+from typing import Union
 from PyQt6.QtCore import Qt, QAbstractItemModel, QModelIndex
 from PyQt6.QtWidgets import QApplication
 
+from elftools.dwarf.die import DIE
+from elftools.dwarf.compileunit import CompileUnit
+
 from .fx import bold_font, blue_brush
 from .dwarfutil import DIE_has_name, DIE_name, has_code_location, safe_DIE_name, top_die_file_name
+from .dwarfone import DIEV1
+
 
 def cu_sort_key(cu):
     return top_die_file_name(cu.get_top_DIE()).lower()
@@ -23,7 +29,7 @@ def decorate_die(die, i):
     die._children = None
     return die
 
-def load_children(parent_die, sort):
+def load_children(parent_die: Union[DIE, DIEV1] , sort: bool):
     # Load and cache child DIEs in the parent DIE, if necessary
     # Assumes the check if the DIE has children has been already performed
     if not hasattr(parent_die, "_children") or parent_die._children is None:
@@ -43,12 +49,18 @@ def load_children(parent_die, sort):
             ctxt = dict()
             try:
                 cu = parent_die.cu
+                ctxt['cu_header'] = cu.header
+                ctxt['cu_offset'] = cu.cu_offset
+                ctxt['cu_die_offset'] = cu.cu_die_offset
+                ctxt['cu_size'] = cu.size
+                ctxt['dwarf_config'] = cu.dwarfinfo.config
+                abbrev_codes = set(d.abbrev_code for d in cu._dielist if not d.is_null())
+                at = cu.get_abbrev_table()
+                ctxt['abbrevs'] = {c: at.get_abbrev(c) for c in abbrev_codes}
                 stm = cu.dwarfinfo.debug_info_sec.stream
                 crash_pos = ctxt['crash_pos'] = stm.tell()
-                last_die_index = bisect_left(cu._diemap, crash_pos)-1
-                last_die = ctxt['last_die'] = cu._dielist[last_die_index]
-                slice = stm.getbuffer()[last_die.offset:crash_pos+1]
-                ctxt['sec_at_last_die'] =  ' '.join("%02x" % b for b in slice)
+                slice = stm.getbuffer()[cu.cu_die_offset:crash_pos+1]
+                ctxt['cu_in_info'] =  ' '.join("%02x" % b for b in slice)
             except Exception:
                 pass
             report_crash(exc, tb, version, currentframe(), ctxt)
