@@ -925,6 +925,20 @@ def main():
     from .patch import monkeypatch
     monkeypatch()
 
+    # DWEX is styled for a light theme, but Qt defaults to something "random" based on system settings.
+    # Hacky fix for accidental dark theme in Windows: force the "windowsvista" theme if it exists.
+    styles = QStyleFactory.keys()
+    preferred_styles = ["windowsvista"] # Include additional styles for other OSes if necessary.
+
+    style = None
+    for s in preferred_styles:
+        if s in styles:
+            style = QStyleFactory.create(s)
+            break
+
+    if style:
+        QApplication.setStyle(style)
+
     global the_app
     the_app = TheApp()
     the_app.start()
