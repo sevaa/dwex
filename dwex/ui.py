@@ -77,6 +77,9 @@ def setup_menu(win):
     win.cuproperties_menuitem = view_menu.addAction("CU properties...")
     win.cuproperties_menuitem.setEnabled(False)
     win.cuproperties_menuitem.triggered.connect(win.on_cuproperties)
+    view_menu.addSeparator()
+    theme_menuitem = view_menu.addAction("Theme...")
+    theme_menuitem.triggered.connect(win.on_changetheme)
     #########
     edit_menu = menu.addMenu("Edit")
     win.copy_menuitem = edit_menu.addAction("Copy value")

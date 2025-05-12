@@ -19,7 +19,7 @@ from .fx import WaitCursor, ArrowCursor
 from .treedlg import TreeDlg
 
 # Sync with version in setup.py
-version = (4, 50)
+version = (4, 51)
 the_app = None
 
 # TODO:
@@ -72,21 +72,24 @@ class TheWindow(QMainWindow):
 
 
     def load_settings(self):
-        self.sett = QSettings('Seva', 'DWARFExplorer')
-        self.prefix = self.sett.value('General/Prefix', False, type=bool)
-        self.lowlevel = self.sett.value('General/LowLevel', False, type=bool)
-        self.hex = self.sett.value('General/Hex', False, type=bool)
-        self.sortcus = self.sett.value('General/SortCUs', True, type=bool)
-        self.sortdies = self.sett.value('General/SortDIEs', False, type=bool)
-        self.dwarfregnames = self.sett.value('General/DWARFRegNames', False, type=bool)
+        self.sett = sett = QSettings('Seva', 'DWARFExplorer')
+        self.prefix = sett.value('General/Prefix', False, type=bool)
+        self.lowlevel = sett.value('General/LowLevel', False, type=bool)
+        self.hex = sett.value('General/Hex', False, type=bool)
+        self.sortcus = sett.value('General/SortCUs', True, type=bool)
+        self.sortdies = sett.value('General/SortDIEs', False, type=bool)
+        self.dwarfregnames = sett.value('General/DWARFRegNames', False, type=bool)
         self.mru = []
         for i in range(0, 10):
-            f = self.sett.value("General/MRU%d" % i, False)
+            f = sett.value("General/MRU%d" % i, False)
             if f:
-                arch = self.sett.value("General/MRUArch%d" % i, None)
-                fn = self.sett.value("General/MRUArchA%d" % i, None)
+                arch = sett.value("General/MRUArch%d" % i, None)
+                fn = sett.value("General/MRUArchA%d" % i, None)
                 fa = (f,) if arch is None else (f, arch) if fn is None else (f, arch, fn)
-                self.mru.append(fa)        
+                self.mru.append(fa)
+        theme = sett.value("General/Theme", None, type=str)
+        if theme and theme in QStyleFactory.keys():
+            QApplication.setStyle(QStyleFactory.create(theme))
 
     ###################################################################
     # Done with init, now file stuff
@@ -587,6 +590,23 @@ class TheWindow(QMainWindow):
         if index:
             self.the_tree.setCurrentIndex(index)
 
+    def on_changetheme(self):
+        themes = ["Default",] + QStyleFactory.keys()
+        theme = self.sett.value('General/Theme', None, type=str)
+        theme_no = themes.index(theme) if theme and theme in themes else 0
+        r = QInputDialog.getItem(self, "Theme", "Please select the visual theme:", themes, theme_no, False, Qt.WindowType.Dialog)
+        if r[1]:
+            new_theme_no = themes.index(r[0])
+            if new_theme_no == 0 and theme:
+                self.sett.remove('General/Theme')
+            elif new_theme_no > 0:
+                self.sett.setValue('General/Theme', themes[new_theme_no])
+
+            if new_theme_no > 0:
+                QApplication.setStyle(QStyleFactory.create(themes[new_theme_no]))
+            else:
+                QApplication.setStyle(None)
+    
     ##########################################################################
     ##########################################################################
 
@@ -924,20 +944,6 @@ def main():
 
     from .patch import monkeypatch
     monkeypatch()
-
-    # DWEX is styled for a light theme, but Qt defaults to something "random" based on system settings.
-    # Hacky fix for accidental dark theme in Windows: force the "windowsvista" theme if it exists.
-    styles = QStyleFactory.keys()
-    preferred_styles = ["windowsvista"] # Include additional styles for other OSes if necessary.
-
-    style = None
-    for s in preferred_styles:
-        if s in styles:
-            style = QStyleFactory.create(s)
-            break
-
-    if style:
-        QApplication.setStyle(style)
 
     global the_app
     the_app = TheApp()
