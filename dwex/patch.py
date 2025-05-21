@@ -108,6 +108,24 @@ def monkeypatch():
             self['sh_offset'], self['sh_type'] == 'SHT_NOBITS')
     elftools.elf.dynamic.DynamicSection.__init__ = DynamicSection_init
 
+    # GNU opcodes - fix for #1740, except it's incompatible with the blob in the first crash
+    elftools.dwarf.dwarf_expr.DW_OP_name2opcode['OP_GNU_addr_index'] = 0xfb
+    elftools.dwarf.dwarf_expr.DW_OP_name2opcode['OP_GNU_const_index'] = 0xfc
+    elftools.dwarf.dwarf_expr.DW_OP_name2opcode['OP_GNU_variable_value'] = 0xfd
+
+    elftools.dwarf.dwarf_expr.DW_OP_opcode2name[0xfb] = 'OP_GNU_addr_index'
+    elftools.dwarf.dwarf_expr.DW_OP_opcode2name[0xfc] = 'OP_GNU_const_index'
+    elftools.dwarf.dwarf_expr.DW_OP_opcode2name[0xfd] = 'OP_GNU_variable_value'
+
+    orig_init_dispatch_table = elftools.dwarf.dwarf_expr._init_dispatch_table
+    def _init_dispatch_table(structs):
+        dt = orig_init_dispatch_table(structs)
+        dt[0xfb] = lambda stream: [struct_parse(structs.the_Dwarf_uleb128, stream)]
+        dt[0xfc] = lambda stream: [struct_parse(structs.the_Dwarf_uleb128, stream)]
+        dt[0xfd] = lambda stream: [struct_parse(structs.the_Dwarf_uleb128, stream)]
+        return dt
+    elftools.dwarf.dwarf_expr._init_dispatch_table = _init_dispatch_table
+
     # Short out import directory parsing for now
     filebytes.pe.PE._parseDataDirectory = lambda self,a,b,c: None
 

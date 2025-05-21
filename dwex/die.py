@@ -19,6 +19,10 @@ def is_long_blob(attr):
     val = attr.value
     return ((isinstance(val, bytes) and attr.form not in ('DW_FORM_strp', 'DW_FORM_string')) or is_int_list(val)) and len(val) > MAX_INLINE_BYTEARRAY_LEN
 
+class ExprParseError(Exception):
+    expr = None
+    opcode = None
+
 #------------------------------------------------
 # DIE formatter
 #------------------------------------------------
@@ -135,7 +139,13 @@ class DIETableModel(QAbstractTableModel):
         """
         if self.die.cu._exprparser is None:
             self.die.cu._exprparser = DWARFExprParser(self.die.cu.structs) if self.die.cu['version'] > 1 else DWARFExprParserV1(self.die.cu.structs)
-        return self.die.cu._exprparser.parse_expr(expr)
+        try:
+            return self.die.cu._exprparser.parse_expr(expr)
+        except KeyError as ke:
+            pe = ExprParseError()
+            pe.expr = expr
+            pe.opcode = ke.args[0]
+            raise pe
     
     def format_op(self, op):
         return self.expr_formatter.format_op(*op)
@@ -237,6 +247,17 @@ class DIETableModel(QAbstractTableModel):
             else:
                 return hex(val) if self.hex and isinstance(val, int) else str(val)
         # except BaseException as exc:
+        except ExprParseError as exc: # Shorting out #1740
+            from .__main__ import version
+            from .crash import report_crash
+            from inspect import currentframe
+            ctxt = {'attr': attr,
+                        'die': die,
+                        'dwarf_version': dwarf_version,
+                        'opcode': exc.opcode,
+                        'expr': ' '.join(f'{b:02X}' for b in exc.expr)}
+            report_crash(exc, exc.__traceback__, version, currentframe(), ctxt)
+            return f"(unknown expression opcode 0x{exc.opcode:02X})"
         except ELFParseError as exc:
             import sys
             if not sys.gettrace():
