@@ -29,7 +29,7 @@ def decorate_die(die, i):
     die._children = None
     return die
 
-def load_children(parent_die: Union[DIE, DIEV1] , sort: bool):
+def load_children(parent_die: Union[DIE, DIEV1] , sort: bool): #(parent_die: Union[DIE, DIEV1] , sort: bool):
     # Load and cache child DIEs in the parent DIE, if necessary
     # Assumes the check if the DIE has children has been already performed
     if not hasattr(parent_die, "_children") or parent_die._children is None:
@@ -49,17 +49,16 @@ def load_children(parent_die: Union[DIE, DIEV1] , sort: bool):
             ctxt = dict()
             try:
                 cu = parent_die.cu
-                ctxt['cu_header'] = cu.header
                 ctxt['cu_offset'] = cu.cu_offset
-                ctxt['cu_die_offset'] = cu.cu_die_offset
-                ctxt['cu_size'] = cu.size
                 ctxt['dwarf_config'] = cu.dwarfinfo.config
                 abbrev_codes = set(d.abbrev_code for d in cu._dielist if not d.is_null())
                 at = cu.get_abbrev_table()
-                ctxt['abbrevs'] = {c: at.get_abbrev(c) for c in abbrev_codes}
+                format_attr_in_abbrev = lambda a: (a.name, a.form, a.value) if a.value is not None else (a.name, a.form)
+                format_abbr = lambda ab: (ab.decl.tag, ab._has_children, tuple(format_attr_in_abbrev(a) for a in ab.decl.attr_spec))
+                ctxt['abbrevs'] = {c: format_abbr(at.get_abbrev(c)) for c in abbrev_codes}
                 stm = cu.dwarfinfo.debug_info_sec.stream
                 crash_pos = ctxt['crash_pos'] = stm.tell()
-                slice = stm.getbuffer()[cu.cu_die_offset:crash_pos+1]
+                slice = stm.getbuffer()[cu.cu_offset:crash_pos+1]
                 ctxt['cu_in_info'] =  ' '.join("%02x" % b for b in slice)
             except Exception:
                 pass
