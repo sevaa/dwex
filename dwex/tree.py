@@ -290,12 +290,17 @@ class DWARFTreeModel(QAbstractItemModel):
                     tb = exc.__traceback__
                     ctxt = dict()
                     try:
+                        ctxt['cu_offset'] = cu.cu_offset
+                        ctxt['dwarf_config'] = cu.dwarfinfo.config
+                        abbrev_codes = set(d.abbrev_code for d in cu._dielist if not d.is_null())
+                        at = cu.get_abbrev_table()
+                        format_attr_in_abbrev = lambda a: (a.name, a.form, a.value) if a.value is not None else (a.name, a.form)
+                        format_abbr = lambda ab: (ab.decl.tag, ab._has_children, tuple(format_attr_in_abbrev(a) for a in ab.decl.attr_spec))
+                        ctxt['abbrevs'] = {c: format_abbr(at.get_abbrev(c)) for c in abbrev_codes}
                         stm = cu.dwarfinfo.debug_info_sec.stream
                         crash_pos = ctxt['crash_pos'] = stm.tell()
-                        last_die_index = bisect_left(cu._diemap, crash_pos)-1
-                        last_die = ctxt['last_die'] = cu._dielist[last_die_index]
-                        slice = stm.getbuffer()[last_die.offset:crash_pos+1]
-                        ctxt['sec_at_last_die'] =  ' '.join("%02x" % b for b in slice)
+                        slice = stm.getbuffer()[cu.cu_offset:crash_pos+1]
+                        ctxt['cu_in_info'] =  ' '.join("%02x" % b for b in slice)
                     except Exception:
                         pass
                     report_crash(exc, tb, version, currentframe(), ctxt)
