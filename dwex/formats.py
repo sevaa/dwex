@@ -366,6 +366,7 @@ def load_companion_executable(filename, di):
             arch = make_macho_arch_name_raw(*di._arch_code)
             raise FormatError(f"This binary does not contain a slice for {arch}.")
     elif macho_arch_code(macho) != di._arch_code:
+        arch = make_macho_arch_name_raw(*di._arch_code)
         raise FormatError(f"The architecture of this binary does not match that of the curernt DWARF, which is {arch}.")
     
     ft = macho.machHeader.header.filetype
