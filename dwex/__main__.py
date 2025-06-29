@@ -19,7 +19,7 @@ from .fx import WaitCursor, ArrowCursor
 from .treedlg import TreeDlg
 
 # Sync with version in setup.py
-version = (4, 53)
+version = (4, 54)
 the_app = None
 
 # TODO:
@@ -854,12 +854,16 @@ class TheWindow(QMainWindow):
             self.show_warning("This binary does not have an aranges section.")
             
     def on_frames(self):
-        entries = get_di_frames(self.dwarfinfo)
-        if entries:
-            FramesDlg(self, entries, self.dwarfinfo, self.dwarfregnames, self.hex).exec()
-            # TODO: navigate to function
-        else:
-            self.show_warning("This binary does not have neither an eh_frames section nor a debug_frames section.")
+        try:
+            entries = get_di_frames(self.dwarfinfo)
+            if entries:
+                FramesDlg(self, entries, self.dwarfinfo, self.dwarfregnames, self.hex).exec()
+                # TODO: navigate to function
+            else:
+                self.show_warning("This binary does not have neither an eh_frames section nor a debug_frames section.")
+        except KeyError: # 1761
+            self.show_warning("Error parsing the frames section in this binary. Please report to the tech support: menu/Help/Report an issue.")
+
             
     def on_unwind(self):
         if self.dwarfinfo._unwind_sec:
