@@ -13,6 +13,13 @@ class FormatError(Exception):
     def __init__(self, s):
         Exception.__init__(self, s)
 
+def decorate_di(di, f, a, sa):
+    di._format = f
+    di._arch_code = a
+    di._start_address = sa
+    di._frames = None
+    di._use_siblings = not(f in (0, 4) and a in ("EM_PPC", 'EM_PPC64'))
+
 def read_pe(filename):
     from filebytes.pe import PE, IMAGE_FILE_MACHINE, BinaryError
     import struct, zlib
@@ -76,9 +83,7 @@ def read_pe(filename):
             gnu_debugaltlink_sec = data.get('.gnu_debugaltlink'),
             debug_types_sec = data.get('.debug_types')
         )
-        di._format = 2
-        di._arch_code = machine
-        di._start_address = pefile.imageNtHeaders.header.OptionalHeader.ImageBase
+        decorate_di(di, 2, machine, pefile.imageNtHeaders.header.OptionalHeader.ImageBase)
         di._frames = None
         return di
     except BinaryError as err:
@@ -328,14 +333,11 @@ def get_macho_dwarf(macho, slice_code):
         gnu_debugaltlink_sec = data.get('__gnu_debugaltlink'),
         debug_types_sec = data.get('__debug_types'),
     )
+    text_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == "__TEXT"), False)
+    decorate_di(di, 1, macho_arch_code(macho), text_cmd.header.vmaddr if text_cmd else 0)
     di._unwind_sec = sections.get('__unwind_info') # VERY unlikely to be None
-    di._format = 1 # Will be adjusted later if Mach-O within A within fat Mach-O
-    di._arch_code = macho_arch_code(macho)
     di._slice_code = slice_code
     di._uuid = uuid
-    text_cmd = next((cmd for cmd in macho.loadCommands if cmd.header.cmd in (LC.SEGMENT, LC.SEGMENT_64) and cmd.name == "__TEXT"), False)
-    di._start_address = text_cmd.header.vmaddr if text_cmd else 0
-    di._frames = None
     di._has_exec = False
     return di
 
@@ -495,10 +497,7 @@ def read_wasm(file):
         gnu_debugaltlink_sec = None,
         debug_types_sec = data.get('.debug_types')
     )
-    di._format = 3
-    di._arch_code = None #N/A
-    di._start_address = 0
-    di._frames = None
+    decorate_di(di, 3, None, 0)
     return di
 
 # Filename is only needed for supplemental DWARF resolution
@@ -519,10 +518,7 @@ def read_elf(file, filename):
         di = parse_dwarf1(elffile)
 
     if di:
-        di._format = 0
-        di._start_address = start_address
-        di._arch_code = elffile.header.e_machine
-        di._frames = None
+        decorate_di(di, 0, elffile.header.e_machine, start_address)
     return di
 
 ###########################################################################
