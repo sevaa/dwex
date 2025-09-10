@@ -942,7 +942,7 @@ class TheApp(QApplication):
 
 def main():
     under_debugger = hasattr(sys, 'gettrace') and sys.gettrace() or hasattr(sys, 'monitoring') and sys.monitoring.get_tool(sys.monitoring.DEBUGGER_ID) # Lame way to detect a debugger
-    if not under_debugger: 
+    if not under_debugger and os.environ.get("DWEX_NOEXCHOOK") is None: 
         on_exception.prev_exchook = sys.excepthook
         sys.excepthook = on_exception
 
