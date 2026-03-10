@@ -309,7 +309,7 @@ def get_macho_dwarf(macho, slice_code):
     cpu = macho.machHeader.header.cputype
     di = DWARFInfo(
         config = DwarfConfig(
-            little_endian=True,
+            little_endian = not macho.isBigEndian,
             default_address_size = 8 if (cpu & TypeFlags.ABI64) != 0 else 4,
             machine_arch = make_macho_arch_name(macho)
         ),
