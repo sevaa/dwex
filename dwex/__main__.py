@@ -181,6 +181,7 @@ class TheWindow(QMainWindow):
             self.savesection_menuitem.setEnabled(True)
             self.switchslice_menuitem.setEnabled(slice_code is not None)
             self.loadexec_menuitem.setEnabled(di._format in (1, 5))
+            self.exporttree_menuitem.setEnabled(has_CUs)
             self.back_menuitem.setEnabled(False)
             self.back_tbitem.setEnabled(False)
             self.forward_menuitem.setEnabled(False)
@@ -393,6 +394,149 @@ class TheWindow(QMainWindow):
     # TODO: do this in a more elegant way, without reopening and rereading
     def on_switchslice(self):
         self.open_file(self.filename, None)
+
+    def get_die_c_type_str(self, die):
+        """Resolves a DIE's type into a C-style type string."""
+        from .dwarfutil import parse_datatype
+
+        def format_td(td):
+            if not td.name:
+                return "void"
+
+            if td.tag in ('subroutine', 'ptr_to_member_type', 'ptr_to_member'):
+                return td.name
+
+            base_name = td.name
+            scopes_str = "::".join(td.scopes) + "::" if td.scopes else ""
+
+            post_modifiers = []
+            pre_modifiers = []
+
+            # Process modifiers from right-to-left (inner-to-outer) to build C-style declarations
+            for mod in reversed(list(td.modifiers)):
+                if mod == 'pointer':
+                    post_modifiers.append('*')
+                elif mod == 'reference':
+                    post_modifiers.append('&')
+                elif mod == 'const':
+                    # Heuristic: if a pointer/ref is already present, this 'const' applies to it.
+                    if any(m in ['*', '&'] for m in post_modifiers):
+                        post_modifiers.append('const')
+                    else:
+                        pre_modifiers.append('const')
+                else:  # Other modifiers like volatile, etc.
+                    pre_modifiers.append(mod)
+
+            pre_str = " ".join(pre_modifiers)
+            post_str = " ".join(post_modifiers)
+
+            # Assemble and clean up whitespace
+            full_str = f"{pre_str} {scopes_str}{base_name}{post_str}"
+            return " ".join(full_str.split())
+
+        try:
+            td = parse_datatype(die)
+            return format_td(td)
+        except Exception:
+            return "/*<error_resolving_type>*/"
+
+    def traverse_and_generate_c_skeleton(self, model_index, depth, lines):
+        """Recursively traverses the tree model and generates C skeleton lines."""
+        if not model_index.isValid():
+            return
+
+        die = model_index.internalPointer()
+        indent = '\t' * depth
+        tag = die.tag
+        from .dwarfutil import safe_DIE_name, subprogram_name
+
+        # Skip tags handled by their parents (e.g., parameters are part of the function signature)
+        if tag == 'DW_TAG_formal_parameter':
+            return
+
+        if tag in ('DW_TAG_structure_type', 'DW_TAG_class_type', 'DW_TAG_union_type'):
+            keyword = tag.replace('DW_TAG_', '').replace('_type', '')
+            name = safe_DIE_name(die, '')
+            lines.append(f"{indent}{keyword} {name} {{")
+            for i in range(self.tree_model.rowCount(model_index)):
+                self.traverse_and_generate_c_skeleton(self.tree_model.index(i, 0, model_index), depth + 1, lines)
+            lines.append(f"{indent}}};")
+
+        elif tag == 'DW_TAG_member':
+            type_str = self.get_die_c_type_str(die)
+            name = safe_DIE_name(die, '?')
+            bitsize_str = ""
+            if 'DW_AT_bit_size' in die.attributes:
+                bitsize = die.attributes['DW_AT_bit_size'].value
+                bitsize_str = f" : {bitsize}"
+            lines.append(f"{indent}{type_str} {name}{bitsize_str};")
+
+        elif tag == 'DW_TAG_subprogram':
+            ret_type_str = self.get_die_c_type_str(die)
+            name = subprogram_name(die, '?')
+
+            params = []
+            for child in die.iter_children():
+                if child.tag == 'DW_TAG_formal_parameter':
+                    param_type_str = self.get_die_c_type_str(child)
+                    param_name = safe_DIE_name(child, '')
+                    params.append(f"{param_type_str} {param_name}".strip())
+                elif child.tag == 'DW_TAG_unspecified_parameters':
+                    params.append('...')
+
+            params_str = ", ".join(params) if params else "void"
+            lines.append(f"{indent}{ret_type_str} {name}({params_str}) {{")
+
+            for i in range(self.tree_model.rowCount(model_index)):
+                self.traverse_and_generate_c_skeleton(self.tree_model.index(i, 0, model_index), depth + 1, lines)
+            lines.append(f"{indent}}}")
+
+        elif tag == 'DW_TAG_variable':
+            type_str = self.get_die_c_type_str(die)
+            name = safe_DIE_name(die, '?')
+            lines.append(f"{indent}{type_str} {name};")
+
+        elif tag == 'DW_TAG_lexical_block':
+            lines.append(f"{indent}{{ // Lexical Block")
+            for i in range(self.tree_model.rowCount(model_index)):
+                self.traverse_and_generate_c_skeleton(self.tree_model.index(i, 0, model_index), depth + 1, lines)
+            lines.append(f"{indent}}}")
+
+        else:
+            # Fallback for other DIE types: print original text and recurse
+            text = self.tree_model.data(model_index, Qt.ItemDataRole.DisplayRole)
+            lines.append(indent + "// " + text)
+            for i in range(self.tree_model.rowCount(model_index)):
+                self.traverse_and_generate_c_skeleton(self.tree_model.index(i, 0, model_index), depth + 1, lines)
+
+    def on_export_tree(self):
+        if not self.tree_model:
+            return
+
+        start_index = self.the_tree.currentIndex()
+
+        default_filename = os.path.splitext(os.path.basename(self.filename))[0] + "_skel.c"
+        filename, _ = QFileDialog.getSaveFileName(self, "Export as C Skeleton", default_filename, "C Source Files (*.c *.h);;Text Files (*.txt);;All Files (*)")
+
+        if not filename:
+            return
+
+        text_lines = []
+        with WaitCursor():
+            if start_index.isValid():
+                self.traverse_and_generate_c_skeleton(start_index, 0, text_lines)
+            else:  # Export entire tree
+                invisible_root = QModelIndex()
+                num_roots = self.tree_model.rowCount(invisible_root)
+                for i in range(num_roots):
+                    root_index = self.tree_model.index(i, 0, invisible_root)
+                    self.traverse_and_generate_c_skeleton(root_index, 0, text_lines)
+
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(text_lines))
+        except Exception as exc:
+            self.show_warning("Error exporting C skeleton: " + str(exc))
 
     #############################################################
     # Done with file stuff, now tree navigation

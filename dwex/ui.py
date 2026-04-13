@@ -19,6 +19,9 @@ def setup_menu(win):
     win.loadexec_menuitem = file_menu.addAction("Load companion executable...")
     win.loadexec_menuitem.triggered.connect(win.on_loadexec)
     win.loadexec_menuitem.setEnabled(False)
+    win.exporttree_menuitem = file_menu.addAction("Export C skeleton...")
+    win.exporttree_menuitem.triggered.connect(win.on_export_tree)
+    win.exporttree_menuitem.setEnabled(False)
     win.mru_menu = file_menu.addMenu("Recent files")
     if len(win.mru):
         win.populate_mru_menu()
