@@ -64,6 +64,9 @@ class FuncMapDlg(LoadedModuleDlgBase):
         self.nav_bu.clicked.connect(lambda: self.navigate_to_index(self.the_table.currentIndex()))
         self.nav_bu.setEnabled(False)
         buttons.addButton(self.nav_bu, QDialogButtonBox.ButtonRole.ApplyRole)
+        self.export_bu = QPushButton("Export", self)
+        self.export_bu.clicked.connect(self.export_funcs)
+        buttons.addButton(self.export_bu, QDialogButtonBox.ButtonRole.ApplyRole)
         buttons.accepted.connect(self.reject)
         buttons.rejected.connect(self.reject)
         ly.addWidget(buttons)
@@ -78,4 +81,20 @@ class FuncMapDlg(LoadedModuleDlgBase):
         row = index.row()
         self.selected_die = self.the_table.model().values[row][2]
         self.done(QDialog.DialogCode.Accepted)
-        
+
+    def export_funcs(self):
+        funcs = self.the_table.model().values
+        if not funcs:
+            QMessageBox.information(self, "Export Functions", "There are no functions to export.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(self, "Save Function Map", "functions_dump.txt", "Text Files (*.txt);;All Files (*)")
+
+        if path:
+            try:
+                with open(path, 'w') as f:
+                    for func in funcs:
+                        f.write(f"Address: {func[0]}, Name: {func[1]}\n")
+                QMessageBox.information(self, "Export Successful", f"Successfully exported functions to {path}")
+            except IOError as e:
+                QMessageBox.critical(self, "Export Error", f"Failed to write to file: {e}")
