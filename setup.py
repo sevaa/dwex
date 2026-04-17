@@ -123,7 +123,7 @@ except:
 
 setup(
     name='dwex',
-    version='4.70',  # Sync with version in __main__
+    version='4.80',  # Sync with version in __main__
     packages=['dwex'],
     url="https://github.com/sevaa/dwex/",
     entry_points={"gui_scripts": ["dwex = dwex.__main__:main"]},
@@ -155,6 +155,7 @@ setup(
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
         "Programming Language :: Python :: Implementation :: CPython",
         "Topic :: Software Development :: Debuggers"
     ]

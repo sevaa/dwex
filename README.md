@@ -23,8 +23,8 @@ Requirements and Dependencies
 ------------
  - Python 3.6.1+
  - PyQt6
- - filebytes 0.10.1+
  - pyelftools 0.30+
+ - pyobjc (MacOS X only)
 
 Installation
 -------------
@@ -33,7 +33,7 @@ If necessary, install [the latest Python](https://www.python.org/downloads/) in 
 
 On Windows, if `pip` and/or Python is not in PATH, use `c:\Python39\python -m pip install dwex`, substituting your own path to Python 3.
 
-Alternatively, get the dwex source tree from Github, and run `python setup.py install` in the root folder of the package. In this scenario, you'd have to install the dependencies separately - with `pip install pyqt6 filebytes pyelftools`.
+Alternatively, get the dwex source tree from Github, and run `python setup.py install` in the root folder of the package. In this scenario, you'd have to install the dependencies separately - with `pip install pyqt6 pyelftools`. On MacOS X, also `pyobjc`.
 
 On Linux, sometimes the `python` command defaults to Python 2 while Python 3 is installed side by side. In this case, use `python3` and `pip3`, respectively. Use `python -V` to check.
 
